@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://krlpgud01utl"
+path="res://.godot/imported/no, there is.wav-61a8ae0077b853e885e6dee8694e8b66.sample"
+
+[deps]
+
+source_file="res://audio/words/sightwords/no, there is.wav"
+dest_files=["res://.godot/imported/no, there is.wav-61a8ae0077b853e885e6dee8694e8b66.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

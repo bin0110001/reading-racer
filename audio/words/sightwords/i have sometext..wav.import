@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://cmgyn1rhvkqw1"
+path="res://.godot/imported/i have sometext..wav-6f59403b0a7d2850297faf95c1c624c6.sample"
+
+[deps]
+
+source_file="res://audio/words/sightwords/i have sometext..wav"
+dest_files=["res://.godot/imported/i have sometext..wav-6f59403b0a7d2850297faf95c1c624c6.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

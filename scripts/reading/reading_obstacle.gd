@@ -26,8 +26,18 @@ func configure(next_segment_index: int, next_lane_index: int) -> void:
 
 
 func set_cleared() -> void:
+	if cleared:
+		return
 	cleared = true
-	visible = false
+
+	# Knock the obstacle out of the way rather than instantly disappearing.
+	# This gives a better sense that the player bumped it out of the lane.
+	var target_position := position + Vector3(4.0, 0.0, randf_range(-1.0, 1.0) * 2.0)
+	var tween := create_tween()
+	var prop_tween := tween.tween_property(self, "position", target_position, 0.3)
+	prop_tween.set_trans(Tween.TRANS_SINE)
+	prop_tween.set_ease(Tween.EASE_OUT)
+	tween.connect("finished", Callable(self, "queue_free"))
 
 
 func _process(delta: float) -> void:

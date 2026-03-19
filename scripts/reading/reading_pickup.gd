@@ -14,9 +14,10 @@ var _base_height := 0.0
 func _ready() -> void:
 	_base_height = position.y
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_label.font_size = 64
+	# Increase letter size by 4x for better readability.
+	_label.font_size = 256
 	_label.modulate = Color(1.0, 0.95, 0.45)
-	_label.outline_size = 12
+	_label.outline_size = 48
 	_label.text = letter.to_upper()
 	add_child(_label)
 

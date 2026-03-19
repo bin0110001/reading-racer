@@ -18,8 +18,9 @@ var _tilt_cooldown := 0.0
 
 
 static func ensure_input_actions() -> void:
-	_ensure_action(ACTION_MOVE_UP, [KEY_UP, KEY_W])
-	_ensure_action(ACTION_MOVE_DOWN, [KEY_DOWN, KEY_S])
+	# Controls are left/right now that the map is rotated.
+	_ensure_action(ACTION_MOVE_UP, [KEY_LEFT, KEY_A])
+	_ensure_action(ACTION_MOVE_DOWN, [KEY_RIGHT, KEY_D])
 	_ensure_action(ACTION_TOGGLE_OPTIONS, [KEY_ESCAPE, KEY_TAB])
 	_ensure_action(ACTION_CONFIRM, [KEY_SPACE, KEY_ENTER])
 
@@ -62,8 +63,9 @@ func handle_input(event: InputEvent) -> void:
 			_swipe_active = false
 	elif event is InputEventScreenDrag and _swipe_active:
 		var delta: Vector2 = event.position - _swipe_start
-		if absf(delta.y) >= SWIPE_DEADZONE:
-			_pending_lane_delta = -1 if delta.y < 0.0 else 1
+		# Swipe left/right maps to lane changes when the map is rotated.
+		if absf(delta.x) >= SWIPE_DEADZONE:
+			_pending_lane_delta = -1 if delta.x < 0.0 else 1
 			_swipe_start = event.position
 
 
@@ -86,10 +88,10 @@ func consume_lane_delta(delta: float) -> int:
 				var accelerometer := Input.get_accelerometer()
 				if accelerometer == Vector3.ZERO:
 					result = 0
-				elif accelerometer.z < -TILT_DEADZONE:
+				elif accelerometer.x < -TILT_DEADZONE:
 					_tilt_cooldown = TILT_REPEAT_SECONDS
 					result = -1
-				elif accelerometer.z > TILT_DEADZONE:
+				elif accelerometer.x > TILT_DEADZONE:
 					_tilt_cooldown = TILT_REPEAT_SECONDS
 					result = 1
 

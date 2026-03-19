@@ -1,18 +1,31 @@
 extends Node3D
 
-const LANE_POSITIONS := [-6.0, 0.0, 6.0]
+const LANE_WIDTH := 6.0
+const LANE_HALF_WIDTH := LANE_WIDTH * 0.5
+const LANE_POSITIONS := [-LANE_WIDTH, 0.0, LANE_WIDTH]
 const PLAYER_START_X := -12.0
 const WORD_START_X := 26.0
 const SEGMENT_SPACING := 18.0
 const PLAYER_SPEED := 13.0
 const SLOWED_SPEED := 7.0
 const LANE_CHANGE_SPEED := 18.0
-const PICKUP_RADIUS_X := 2.5
-const PICKUP_RADIUS_Z := 1.8
+# Increased pickup radius to match much larger letter render size.
+const PICKUP_RADIUS_X := 4.0
+const PICKUP_RADIUS_Z := 3.0
 const OBSTACLE_RADIUS_X := 2.7
 const OBSTACLE_RADIUS_Z := 2.0
 
+const WORD_GAP := 30.0
+const PRESPAWN_WORDS := 2
+const MIN_ROAD_AHEAD := SEGMENT_SPACING * 10
+const ROAD_TILES_AHEAD := 10
+const ROAD_TILES_BEHIND := 2
+const WORD_START_OFFSET := WORD_START_X - PLAYER_START_X
+const ROAD_CLEAR_GAP := SEGMENT_SPACING
+
 const PLAYER_MODEL_PATH := "res://models/vehicle-truck-yellow.glb"
+const ROAD_MODEL_PATH := "res://models/track-straight.glb"
+const ROAD_SCALE := 2.0
 const OBSTACLE_MODEL_PATH := "res://models/track-bump.glb"
 const FINISH_MODEL_PATH := "res://models/track-finish.glb"
 const DECORATION_MODEL_PATH := "res://models/decoration-forest.glb"
@@ -39,6 +52,19 @@ var countdown_remaining := 3.0
 var slowed_timer := 0.0
 var completion_timer := 0.0
 var course_length := 120.0
+var finish_line_x := 0.0
+var decoration_end_x := 0.0
+var farthest_spawned_x := 0.0
+
+var track_tile_length := 0.0
+var road_tiles: Dictionary = {}
+var min_tile_index := 0
+var max_tile_index := -1
+var current_tile_index := 0
+
+var current_word_start_x := WORD_START_X
+var next_word_start_x := WORD_START_X
+var next_spawn_entry_index := 0
 
 @onready var road: Node3D = $Road
 @onready var spawn_root: Node3D = $SpawnRoot
@@ -81,7 +107,7 @@ func _ready() -> void:
 	_attach_player_model()
 	_load_group(requested_group)
 	_build_course_geometry()
-	_start_next_word(false)
+	_start_next_word(false, true, true)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -120,12 +146,11 @@ func _physics_process(delta: float) -> void:
 		_update_camera(delta)
 		return
 
-	if state == "complete":
+	if state == "transition":
 		completion_timer -= delta
 		if completion_timer <= 0.0:
-			_start_next_word(true)
-		_update_camera(delta)
-		return
+			_start_next_word(true, false, false)
+		# allow the player to keep moving into the empty area
 
 	slowed_timer = maxf(slowed_timer - delta, 0.0)
 	var lane_delta := control_profile.consume_lane_delta(delta)
@@ -143,6 +168,7 @@ func _physics_process(delta: float) -> void:
 
 	_check_pickups()
 	_check_obstacles()
+	_ensure_road_ahead()
 	_update_status()
 	_update_camera(delta)
 
@@ -159,18 +185,32 @@ func _load_group(group_name: String) -> void:
 		hud.flash_feedback("Expected simple word clips like cat.wav", Color(1.0, 0.5, 0.4))
 
 
-func _start_next_word(play_feedback: bool) -> void:
+func _start_next_word(
+	play_feedback: bool, use_countdown: bool = false, reset_position: bool = false
+) -> void:
 	if current_entries.is_empty():
 		return
 
 	current_entry_index = (current_entry_index + 1) % current_entries.size()
 	current_entry = current_entries[current_entry_index]
-	_reset_word_state()
+	next_spawn_entry_index = (current_entry_index + 1) % current_entries.size()
+
+	# Ensure the next word starts ahead of the player.
+	# This provides a small empty area between words.
+	var is_first_word := current_entry_index == 0
+	if is_first_word:
+		current_word_start_x = next_word_start_x
+	else:
+		var desired_start_x := player.position.x + WORD_GAP
+		current_word_start_x = max(next_word_start_x, desired_start_x)
+
+	_reset_word_state(reset_position, use_countdown)
 	hud.set_word(str(current_entry.get("text", "")))
 	hud.set_phoneme("")
 	if play_feedback:
 		hud.flash_feedback("Next word", Color(0.45, 0.75, 1.0))
-	_spawn_course_for_entry(current_entry)
+	_spawn_course_for_entry(current_entry, current_word_start_x, is_first_word)
+	_ensure_words_ahead()
 	phoneme_player.play_word(content_loader.get_word_stream(current_entry))
 	_update_status()
 
@@ -179,37 +219,72 @@ func _restart_current_word() -> void:
 	if current_entry.is_empty():
 		return
 
-	_reset_word_state()
+	_reset_word_state(true, true)
 	hud.set_phoneme("")
-	_spawn_course_for_entry(current_entry)
+	_spawn_course_for_entry(current_entry, current_word_start_x, true)
 	phoneme_player.play_word(content_loader.get_word_stream(current_entry))
 	_update_status()
 
 
-func _reset_word_state() -> void:
-	lane_index = 1
+func _reset_word_state(reset_position: bool = false, use_countdown: bool = true) -> void:
+	if reset_position:
+		lane_index = 1
+		player.position = Vector3(
+			current_word_start_x - WORD_START_OFFSET, 0.0, LANE_POSITIONS[lane_index]
+		)
 	next_target_index = 0
 	slowed_timer = 0.0
 	completion_timer = 0.0
 	countdown_remaining = 3.0
-	state = "countdown"
-	player.position = Vector3(PLAYER_START_X, 0.0, LANE_POSITIONS[lane_index])
+	if use_countdown:
+		state = "countdown"
+	else:
+		state = "playing"
 	phoneme_player.stop_phoneme()
 
 
-func _spawn_course_for_entry(entry: Dictionary) -> void:
-	for child in spawn_root.get_children():
-		child.queue_free()
-	pickups.clear()
-	obstacles.clear()
+func _spawn_course_for_entry(
+	entry: Dictionary,
+	word_start_x: float,
+	clear_existing: bool = true,
+	register_pickups: bool = true
+) -> void:
+	# When changing words we only want to reset the active pickups/obstacles, but we keep the
+	# previously spawned world geometry so the course feels continuous.
+	# Old spawned objects will be pruned as the player moves forward.
+	if clear_existing:
+		for child in spawn_root.get_children():
+			child.queue_free()
+		# Reset the base course so the new word feels like a fresh run.
+		course_length = 120.0
+		finish_line_x = 0.0
+		decoration_end_x = 0.0
+		farthest_spawned_x = 0.0
+		if not current_entries.is_empty():
+			next_spawn_entry_index = (current_entry_index + 1) % current_entries.size()
+		else:
+			next_spawn_entry_index = 0
+		_build_course_geometry()
+
+	if register_pickups:
+		pickups.clear()
+		obstacles.clear()
 
 	var letters: Array = entry.get("letters", []) as Array
-	course_length = WORD_START_X + maxf(float(letters.size()), 1.0) * SEGMENT_SPACING + 30.0
-	_build_course_geometry()
+	var letter_count: float = maxf(float(letters.size()), 1.0)
+	var word_end_x: float = word_start_x + letter_count * SEGMENT_SPACING
+	var finish_x: float = word_end_x + 22.0
+	finish_line_x = finish_x
+	# Ensure the road extends far enough ahead of the player.
+	var desired_course_end: float = max(finish_x + 8.0, player.position.x + MIN_ROAD_AHEAD)
+	var new_course_length: float = max(course_length, desired_course_end)
+	if new_course_length > course_length:
+		course_length = new_course_length
+		_extend_course_decorations()
 
 	for letter_index in range(letters.size()):
 		var lane_for_letter := rng.randi_range(0, LANE_POSITIONS.size() - 1)
-		var segment_x := WORD_START_X + letter_index * SEGMENT_SPACING
+		var segment_x := word_start_x + letter_index * SEGMENT_SPACING
 		var pickup := ReadingPickup.new()
 		pickup.position = Vector3(segment_x, 2.3, LANE_POSITIONS[lane_for_letter])
 		pickup.configure(
@@ -219,7 +294,8 @@ func _spawn_course_for_entry(entry: Dictionary) -> void:
 			lane_for_letter
 		)
 		spawn_root.add_child(pickup)
-		pickups.append(pickup)
+		if register_pickups:
+			pickups.append(pickup)
 
 		for obstacle_lane in range(LANE_POSITIONS.size()):
 			if obstacle_lane == lane_for_letter:
@@ -232,54 +308,124 @@ func _spawn_course_for_entry(entry: Dictionary) -> void:
 				obstacle_visual.scale = Vector3.ONE * 0.6
 				obstacle.add_child(obstacle_visual)
 			spawn_root.add_child(obstacle)
-			obstacles.append(obstacle)
+			if register_pickups:
+				obstacles.append(obstacle)
 
 	var finish_visual := _instantiate_scene(FINISH_MODEL_PATH)
 	if finish_visual != null:
-		finish_visual.position = Vector3(course_length - 8.0, 0.0, 0.0)
+		finish_visual.position = Vector3(finish_x, 0.0, 0.0)
+		finish_visual.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+		finish_visual.scale = Vector3.ONE * 2.0
 		spawn_root.add_child(finish_visual)
+
+	next_word_start_x = finish_x + WORD_GAP
+	farthest_spawned_x = max(farthest_spawned_x, next_word_start_x)
 
 
 func _build_course_geometry() -> void:
 	for child in road.get_children():
 		child.queue_free()
 
-	var road_material := StandardMaterial3D.new()
-	road_material.albedo_color = Color(0.17, 0.2, 0.24)
+	road_tiles.clear()
+	min_tile_index = 0
+	max_tile_index = -1
 
-	var stripe_material := StandardMaterial3D.new()
-	stripe_material.albedo_color = Color(0.95, 0.83, 0.28)
+	# Build the track using the straight track model rather than procedural lanes.
+	track_tile_length = SEGMENT_SPACING
+	var track_sample: Node3D = _instantiate_scene(ROAD_MODEL_PATH)
+	if track_sample != null:
+		# Attempt to infer length from the first mesh in the track scene.
+		var mesh_instance := _find_first_mesh_instance(track_sample)
+		if mesh_instance != null:
+			track_tile_length = mesh_instance.get_aabb().size.x
+		track_sample.queue_free()
 
-	for lane_number in range(LANE_POSITIONS.size()):
-		var lane_mesh := MeshInstance3D.new()
-		var box_mesh := BoxMesh.new()
-		box_mesh.size = Vector3(course_length + 36.0, 0.25, 3.2)
-		lane_mesh.mesh = box_mesh
-		lane_mesh.material_override = road_material
-		lane_mesh.position = Vector3(
-			(course_length + PLAYER_START_X) * 0.5, -0.2, LANE_POSITIONS[lane_number]
-		)
-		road.add_child(lane_mesh)
+	# Apply the requested scaling.
+	track_tile_length *= ROAD_SCALE
 
-		var divider := MeshInstance3D.new()
-		var divider_mesh := BoxMesh.new()
-		divider_mesh.size = Vector3(course_length + 36.0, 0.03, 0.2)
-		divider.mesh = divider_mesh
-		divider.material_override = stripe_material
-		divider.position = Vector3(
-			(course_length + PLAYER_START_X) * 0.5, -0.05, LANE_POSITIONS[lane_number] + 1.75
-		)
-		road.add_child(divider)
+	# Ensure we have enough segments to start with.
+	_update_road_tiles(true)
 
-	for decoration_index in range(6):
-		var forest := _instantiate_scene(DECORATION_MODEL_PATH)
-		if forest == null:
-			continue
-		forest.position = Vector3(
-			18.0 + decoration_index * 24.0, 0.0, -12.0 if decoration_index % 2 == 0 else 12.0
-		)
-		forest.scale = Vector3.ONE * 1.4
-		road.add_child(forest)
+	# Broaden the decoration coverage along the course so the sides feel continuous.
+	var decoration_start_x := PLAYER_START_X + 6.0
+	var decoration_step_x := 14.0
+	# Place decorations well outside the road edge to avoid overlap with lanes.
+	# (The models are fairly wide, so we offset beyond the road by a safe margin.)
+	var side_z_base := LANE_WIDTH * 2.0 + 4.0
+	var side_z_offsets := [side_z_base, side_z_base + 6.0, side_z_base + 12.0]
+
+	var x := decoration_start_x
+	while x < course_length + 36.0:
+		for z_offset in side_z_offsets:
+			for sign in [-1, 1]:
+				var forest := _instantiate_scene(DECORATION_MODEL_PATH)
+				if forest == null:
+					continue
+				forest.position = Vector3(x, 0.0, sign * z_offset)
+				# Rotate forest tiles so they align better with the road and reduce overlap.
+				forest.rotation_degrees = Vector3.ZERO
+				forest.scale = Vector3.ONE * 1.0
+				road.add_child(forest)
+		x += decoration_step_x
+
+	# Track how far we have added decorations so we can extend them incrementally.
+	decoration_end_x = course_length + 36.0
+
+
+func _ensure_road_ahead() -> void:
+	_update_road_tiles()
+	_cleanup_spawned_content()
+	_ensure_words_ahead()
+
+
+func _extend_course_decorations() -> void:
+	# Ensure that side decorations extend as the course grows.
+	var target_end_x := course_length + 36.0
+	if target_end_x <= decoration_end_x:
+		return
+
+	var decoration_step_x := 14.0
+	var side_z_base := LANE_WIDTH * 2.0 + 4.0
+	var side_z_offsets := [side_z_base, side_z_base + 6.0, side_z_base + 12.0]
+
+	var x: float = maxf(decoration_end_x, PLAYER_START_X + 6.0)
+	while x < target_end_x:
+		for z_offset in side_z_offsets:
+			for sign in [-1, 1]:
+				var forest := _instantiate_scene(DECORATION_MODEL_PATH)
+				if forest == null:
+					continue
+				forest.position = Vector3(x, 0.0, sign * z_offset)
+				forest.rotation_degrees = Vector3.ZERO
+				forest.scale = Vector3.ONE * 1.0
+				road.add_child(forest)
+		x += decoration_step_x
+
+	decoration_end_x = target_end_x
+
+
+func _cleanup_spawned_content() -> void:
+	# Remove pickups/obstacles/finish markers that are far behind the player.
+	# This keeps the world feeling continuous without rebuilding the whole map.
+	var clear_x := player.position.x - ROAD_CLEAR_GAP
+	for child in spawn_root.get_children():
+		if child.global_transform.origin.x < clear_x:
+			child.queue_free()
+
+
+func _ensure_words_ahead() -> void:
+	# Pre-spawn future words so the player never sees a gap in the course.
+	# This is intentionally done ahead of time instead of regenerating the map when a word ends.
+	if current_entries.is_empty():
+		return
+
+	var target_x := player.position.x + MIN_ROAD_AHEAD
+	var spawned := 0
+	while farthest_spawned_x < target_x and spawned < PRESPAWN_WORDS:
+		var entry := current_entries[next_spawn_entry_index]
+		_spawn_course_for_entry(entry, next_word_start_x, false, false)
+		next_spawn_entry_index = (next_spawn_entry_index + 1) % current_entries.size()
+		spawned += 1
 
 
 func _attach_player_model() -> void:
@@ -290,9 +436,12 @@ func _attach_player_model() -> void:
 	if model == null:
 		return
 
-	model.scale = Vector3.ONE * 0.9
-	model.rotation_degrees = Vector3(0.0, -90.0, 0.0)
-	vehicle_anchor.position = Vector3(0.0, 0.2, 0.0)
+	# Increase the car size so the player is more visible and feels closer to the camera.
+	model.scale = Vector3.ONE * 1.8
+	# Rotate the vehicle to face forward.
+	model.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+	# Lower the vehicle so it sits closer to the road.
+	vehicle_anchor.position = Vector3(0.0, 0.05, 0.0)
 	vehicle_anchor.add_child(model)
 
 
@@ -303,6 +452,73 @@ func _instantiate_scene(resource_path: String) -> Node3D:
 	if packed_scene == null:
 		return null
 	return packed_scene.instantiate() as Node3D
+
+
+func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
+	if node is MeshInstance3D:
+		return node as MeshInstance3D
+	for child in node.get_children():
+		var found := _find_first_mesh_instance(child)
+		if found != null:
+			return found
+	return null
+
+
+func _spawn_road_tile(index: int) -> void:
+	var track_piece := _instantiate_scene(ROAD_MODEL_PATH)
+	if track_piece == null:
+		return
+	track_piece.scale = Vector3.ONE * ROAD_SCALE
+	track_piece.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+	var center_x := PLAYER_START_X + track_tile_length * 0.5 + index * track_tile_length
+	track_piece.position = Vector3(center_x, 0.0, 0.0)
+	road.add_child(track_piece)
+	road_tiles[index] = track_piece
+
+
+func _remove_road_tile(index: int) -> void:
+	if road_tiles.has(index):
+		road_tiles[index].queue_free()
+		road_tiles.erase(index)
+
+
+func _update_road_tiles(force: bool = false) -> void:
+	if track_tile_length <= 0.0:
+		return
+
+	var tile_index: int = int(floor((player.position.x - PLAYER_START_X) / track_tile_length))
+	current_tile_index = tile_index
+
+	# Determine the target tile range we want to keep around the player.
+	var target_min: int = tile_index - ROAD_TILES_BEHIND
+	var target_max: int = tile_index + ROAD_TILES_AHEAD
+
+	# Do not build past the finish line.
+	if finish_line_x > 0.0:
+		var max_x: float = finish_line_x - ROAD_CLEAR_GAP
+		var max_allowed_index: int = int(floor((max_x - PLAYER_START_X) / track_tile_length))
+		target_max = min(target_max, max_allowed_index)
+
+	# Spawn missing tiles behind the player.
+	if force or target_min < min_tile_index:
+		for i in range(min_tile_index - 1, target_min - 1, -1):
+			_spawn_road_tile(i)
+		min_tile_index = min(min_tile_index, target_min)
+
+	# Spawn missing tiles ahead of the player.
+	if force or target_max > max_tile_index:
+		for i in range(max_tile_index + 1, target_max + 1):
+			_spawn_road_tile(i)
+		max_tile_index = max(max_tile_index, target_max)
+
+	# Remove tiles that are outside the desired range.
+	for i in range(min_tile_index, target_min):
+		_remove_road_tile(i)
+	for i in range(target_max + 1, max_tile_index + 1):
+		_remove_road_tile(i)
+
+	min_tile_index = target_min
+	max_tile_index = target_max
 
 
 func _check_pickups() -> void:
@@ -317,8 +533,13 @@ func _check_pickups() -> void:
 	var delta_x := absf(player.position.x - pickup.position.x)
 	var delta_z := absf(player.position.z - pickup.position.z)
 	if player.position.x > pickup.position.x + 6.0:
+		# The player missed this letter; penalize with feedback but do not restart the word.
+		pickup.set_collected()
+		next_target_index += 1
+		var phoneme_label := pickup.phoneme_alias
+		var phoneme_stream := content_loader.get_phoneme_stream(phoneme_label)
+		phoneme_player.play_looping_phoneme(phoneme_label, phoneme_stream)
 		hud.flash_feedback("Missed %s" % pickup.letter.to_upper(), Color(1.0, 0.48, 0.38))
-		_restart_current_word()
 		return
 	if delta_x > PICKUP_RADIUS_X or delta_z > PICKUP_RADIUS_Z:
 		return
@@ -334,9 +555,18 @@ func _check_pickups() -> void:
 
 
 func _check_obstacles() -> void:
-	for obstacle in obstacles:
-		if obstacle.cleared:
+	# Iterate backwards so we can safely remove freed obstacles.
+	for i in range(obstacles.size() - 1, -1, -1):
+		var obstacle := obstacles[i]
+		if not is_instance_valid(obstacle):
+			obstacles.remove_at(i)
 			continue
+
+		if obstacle.cleared:
+			# Remove cleared obstacles to avoid accessing freed memory.
+			obstacles.remove_at(i)
+			continue
+
 		var delta_x := absf(player.position.x - obstacle.position.x)
 		var delta_z := absf(player.position.z - obstacle.position.z)
 		if delta_x <= OBSTACLE_RADIUS_X and delta_z <= OBSTACLE_RADIUS_Z:
@@ -347,10 +577,11 @@ func _check_obstacles() -> void:
 
 		if obstacle.position.x < player.position.x - 6.0:
 			obstacle.set_cleared()
+			obstacles.remove_at(i)
 
 
 func _complete_word() -> void:
-	state = "complete"
+	state = "transition"
 	completion_timer = 2.0
 	phoneme_player.stop_phoneme()
 	phoneme_player.play_word(content_loader.get_word_stream(current_entry))
@@ -359,9 +590,10 @@ func _complete_word() -> void:
 
 
 func _update_camera(delta: float) -> void:
-	var desired_position := player.position + Vector3(-18.0, 13.0, 0.0)
+	# Move the camera closer and slightly lower so the larger vehicle stays in view.
+	var desired_position := player.position + Vector3(-12.0, 10.0, 0.0)
 	camera_rig.position = camera_rig.position.lerp(desired_position, delta * 4.0)
-	camera.look_at(player.position + Vector3(8.0, 1.5, 0.0), Vector3.UP)
+	camera.look_at(player.position + Vector3(6.0, 1.5, 0.0), Vector3.UP)
 
 
 func _update_status() -> void:
@@ -428,8 +660,8 @@ func _on_phoneme_changed(label: String) -> void:
 func _update_help_text() -> void:
 	match str(settings.get("control_mode", ReadingSettingsStore.CONTROL_MODE_KEYBOARD)):
 		ReadingSettingsStore.CONTROL_MODE_SWIPE:
-			hud.set_help("Swipe up/down to switch lanes   Esc/Tab: options")
+			hud.set_help("Swipe left/right to switch lanes   Esc/Tab: options")
 		ReadingSettingsStore.CONTROL_MODE_TILT:
-			hud.set_help("Tilt the tablet to switch lanes   Esc/Tab: options")
+			hud.set_help("Tilt the tablet left/right to switch lanes   Esc/Tab: options")
 		_:
-			hud.set_help("Up/Down or W/S to switch lanes   Esc/Tab: options")
+			hud.set_help("Left/Right or A/D to switch lanes   Esc/Tab: options")

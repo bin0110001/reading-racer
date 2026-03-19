@@ -18,8 +18,6 @@ const OBSTACLE_RADIUS_Z := 2.0
 const WORD_GAP := 30.0
 const PRESPAWN_WORDS := 2
 const MIN_ROAD_AHEAD := SEGMENT_SPACING * 10
-const ROAD_TILES_AHEAD := 10
-const ROAD_TILES_BEHIND := 2
 const WORD_START_OFFSET := WORD_START_X - PLAYER_START_X
 const ROAD_CLEAR_GAP := SEGMENT_SPACING
 
@@ -28,7 +26,22 @@ const ROAD_MODEL_PATH := "res://models/track-straight.glb"
 const ROAD_SCALE := 2.0
 const OBSTACLE_MODEL_PATH := "res://models/track-bump.glb"
 const FINISH_MODEL_PATH := "res://models/track-finish.glb"
-const DECORATION_MODEL_PATH := "res://models/decoration-forest.glb"
+const DECORATION_MODEL_PATH := "res://models/decoration-forest.glb"  # fallback
+
+# Decoration selection (weighted): empty is more common.
+const DECORATION_MODELS := [
+	{"path": "res://models/decoration-empty.glb", "weight": 6},
+	{"path": "res://models/decoration-forest.glb", "weight": 2},
+	{"path": "res://models/decoration-tents.glb", "weight": 2},
+]
+
+# Grid layout constants
+const GRID_WIDTH := 7  # Z-axis: 7 columns (decorations + 1 road + decorations)
+const GRID_AHEAD := 10  # X-axis: 10 rows ahead of camera
+const GRID_BEHIND := 3  # X-axis: 3 rows behind camera
+const GRID_DEPTH := GRID_AHEAD + GRID_BEHIND  # Total 13 rows
+const GRID_CENTER_START := 3  # Column where the road is (col 3, centered)
+const GRID_CENTER_END := 3  # Last center column (inclusive)
 
 var settings_store := ReadingSettingsStore.new()
 var content_loader := ReadingContentLoader.new()
@@ -53,13 +66,11 @@ var slowed_timer := 0.0
 var completion_timer := 0.0
 var course_length := 120.0
 var finish_line_x := 0.0
-var decoration_end_x := 0.0
 var farthest_spawned_x := 0.0
 
 var track_tile_length := 0.0
-var road_tiles: Dictionary = {}
-var min_tile_index := 0
-var max_tile_index := -1
+var track_tile_width := 0.0
+var grid_cells: Dictionary = {}  # Key: "x,z", Value: Node3D reference
 var current_tile_index := 0
 
 var current_word_start_x := WORD_START_X
@@ -159,9 +170,13 @@ func _physics_process(delta: float) -> void:
 
 	var speed := SLOWED_SPEED if slowed_timer > 0.0 else PLAYER_SPEED
 	player.position.x += speed * delta
-	player.position.z = move_toward(
-		player.position.z, LANE_POSITIONS[lane_index], LANE_CHANGE_SPEED * delta
-	)
+
+	# Calculate the road center Z position and move player within it
+	var road_center_z: float = (GRID_CENTER_START - GRID_WIDTH * 0.5) * track_tile_width
+	var lane_offset: float = LANE_POSITIONS[lane_index]
+	var target_z: float = road_center_z + lane_offset
+	player.position.z = move_toward(player.position.z, target_z, LANE_CHANGE_SPEED * delta)
+
 	vehicle_anchor.rotation.z = lerp_angle(
 		vehicle_anchor.rotation.z, float(lane_delta) * -0.14, delta * 9.0
 	)
@@ -229,9 +244,8 @@ func _restart_current_word() -> void:
 func _reset_word_state(reset_position: bool = false, use_countdown: bool = true) -> void:
 	if reset_position:
 		lane_index = 1
-		player.position = Vector3(
-			current_word_start_x - WORD_START_OFFSET, 0.0, LANE_POSITIONS[lane_index]
-		)
+		var road_center_z: float = (GRID_CENTER_START - GRID_WIDTH * 0.5) * track_tile_width
+		player.position = Vector3(current_word_start_x - WORD_START_OFFSET, 0.0, road_center_z)
 	next_target_index = 0
 	slowed_timer = 0.0
 	completion_timer = 0.0
@@ -258,7 +272,6 @@ func _spawn_course_for_entry(
 		# Reset the base course so the new word feels like a fresh run.
 		course_length = 120.0
 		finish_line_x = 0.0
-		decoration_end_x = 0.0
 		farthest_spawned_x = 0.0
 		if not current_entries.is_empty():
 			next_spawn_entry_index = (current_entry_index + 1) % current_entries.size()
@@ -270,6 +283,9 @@ func _spawn_course_for_entry(
 		pickups.clear()
 		obstacles.clear()
 
+	# Calculate the center Z position of the road column for all pickups/obstacles
+	var road_center_z: float = (GRID_CENTER_START - GRID_WIDTH * 0.5) * track_tile_width
+
 	var letters: Array = entry.get("letters", []) as Array
 	var letter_count: float = maxf(float(letters.size()), 1.0)
 	var word_end_x: float = word_start_x + letter_count * SEGMENT_SPACING
@@ -280,29 +296,26 @@ func _spawn_course_for_entry(
 	var new_course_length: float = max(course_length, desired_course_end)
 	if new_course_length > course_length:
 		course_length = new_course_length
-		_extend_course_decorations()
 
 	for letter_index in range(letters.size()):
-		var lane_for_letter := rng.randi_range(0, LANE_POSITIONS.size() - 1)
 		var segment_x := word_start_x + letter_index * SEGMENT_SPACING
 		var pickup := ReadingPickup.new()
-		pickup.position = Vector3(segment_x, 2.3, LANE_POSITIONS[lane_for_letter])
+		pickup.position = Vector3(segment_x, 2.3, road_center_z)
 		pickup.configure(
 			str(letters[letter_index]),
 			content_loader.get_phoneme_label(entry, letter_index),
 			letter_index,
-			lane_for_letter
+			0
 		)
 		spawn_root.add_child(pickup)
 		if register_pickups:
 			pickups.append(pickup)
 
-		for obstacle_lane in range(LANE_POSITIONS.size()):
-			if obstacle_lane == lane_for_letter:
-				continue
+		# Spawn obstacles on both sides of the road
+		for side in [-1, 1]:
 			var obstacle := ReadingObstacle.new()
-			obstacle.position = Vector3(segment_x, 0.6, LANE_POSITIONS[obstacle_lane])
-			obstacle.configure(letter_index, obstacle_lane)
+			obstacle.position = Vector3(segment_x, 0.6, road_center_z + side * LANE_WIDTH)
+			obstacle.configure(letter_index, side)
 			var obstacle_visual := _instantiate_scene(OBSTACLE_MODEL_PATH)
 			if obstacle_visual != null:
 				obstacle_visual.scale = Vector3.ONE * 0.6
@@ -311,97 +324,115 @@ func _spawn_course_for_entry(
 			if register_pickups:
 				obstacles.append(obstacle)
 
-	var finish_visual := _instantiate_scene(FINISH_MODEL_PATH)
-	if finish_visual != null:
-		finish_visual.position = Vector3(finish_x, 0.0, 0.0)
-		finish_visual.rotation_degrees = Vector3(0.0, 90.0, 0.0)
-		finish_visual.scale = Vector3.ONE * 2.0
-		spawn_root.add_child(finish_visual)
-
 	next_word_start_x = finish_x + WORD_GAP
 	farthest_spawned_x = max(farthest_spawned_x, next_word_start_x)
 
 
 func _build_course_geometry() -> void:
+	# Clear all existing grid cells
 	for child in road.get_children():
 		child.queue_free()
+	grid_cells.clear()
 
-	road_tiles.clear()
-	min_tile_index = 0
-	max_tile_index = -1
-
-	# Build the track using the straight track model rather than procedural lanes.
+	# Measure the track tile dimensions
 	track_tile_length = SEGMENT_SPACING
 	var track_sample: Node3D = _instantiate_scene(ROAD_MODEL_PATH)
 	if track_sample != null:
-		# Attempt to infer length from the first mesh in the track scene.
 		var mesh_instance := _find_first_mesh_instance(track_sample)
 		if mesh_instance != null:
 			track_tile_length = mesh_instance.get_aabb().size.x
+			track_tile_width = mesh_instance.get_aabb().size.z
 		track_sample.queue_free()
 
-	# Apply the requested scaling.
+	# Apply scale
 	track_tile_length *= ROAD_SCALE
+	track_tile_width *= ROAD_SCALE
 
-	# Ensure we have enough segments to start with.
-	_update_road_tiles(true)
+	# Build the initial grid around the player
+	_update_grid()
 
-	# Broaden the decoration coverage along the course so the sides feel continuous.
-	var decoration_start_x := PLAYER_START_X + 6.0
-	var decoration_step_x := 14.0
-	# Place decorations well outside the road edge to avoid overlap with lanes.
-	# (The models are fairly wide, so we offset beyond the road by a safe margin.)
-	var side_z_base := LANE_WIDTH * 2.0 + 4.0
-	var side_z_offsets := [side_z_base, side_z_base + 6.0, side_z_base + 12.0]
 
-	var x := decoration_start_x
-	while x < course_length + 36.0:
-		for z_offset in side_z_offsets:
-			for sign in [-1, 1]:
-				var forest := _instantiate_scene(DECORATION_MODEL_PATH)
-				if forest == null:
-					continue
-				forest.position = Vector3(x, 0.0, sign * z_offset)
-				# Rotate forest tiles so they align better with the road and reduce overlap.
-				forest.rotation_degrees = Vector3.ZERO
-				forest.scale = Vector3.ONE * 1.0
-				road.add_child(forest)
-		x += decoration_step_x
+func _update_grid() -> void:
+	# Determine which rows (X-index) should be active based on player position
+	var player_row_index: int = int(floor((player.position.x - PLAYER_START_X) / track_tile_length))
+	var target_row_min: int = player_row_index - GRID_BEHIND
+	var target_row_max: int = player_row_index + GRID_AHEAD
 
-	# Track how far we have added decorations so we can extend them incrementally.
-	decoration_end_x = course_length + 36.0
+	# Remove rows that are no longer needed
+	var rows_to_remove: Array = []
+	for key in grid_cells.keys():
+		var parts = key.split(",")
+		var row: int = int(parts[0])
+		if row < target_row_min or row > target_row_max:
+			rows_to_remove.append(key)
+
+	for key in rows_to_remove:
+		if is_instance_valid(grid_cells[key]):
+			grid_cells[key].queue_free()
+		grid_cells.erase(key)
+
+	# Add new rows
+	for row in range(target_row_min, target_row_max + 1):
+		for col in range(GRID_WIDTH):
+			var key = "%d,%d" % [row, col]
+			if grid_cells.has(key):
+				continue
+
+			_spawn_grid_cell(row, col, key)
+
+
+func _spawn_grid_cell(row: int, col: int, key: String) -> void:
+	# Determine if this cell is a road (center lane) or decoration
+	var is_roadway := col >= GRID_CENTER_START and col <= GRID_CENTER_END
+
+	# Calculate world position
+	var world_x: float = PLAYER_START_X + (row + 0.5) * track_tile_length
+	var world_z: float = (col - GRID_WIDTH * 0.5) * track_tile_width
+
+	var cell_node: Node3D = null
+
+	# Check if this cell should have a finish marker
+	var distance_from_finish: float = absf(world_x - finish_line_x)
+	var is_finish_line := (
+		is_roadway and finish_line_x > 0.0 and distance_from_finish < track_tile_length * 0.6
+	)
+
+	if is_finish_line:
+		# Spawn finish marker
+		var finish_visual := _instantiate_scene(FINISH_MODEL_PATH)
+		if finish_visual != null:
+			finish_visual.position = Vector3(world_x, 0.0, world_z)
+			finish_visual.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+			finish_visual.scale = Vector3.ONE * ROAD_SCALE
+			road.add_child(finish_visual)
+			cell_node = finish_visual
+	elif is_roadway:
+		# Spawn road tile
+		var track_piece := _instantiate_scene(ROAD_MODEL_PATH)
+		if track_piece != null:
+			track_piece.scale = Vector3.ONE * ROAD_SCALE
+			track_piece.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+			track_piece.position = Vector3(world_x, 0.0, world_z)
+			road.add_child(track_piece)
+			cell_node = track_piece
+	else:
+		# Spawn decoration tile
+		var decoration := _instantiate_scene(_pick_decoration_path())
+		if decoration != null:
+			decoration.scale = Vector3.ONE * ROAD_SCALE
+			decoration.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+			decoration.position = Vector3(world_x, 0.0, world_z)
+			road.add_child(decoration)
+			cell_node = decoration
+
+	if cell_node != null:
+		grid_cells[key] = cell_node
 
 
 func _ensure_road_ahead() -> void:
-	_update_road_tiles()
+	_update_grid()
 	_cleanup_spawned_content()
 	_ensure_words_ahead()
-
-
-func _extend_course_decorations() -> void:
-	# Ensure that side decorations extend as the course grows.
-	var target_end_x := course_length + 36.0
-	if target_end_x <= decoration_end_x:
-		return
-
-	var decoration_step_x := 14.0
-	var side_z_base := LANE_WIDTH * 2.0 + 4.0
-	var side_z_offsets := [side_z_base, side_z_base + 6.0, side_z_base + 12.0]
-
-	var x: float = maxf(decoration_end_x, PLAYER_START_X + 6.0)
-	while x < target_end_x:
-		for z_offset in side_z_offsets:
-			for sign in [-1, 1]:
-				var forest := _instantiate_scene(DECORATION_MODEL_PATH)
-				if forest == null:
-					continue
-				forest.position = Vector3(x, 0.0, sign * z_offset)
-				forest.rotation_degrees = Vector3.ZERO
-				forest.scale = Vector3.ONE * 1.0
-				road.add_child(forest)
-		x += decoration_step_x
-
-	decoration_end_x = target_end_x
 
 
 func _cleanup_spawned_content() -> void:
@@ -454,6 +485,22 @@ func _instantiate_scene(resource_path: String) -> Node3D:
 	return packed_scene.instantiate() as Node3D
 
 
+func _pick_decoration_path() -> String:
+	# Weighted selection: empty decorations are more common.
+	var total_weight := 0
+	for deco in DECORATION_MODELS:
+		total_weight += int(deco.weight)
+
+	var roll := rng.randi_range(1, total_weight)
+	for deco in DECORATION_MODELS:
+		roll -= int(deco.weight)
+		if roll <= 0:
+			return str(deco.path)
+
+	# Fallback in case weights are broken.
+	return DECORATION_MODEL_PATH
+
+
 func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 	if node is MeshInstance3D:
 		return node as MeshInstance3D
@@ -462,63 +509,6 @@ func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 		if found != null:
 			return found
 	return null
-
-
-func _spawn_road_tile(index: int) -> void:
-	var track_piece := _instantiate_scene(ROAD_MODEL_PATH)
-	if track_piece == null:
-		return
-	track_piece.scale = Vector3.ONE * ROAD_SCALE
-	track_piece.rotation_degrees = Vector3(0.0, 90.0, 0.0)
-	var center_x := PLAYER_START_X + track_tile_length * 0.5 + index * track_tile_length
-	track_piece.position = Vector3(center_x, 0.0, 0.0)
-	road.add_child(track_piece)
-	road_tiles[index] = track_piece
-
-
-func _remove_road_tile(index: int) -> void:
-	if road_tiles.has(index):
-		road_tiles[index].queue_free()
-		road_tiles.erase(index)
-
-
-func _update_road_tiles(force: bool = false) -> void:
-	if track_tile_length <= 0.0:
-		return
-
-	var tile_index: int = int(floor((player.position.x - PLAYER_START_X) / track_tile_length))
-	current_tile_index = tile_index
-
-	# Determine the target tile range we want to keep around the player.
-	var target_min: int = tile_index - ROAD_TILES_BEHIND
-	var target_max: int = tile_index + ROAD_TILES_AHEAD
-
-	# Do not build past the finish line.
-	if finish_line_x > 0.0:
-		var max_x: float = finish_line_x - ROAD_CLEAR_GAP
-		var max_allowed_index: int = int(floor((max_x - PLAYER_START_X) / track_tile_length))
-		target_max = min(target_max, max_allowed_index)
-
-	# Spawn missing tiles behind the player.
-	if force or target_min < min_tile_index:
-		for i in range(min_tile_index - 1, target_min - 1, -1):
-			_spawn_road_tile(i)
-		min_tile_index = min(min_tile_index, target_min)
-
-	# Spawn missing tiles ahead of the player.
-	if force or target_max > max_tile_index:
-		for i in range(max_tile_index + 1, target_max + 1):
-			_spawn_road_tile(i)
-		max_tile_index = max(max_tile_index, target_max)
-
-	# Remove tiles that are outside the desired range.
-	for i in range(min_tile_index, target_min):
-		_remove_road_tile(i)
-	for i in range(target_max + 1, max_tile_index + 1):
-		_remove_road_tile(i)
-
-	min_tile_index = target_min
-	max_tile_index = target_max
 
 
 func _check_pickups() -> void:

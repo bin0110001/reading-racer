@@ -15,9 +15,21 @@ run/main_scene="res://scenes/reading_mode.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+Diagnostic="*res://scripts/reading/startup_diagnostic.gd"
+
 [dotnet]
 
 project/assembly_name="ReadingRacer"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")
+
+[gdunit4]
+
+settings/test/test_discovery=true
 
 [physics]
 

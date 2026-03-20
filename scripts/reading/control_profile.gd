@@ -21,6 +21,17 @@ static func ensure_input_actions() -> void:
 	# Controls are left/right now that the map is rotated.
 	_ensure_action(ACTION_MOVE_UP, [KEY_LEFT, KEY_A])
 	_ensure_action(ACTION_MOVE_DOWN, [KEY_RIGHT, KEY_D])
+
+	# Add fallback/default UI actions for control profiles that use built-in names.
+	_ensure_action("ui_left", [KEY_LEFT, KEY_A])
+	_ensure_action("ui_right", [KEY_RIGHT, KEY_D])
+	_ensure_action("ui_up", [KEY_UP, KEY_W])
+	_ensure_action("ui_down", [KEY_DOWN, KEY_S])
+	_ensure_action("ui_a", [KEY_A])
+	_ensure_action("ui_d", [KEY_D])
+	_ensure_action("ui_w", [KEY_W])
+	_ensure_action("ui_s", [KEY_S])
+
 	_ensure_action(ACTION_TOGGLE_OPTIONS, [KEY_ESCAPE, KEY_TAB])
 	_ensure_action(ACTION_CONFIRM, [KEY_SPACE, KEY_ENTER])
 

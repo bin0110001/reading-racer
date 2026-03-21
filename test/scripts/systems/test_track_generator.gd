@@ -43,8 +43,11 @@ func test_track_generator_builds_closed_loop_layout() -> void:
 		{"text": "plane", "letters": ["p", "l", "a", "n", "e"]},
 	]
 
-	var layout := generator.generate_loop_layout(
-		entries, {"word_gap_cells": 2, "padding_cells": 6, "decoration_margin": 3}
+	var layout: TrackLayout = (
+		generator.generate_loop_layout(
+			entries, {"word_gap_cells": 2, "padding_cells": 6, "decoration_margin": 3}
+		)
+		as TrackLayout
 	)
 
 	assert_that(layout).is_not_null()
@@ -56,8 +59,8 @@ func test_track_generator_builds_closed_loop_layout() -> void:
 	for index in range(layout.path_cells.size()):
 		var current_cell: Vector3i = layout.path_cells[index]
 		var next_cell: Vector3i = layout.path_cells[(index + 1) % layout.path_cells.size()]
-		var step := next_cell - current_cell
-		var manhattan_distance := abs(step.x) + abs(step.y) + abs(step.z)
+		var step: Vector3i = next_cell - current_cell
+		var manhattan_distance: int = abs(step.x) + abs(step.y) + abs(step.z)
 		assert_that(manhattan_distance).is_equal(1)
 
 
@@ -68,10 +71,10 @@ func test_track_generator_loop_layout_does_not_repeat_cells() -> void:
 		{"text": "racer", "letters": ["r", "a", "c", "e", "r"]},
 	]
 
-	var layout := generator.generate_loop_layout(entries)
-	var seen := {}
+	var layout: TrackLayout = generator.generate_loop_layout(entries) as TrackLayout
+	var seen: Dictionary = {}
 	for cell in layout.path_cells:
-		var key := "%d,%d,%d" % [cell.x, cell.y, cell.z]
+		var key: String = "%d,%d,%d" % [cell.x, cell.y, cell.z]
 		assert_that(seen.has(key)).is_false()
 		seen[key] = true
 
@@ -84,10 +87,12 @@ func test_track_generator_loop_layout_is_straight_heavy_and_filled() -> void:
 		{"text": "tiles", "letters": ["t", "i", "l", "e", "s"]},
 	]
 
-	var layout := generator.generate_loop_layout(entries, {"decoration_margin": 4})
+	var layout: TrackLayout = (
+		generator.generate_loop_layout(entries, {"decoration_margin": 4}) as TrackLayout
+	)
 	var straight_count := int(layout.metadata.get("straight_count", 0))
 	var corner_count := int(layout.metadata.get("corner_count", 0))
-	var expected_decoration_count := layout.size.x * layout.size.z - layout.path_cells.size()
+	var expected_decoration_count: int = layout.size.x * layout.size.z - layout.path_cells.size()
 
 	assert_that(straight_count).is_greater(corner_count)
 	assert_that(int(layout.metadata.get("decoration_count", -1))).is_equal(
@@ -138,15 +143,6 @@ func test_straight_segment_properties() -> void:
 
 func test_curve_segment_heading_interpolation() -> void:
 	var segment = CurveSegment.new(0, Vector3(0.0, 0.0, 0.0), 18.0, 0.0, PI / 4.0, 1.0)
-
-	# Test heading at various points
-	var heading_start = segment.get_heading_at_progress(0.0)
-	var heading_mid = segment.get_heading_at_progress(0.5)
-	var heading_end = segment.get_heading_at_progress(1.0)
-
-	assert_that(abs(heading_start - 0.0)).is_less_equal(0.01)
-	assert_that(heading_mid).is_greater(heading_start)
-	assert_that(abs(heading_end - PI / 4.0)).is_less_equal(0.01)
 
 	# Test heading at various points
 	var heading_start = segment.get_heading_at_progress(0.0)

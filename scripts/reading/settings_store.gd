@@ -17,6 +17,7 @@ static func default_settings() -> Dictionary:
 		"control_mode": CONTROL_MODE_KEYBOARD,
 		"word_group": "sightwords",
 		"master_volume": 0.8,
+		"random_word_order": false,
 	}
 
 
@@ -33,6 +34,9 @@ func load_settings() -> Dictionary:
 	settings["master_volume"] = clampf(
 		float(config.get_value("reading", "master_volume", settings["master_volume"])), 0.0, 1.0
 	)
+	settings["random_word_order"] = bool(
+		config.get_value("reading", "random_word_order", settings["random_word_order"])
+	)
 	return settings
 
 
@@ -45,6 +49,7 @@ func save_settings(settings: Dictionary) -> void:
 	config.set_value("reading", "control_mode", str(merged["control_mode"]))
 	config.set_value("reading", "word_group", str(merged["word_group"]))
 	config.set_value("reading", "master_volume", clampf(float(merged["master_volume"]), 0.0, 1.0))
+	config.set_value("reading", "random_word_order", bool(merged["random_word_order"]))
 	config.save(SAVE_PATH)
 
 

@@ -43,6 +43,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\gdscript-check.ps1 -Fix
   2. Godot validation passes (all non-test AND test scripts must compile without errors)
   3. GDUnit CLI executes (test files load and run)
 - **New workflow**: When an error is reported, do NOT fix it directly; first add a regression test that fails for that same error message, then implement the code fix, and then re-run tests to confirm the regression test now passes.
+- **Test validity rule**: a test must be executed by the suite to count. A test that is not included or is skipped is not a test.
 If we run into other issues creating GD Scripts, keep this up to date.
 
 Inline quick-run command (really good):

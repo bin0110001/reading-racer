@@ -29,6 +29,9 @@ var obstacle_triggers: Array[ReadingObstacleTrigger] = []
 var finish_gate_trigger: ReadingFinishGateTrigger = null
 var spawn_root: Node3D = null
 
+# Placement grid for testable map workflow (path_index x lane_index)
+var placement_grid: Array = []
+
 
 func _init(p_content_loader: ReadingContentLoader) -> void:
 	content_loader = p_content_loader
@@ -56,11 +59,14 @@ func spawn_course_pickups_and_obstacles(
 	if word_anchor.is_empty():
 		return
 
+	# Always reset existing pickups and obstacles when making a new word course.
+	# This keeps current word logic aligned with finish-gate collection state.
+	pickup_triggers.clear()
+	obstacle_triggers.clear()
+
 	if clear_existing:
 		for child in spawn_root.get_children():
 			child.queue_free()
-		pickup_triggers.clear()
-		obstacle_triggers.clear()
 
 	var start_index: int = int(word_anchor.get("start_index", 0))
 	var letters: Array = current_entry.get("letters", []) as Array
@@ -99,6 +105,14 @@ func spawn_course_pickups_and_obstacles(
 		pickup_trigger.pickup_triggered.connect(_on_pickup_triggered.bindv([pickup_trigger]))
 		pickup_triggers.append(pickup_trigger)
 
+		# Record generic placement grid entry for headless validation/testing.
+		set_placement_object(
+			path_index,
+			1,
+			"pickup",
+			{"letter": pickup_trigger.letter, "phoneme_label": pickup_trigger.phoneme_label},
+		)
+
 		# Spawn obstacles on both sides
 		for side in [-1, 1]:
 			var obstacle_trigger: ReadingObstacleTrigger = ReadingObstacleTrigger.new()
@@ -121,25 +135,31 @@ func spawn_course_pickups_and_obstacles(
 			obstacle_trigger.obstacle_hit.connect(_on_obstacle_hit.bindv([obstacle_trigger]))
 			obstacle_triggers.append(obstacle_trigger)
 
+			# Record generic obstacle placement.
+			var lane_idx = 0 if side == -1 else 2
+			var side_label = "left" if side == -1 else "right"
+			set_placement_object(
+				path_index,
+				lane_idx,
+				"obstacle",
+				{"obstacle_index": obstacle_trigger.obstacle_index, "side": side_label},
+			)
+
 	# Create finish gate
 	if finish_gate_trigger:
 		finish_gate_trigger.queue_free()
 	finish_gate_trigger = ReadingFinishGateTrigger.new() as ReadingFinishGateTrigger
 	var finish_frame: Dictionary = p_get_path_frame.call(finish_index)
-	finish_gate_trigger.position = (
-		finish_frame.get("center", Vector3.ZERO) as Vector3 + Vector3(0.0, 1.0, 0.0)
-	)
+	finish_gate_trigger.position = finish_frame.get("center", Vector3.ZERO) as Vector3
 	finish_gate_trigger.rotation.y = float(finish_frame.get("heading", 0.0))
 	finish_gate_trigger.word_index = current_entry_index
 	finish_gate_trigger.trigger_width = SEGMENT_SPACING
 	finish_gate_trigger.trigger_depth = 8.0
 	spawn_root.add_child(finish_gate_trigger)
 	finish_gate_trigger.finish_gate_reached.connect(_on_finish_reached.bindv([finish_gate_trigger]))
-	var finish_visual := _instantiate_scene(FINISH_MODEL_PATH)
-	if finish_visual != null:
-		finish_visual.scale = Vector3.ONE * 2.0
-		finish_visual.rotation_degrees = Vector3(0.0, 90.0, 0.0)
-		finish_gate_trigger.add_child(finish_visual)
+
+	# Record finish line placement item.
+	set_placement_object(finish_index, 1, "finish", {})
 
 
 ## Update finish gate state based on pickups collected
@@ -171,6 +191,47 @@ func get_next_target_letter() -> String:
 ## Reset gameplay state for new word
 func reset() -> void:
 	next_target_index = 0
+	_clear_placement_grid()
+
+
+# ============ Placement grid helpers ============
+
+
+func initialize_placement_grid(path_cell_count: int, lane_count: int = 3) -> void:
+	placement_grid.clear()
+	for i in range(path_cell_count):
+		var row: Array = []
+		for j in range(lane_count):
+			row.append({})
+		placement_grid.append(row)
+
+
+func _clear_placement_grid() -> void:
+	placement_grid.clear()
+
+
+func set_placement_object(
+	path_index: int,
+	lane_index: int,
+	object_type: String,
+	metadata: Dictionary = {},
+) -> void:
+	if path_index < 0 or path_index >= placement_grid.size():
+		return
+	if lane_index < 0 or lane_index >= placement_grid[path_index].size():
+		return
+	placement_grid[path_index][lane_index] = {
+		"type": object_type,
+		"metadata": metadata.duplicate(true),
+	}
+
+
+func get_placement_object(path_index: int, lane_index: int) -> Dictionary:
+	if path_index < 0 or path_index >= placement_grid.size():
+		return {}
+	if lane_index < 0 or lane_index >= placement_grid[path_index].size():
+		return {}
+	return placement_grid[path_index][lane_index] as Dictionary
 
 
 # ============ Private Signal Handlers ============

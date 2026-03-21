@@ -5,6 +5,7 @@ class_name MapDisplayManager extends RefCounted
 
 ## Model paths and constants
 const ROAD_MODEL_PATH := "res://models/track-straight.glb"
+const FINISH_MODEL_PATH := "res://models/track-finish.glb"
 const DECORATION_MODEL_PATH := "res://models/decoration-forest.glb"
 const ROAD_SCALE := 2.0
 
@@ -27,6 +28,8 @@ var layout_origin: Vector3 = Vector3.ZERO
 var grid_cells: Dictionary = {}  # Key: "x,y,z", Value: Node3D reference
 var layout_cell_entries: Array = []
 var shared_track_layout: Variant = null
+var current_finish_cell: Vector3i = Vector3i(-1, -1, -1)
+var finish_cell_original_scene_path: String = ""
 
 ## Debug visualization
 var debug_path_mesh_instance: MeshInstance3D = null
@@ -65,6 +68,72 @@ func set_layout_data(
 	if shared_track_layout != null:
 		var layout_dict: Dictionary = shared_track_layout.to_dictionary()
 		layout_cell_entries = layout_dict.get("cells", []) as Array
+		# Reset finish token when layout is updated
+		current_finish_cell = Vector3i(-1, -1, -1)
+		finish_cell_original_scene_path = ""
+
+
+func _cell_key(cell: Vector3i) -> String:
+	return "%d,%d,%d" % [cell.x, cell.y, cell.z]
+
+
+func _restore_finish_cell() -> void:
+	if current_finish_cell.x < 0:
+		return
+	var cell_key = _cell_key(current_finish_cell)
+	# restore original path on the layout entry
+	for cell_entry in layout_cell_entries:
+		if cell_entry.get("cell", Vector3i.ZERO) == current_finish_cell:
+			var data = cell_entry.get("data", {}) as Dictionary
+			data["scene_path"] = finish_cell_original_scene_path
+			break
+
+	# if the tile is in view, respawn as original
+	if grid_cells.has(cell_key):
+		if is_instance_valid(grid_cells[cell_key]):
+			grid_cells[cell_key].queue_free()
+		grid_cells.erase(cell_key)
+		for cell_entry in layout_cell_entries:
+			if cell_entry.get("cell", Vector3i.ZERO) == current_finish_cell:
+				_spawn_grid_cell(
+					current_finish_cell, cell_entry.get("data", {}) as Dictionary, cell_key
+				)
+				break
+
+	current_finish_cell = Vector3i(-1, -1, -1)
+	finish_cell_original_scene_path = ""
+
+
+func set_finish_cell(cell: Vector3i) -> void:
+	if shared_track_layout == null:
+		return
+
+	if current_finish_cell != cell and current_finish_cell.x >= 0:
+		_restore_finish_cell()
+
+	var cell_key = _cell_key(cell)
+	var target_entry: Dictionary = {}
+	for cell_entry in layout_cell_entries:
+		if cell_entry.get("cell", Vector3i.ZERO) == cell:
+			target_entry = cell_entry
+			break
+
+	if target_entry.size() == 0:
+		return
+
+	var data = target_entry.get("data", {}) as Dictionary
+	if finish_cell_original_scene_path == "":
+		finish_cell_original_scene_path = str(data.get("scene_path", ROAD_MODEL_PATH))
+
+	data["scene_path"] = FINISH_MODEL_PATH
+	current_finish_cell = cell
+
+	if grid_cells.has(cell_key):
+		if is_instance_valid(grid_cells[cell_key]):
+			grid_cells[cell_key].queue_free()
+		grid_cells.erase(cell_key)
+
+	_spawn_grid_cell(cell, data, cell_key)
 
 
 ## Initialize measurement of track tile from a sample model

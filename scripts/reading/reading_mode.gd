@@ -79,6 +79,8 @@ var completion_timer := 0.0
 var course_length := 120.0
 var finish_line_x := 0.0
 var farthest_spawned_x := 0.0
+var random_word_order := false
+var rng := RandomNumberGenerator.new()
 
 # Track layout data
 var shared_track_layout: Variant = null
@@ -267,6 +269,8 @@ func _ready() -> void:
 	ReadingControlProfile.ensure_input_actions()
 	settings = settings_store.load_settings()
 	var debug_draw_path = bool(settings.get("debug_draw_path", true))
+	random_word_order = bool(settings.get("random_word_order", false))
+	rng.randomize()
 	print("[ReadingMode] Loaded settings: %s" % str(settings.keys()))
 	settings_store.apply_master_volume(float(settings.get("master_volume", 0.8)))
 	available_groups = content_loader.list_word_groups()
@@ -441,7 +445,7 @@ func _physics_process(delta: float) -> void:
 	if state == "transition":
 		completion_timer -= delta
 		if completion_timer <= 0.0:
-			_start_next_word(true, false, false)
+			_start_next_word(true, false, true)
 		# allow the player to keep moving into the empty area
 
 	# Update movement system
@@ -541,12 +545,22 @@ func _rebuild_shared_track_layout() -> void:
 
 
 func _start_next_word(
-	play_feedback: bool, use_countdown: bool = false, reset_position: bool = false
+	play_feedback: bool, use_countdown: bool = false, reset_position: bool = true
 ) -> void:
 	if current_entries.is_empty():
 		return
 
-	current_entry_index = (current_entry_index + 1) % current_entries.size()
+	if random_word_order:
+		if current_entries.size() <= 1:
+			current_entry_index = 0
+		else:
+			var next_index := current_entry_index
+			while next_index == current_entry_index:
+				next_index = rng.randi_range(0, current_entries.size() - 1)
+			current_entry_index = next_index
+	else:
+		current_entry_index = (current_entry_index + 1) % current_entries.size()
+
 	current_entry = current_entries[current_entry_index]
 	next_spawn_entry_index = (current_entry_index + 1) % current_entries.size()
 
@@ -610,11 +624,12 @@ func _spawn_course_for_entry(
 	if shared_track_layout == null or not gameplay_controller:
 		return
 
-	# When changing words, reset active pickups/obstacles but keep geometry (continuous feel)
+	# Reset active pickups/obstacles for the new word while optionally rebuilding track geometry.
+	for child in spawn_root.get_children():
+		child.queue_free()
+
 	if clear_existing:
-		for child in spawn_root.get_children():
-			child.queue_free()
-		# Reset the base course so the new word feels like a fresh run
+		# Reset base course state for first-load or forced re-build.
 		course_length = 120.0
 		finish_line_x = 0.0
 		farthest_spawned_x = 0.0
@@ -634,6 +649,10 @@ func _spawn_course_for_entry(
 	# Spawn pickups and obstacles via gameplay controller
 	var get_path_frame_callable = Callable(self, "_get_path_frame")
 	var path_wrap_callable = Callable(self, "_wrap_path_index")
+	if shared_track_layout != null:
+		gameplay_controller.initialize_placement_grid(
+			shared_track_layout.path_cells.size(), LANE_POSITIONS.size()
+		)
 	gameplay_controller.spawn_course_pickups_and_obstacles(
 		word_anchor, get_path_frame_callable, path_wrap_callable, register_pickups
 	)
@@ -643,6 +662,10 @@ func _spawn_course_for_entry(
 	var finish_index: int = path_wrap_callable.call(int(word_anchor.get("end_index", 0)) + 1)
 	finish_line_x = _path_index_to_distance(finish_index)
 	current_word_start_x = _path_index_to_distance(start_index)
+
+	if map_display_manager != null:
+		var finish_cell: Vector3i = _get_path_cell(finish_index)
+		map_display_manager.set_finish_cell(finish_cell)
 
 	next_word_start_x = _path_index_to_distance(
 		finish_index + int(round(WORD_GAP / SEGMENT_SPACING))
@@ -817,7 +840,7 @@ func _on_control_mode_changed(mode_name: String) -> void:
 func _on_word_group_changed(group_name: String) -> void:
 	_load_group(group_name)
 	if state != "error":
-		_start_next_word(false)
+		_start_next_word(false, false, true)
 		hud.flash_feedback("Word group: %s" % group_name, Color(0.8, 0.92, 1.0))
 
 

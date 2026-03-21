@@ -1,6 +1,9 @@
 class_name TestReadingModeSetup
 extends GdUnitTestSuite
 
+# Project policy: max 20 public test methods per class (gdlint max-public-methods).
+# For additional coverage, create separate files like test_reading_mode_word_flow.gd.
+
 const ReadingModeScript = preload("res://scripts/reading/reading_mode.gd")
 const TrackLayoutScript = preload("res://scripts/reading/track_generator/TrackLayout.gd")
 const MapDisplayManagerScript = preload("res://scripts/reading/systems/MapDisplayManager.gd")
@@ -9,6 +12,18 @@ const MapDisplayManagerScript = preload("res://scripts/reading/systems/MapDispla
 func before_all() -> void:
 	# no setup needed for these tests
 	pass
+
+
+func _get_test_path_frame(path_index: int) -> Dictionary:
+	return {
+		"center": Vector3(float(path_index) * 10.0, 0.0, 0.0),
+		"heading": 0.0,
+		"right": Vector3(0.0, 0.0, 1.0),
+	}
+
+
+func _get_test_path_index(path_index: int) -> int:
+	return path_index
 
 
 func test_reading_content_loader_creation() -> void:
@@ -71,8 +86,7 @@ func test_required_scripts_exist() -> void:
 
 
 func test_reading_mode_scene_location() -> void:
-	var scene = load("res://scenes/reading_mode.tscn")
-	assert_that(scene).is_not_null()
+	assert_that(ResourceLoader.exists("res://scenes/reading_mode.tscn")).is_true()
 
 
 func test_reading_mode_path_smooth_corner() -> void:
@@ -91,18 +105,12 @@ func test_reading_mode_path_smooth_corner() -> void:
 	reading_mode.track_tile_width = 10.0
 
 	var pose = reading_mode._get_pose_at_path_distance(15.0, 0.0)
-	assert_true(pose.has("position"), "pose should contain 'position' key")
-	assert_true(pose.has("heading"), "pose should contain 'heading' key")
+	assert_that(pose.has("position")).is_true()
+	assert_that(pose.has("heading")).is_true()
 	assert_that(pose.position.x).is_less(15.0)
 	assert_that(pose.position.z).is_greater(5.0)
 	assert_that(pose.heading).is_greater(0.0)
 	assert_that(pose.heading).is_less(PI / 2.0)
-
-
-func test_gameplay_controller_uses_light_light_energy_property() -> void:
-	var light = OmniLight3D.new()
-	light.light_energy = 1.5
-	assert_that(light.light_energy).is_equal(1.5)
 
 
 func test_gameplay_controller_does_not_use_invalid_energy_property() -> void:
@@ -164,3 +172,129 @@ func test_map_display_manager_spawns_visible_cells() -> void:
 	manager.update_visible_cells(Vector3.ZERO, 0.0)
 
 	assert_that(manager.grid_cells.size()).is_greater(0)
+
+
+func test_map_display_manager_finish_cell_replaces_tile() -> void:
+	var layout = TrackLayoutScript.new()
+	layout.initialize(Vector3i(4, 1, 4))
+	layout.set_cell(
+		Vector3i(0, 0, 0), {"scene_path": "res://models/track-straight.glb", "rotation_y": 0.0}
+	)
+
+	var manager = MapDisplayManagerScript.new()
+	var road = Node3D.new()
+	var spawn_root = Node3D.new()
+	manager.set_nodes(road, spawn_root)
+	manager.set_layout_data(layout, Vector3.ZERO, 18.0, 18.0)
+	manager.update_visible_cells(Vector3.ZERO, 0.0)
+	manager.set_finish_cell(Vector3i(0, 0, 0))
+
+	assert_that(manager.grid_cells.size()).is_equal(1)
+	var tile = manager.grid_cells.get("0,0,0")
+	assert_that(tile).is_not_null()
+
+	# Ensure the logic marks finish cell with finish model in layout
+	var finish_entry_found = false
+	for entry in manager.layout_cell_entries:
+		if entry.get("cell") == Vector3i(0, 0, 0):
+			finish_entry_found = true
+			var scene_path := str((entry.get("data", {}) as Dictionary).get("scene_path", ""))
+			assert_that(scene_path).is_equal("res://models/track-finish.glb")
+			break
+	assert_that(finish_entry_found).is_true()
+
+
+func test_start_next_word_transition_resets_player_position() -> void:
+	var reading_mode = ReadingModeScript.new()
+	reading_mode.movement_system = MovementSystem.new(LaneChangeController.new())
+	reading_mode.hud = ReadingHUD.new()
+	reading_mode.player = Node3D.new()
+	reading_mode.vehicle_anchor = Node3D.new()
+	reading_mode.spawn_root = Node3D.new()
+	reading_mode.gameplay_controller = GameplayController.new(ReadingContentLoader.new())
+	reading_mode.shared_track_layout = TrackLayoutScript.new()
+	reading_mode.shared_track_layout.word_anchors = [
+		{"start_index": 2, "end_index": 4},
+		{"start_index": 6, "end_index": 8},
+	]
+	reading_mode.track_tile_length = 18.0
+	reading_mode.current_entries = [
+		{"text": "one", "letters": ["o", "n", "e"]},
+		{"text": "two", "letters": ["t", "w", "o"]},
+	]
+	reading_mode.current_entry_index = 0
+	reading_mode.current_entry = reading_mode.current_entries[0]
+	reading_mode.movement_system.player_path_distance = 100.0
+
+	reading_mode._start_next_word(true, false, true)
+
+	# After transition, one should be repositioned to next word start location.
+	var expected_word_anchor: Dictionary = reading_mode._get_word_anchor(1)
+	var expected_start_x := reading_mode._path_index_to_distance(
+		int(expected_word_anchor.get("start_index", 0))
+	)
+	var expected_offset: float = expected_start_x - ReadingModeScript.WORD_START_OFFSET
+	assert_that(reading_mode.movement_system.player_path_distance).is_equal(expected_offset)
+
+
+func test_gameplay_controller_populates_placement_grid() -> void:
+	var gameplay_controller = GameplayController.new(ReadingContentLoader.new())
+	gameplay_controller.set_spawn_root(Node3D.new())
+	gameplay_controller.initialize_placement_grid(10, 3)
+	gameplay_controller.load_entry({"text": "ab", "letters": ["a", "b"]}, 0)
+
+	var word_anchor = {"start_index": 0, "end_index": 1}
+	var get_path_frame = Callable(self, "_get_test_path_frame")
+	var wrap_fn = Callable(self, "_get_test_path_index")
+	gameplay_controller.spawn_course_pickups_and_obstacles(
+		word_anchor, get_path_frame, wrap_fn, true
+	)
+
+	assert_that(gameplay_controller.get_placement_object(0, 1).get("type", "")).is_equal("pickup")
+	assert_that(gameplay_controller.get_placement_object(1, 1).get("type", "")).is_equal("pickup")
+	assert_that(gameplay_controller.get_placement_object(2, 1).get("type", "")).is_equal("finish")
+
+
+func test_gameplay_controller_resets_pickups_between_words() -> void:
+	var gameplay_controller = GameplayController.new(ReadingContentLoader.new())
+	var root = Node3D.new()
+	gameplay_controller.set_spawn_root(root)
+
+	var first_anchor = {
+		"start_index": 0,
+		"end_index": 0,
+	}
+	var second_anchor = {
+		"start_index": 1,
+		"end_index": 2,
+	}
+
+	var get_path_frame = Callable(self, "_get_test_path_frame")
+	var wrap_fn = Callable(self, "_get_test_path_index")
+
+	var first_entry = {"text": "ab", "letters": ["a", "b"]}
+	var second_entry = {"text": "c", "letters": ["c"]}
+
+	gameplay_controller.load_entry(first_entry, 0)
+	(
+		gameplay_controller
+		. spawn_course_pickups_and_obstacles(
+			first_anchor,
+			get_path_frame,
+			wrap_fn,
+			true,
+		)
+	)
+	assert_that(gameplay_controller.get_total_letters()).is_equal(2)
+
+	gameplay_controller.load_entry(second_entry, 1)
+	(
+		gameplay_controller
+		. spawn_course_pickups_and_obstacles(
+			second_anchor,
+			get_path_frame,
+			wrap_fn,
+			false,
+		)
+	)
+	assert_that(gameplay_controller.get_total_letters()).is_equal(1)

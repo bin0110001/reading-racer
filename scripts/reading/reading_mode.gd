@@ -1,4 +1,5 @@
 extends Node3D
+# gdlint: disable=max-file-lines
 
 const CameraController3DClass = preload("res://scripts/reading/CameraController3D.gd")
 
@@ -48,9 +49,11 @@ const DECORATION_MODELS := [
 @export var stream_tiles_each_side: int = 5
 @export var stream_tiles_ahead: int = 10
 @export var stream_tiles_behind: int = 3
+@export var debug_draw_path: bool = true
 
 # Member variables
 var track_generator: TrackGenerator
+var debug_path_mesh_instance: MeshInstance3D = null
 var shared_track_layout: Variant = null
 var current_segments: Array[TrackSegment] = []
 var control_profile: ControlProfile
@@ -148,6 +151,34 @@ func _cell_to_world_center(cell: Vector3i) -> Vector3:
 	)
 
 
+func _catmull_rom_point(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: float) -> Vector3:
+	# Smooth interpolation across 4 control points
+	var t2 = t * t
+	var t3 = t2 * t
+	return (
+		0.5
+		* (
+			(2.0 * p1)
+			+ (p2 - p0) * t
+			+ (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+			+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
+		)
+	)
+
+
+func _catmull_rom_tangent(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: float) -> Vector3:
+	# Derivative for heading direction
+	var t2 = t * t
+	return (
+		0.5
+		* (
+			(p2 - p0)
+			+ (4.0 * p0 - 10.0 * p1 + 8.0 * p2 - 2.0 * p3) * t
+			+ (-3.0 * p0 + 9.0 * p1 - 9.0 * p2 + 3.0 * p3) * t2
+		)
+	)
+
+
 func _get_path_frame(path_index: int) -> Dictionary:
 	if _get_layout_path_count() <= 0:
 		return {}
@@ -179,13 +210,40 @@ func _get_pose_at_path_distance(path_distance: float, lane_offset: float) -> Dic
 	var segment_float := wrapped_distance / track_tile_length
 	var segment_index := int(floor(segment_float))
 	var segment_progress := segment_float - float(segment_index)
-	var current_center := _cell_to_world_center(_get_path_cell(segment_index))
-	var next_center := _cell_to_world_center(_get_path_cell(segment_index + 1))
-	var forward := (next_center - current_center).normalized()
+
+	# Build smooth point via Catmull-Rom interpolation across neighboring path cells
+	var prev_cell := _get_path_cell(segment_index - 1)
+	var current_cell := _get_path_cell(segment_index)
+	var next_cell := _get_path_cell(segment_index + 1)
+	var next_next_cell := _get_path_cell(segment_index + 2)
+
+	var p0 := _cell_to_world_center(prev_cell)
+	var p1 := _cell_to_world_center(current_cell)
+	var p2 := _cell_to_world_center(next_cell)
+	var p3 := _cell_to_world_center(next_next_cell)
+	var center := _catmull_rom_point(p0, p1, p2, p3, segment_progress)
+	var tangent := _catmull_rom_tangent(p0, p1, p2, p3, segment_progress)
+	if tangent.length_squared() == 0.0:
+		# Fallback to linear segment direction
+		var fallback_forward := (p2 - p1).normalized()
+		if fallback_forward.length_squared() == 0.0:
+			fallback_forward = Vector3.RIGHT
+		var right = Vector3(-fallback_forward.z, 0.0, fallback_forward.x)
+		return {
+			"center": center,
+			"position": center + right * lane_offset,
+			"forward": fallback_forward,
+			"right": right,
+			"heading": atan2(fallback_forward.z, fallback_forward.x),
+			"segment_index": segment_index,
+			"segment_progress": segment_progress,
+		}
+
+	var forward := tangent.normalized()
 	if forward.length_squared() == 0.0:
 		forward = Vector3.RIGHT
 	var right := Vector3(-forward.z, 0.0, forward.x)
-	var center := current_center.lerp(next_center, segment_progress)
+
 	return {
 		"center": center,
 		"position": center + right * lane_offset,
@@ -229,6 +287,7 @@ func _ready() -> void:
 	rng.randomize()
 	ReadingControlProfile.ensure_input_actions()
 	settings = settings_store.load_settings()
+	debug_draw_path = bool(settings.get("debug_draw_path", true))
 	print("[ReadingMode] Loaded settings: %s" % str(settings.keys()))
 	settings_store.apply_master_volume(float(settings.get("master_volume", 0.8)))
 	available_groups = content_loader.list_word_groups()
@@ -248,9 +307,11 @@ func _ready() -> void:
 		settings["word_group"] = requested_group
 
 	hud.configure(available_groups, settings)
+	hud.set_debug_path(debug_draw_path)
 	hud.control_mode_changed.connect(_on_control_mode_changed)
 	hud.word_group_changed.connect(_on_word_group_changed)
 	hud.volume_changed.connect(_on_volume_changed)
+	hud.debug_path_toggled.connect(_on_debug_path_toggled)
 	hud.resume_requested.connect(_close_options)
 	phoneme_player.phoneme_changed.connect(_on_phoneme_changed)
 	print("[ReadingMode] HUD configured with group: %s" % requested_group)
@@ -300,6 +361,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		control_profile.handle_input(event)
 	if event.is_action_pressed(ReadingControlProfile.ACTION_TOGGLE_OPTIONS):
 		_toggle_options()
+		get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F10:
+		debug_draw_path = not debug_draw_path
+		settings["debug_draw_path"] = debug_draw_path
+		settings_store.save_settings(settings)
+		_update_debug_path_visual()
+		var status_text := "ON" if debug_draw_path else "OFF"
+		hud.set_help("F10 toggles path debug - %s" % status_text)
+		hud.flash_feedback("Path debug %s" % status_text, Color(0.4, 0.9, 0.4))
 		get_viewport().set_input_as_handled()
 		return
 
@@ -430,14 +502,18 @@ func _update_player_heading_and_position(delta: float) -> void:
 	if player_steering != 0.0:
 		blended_heading += player_steering * (1.0 - steering_influence) * delta
 
-	player_heading = blended_heading
+	player_heading = fmod(blended_heading + PI * 2.0, PI * 2.0)
 	player.position = track_pose.get("position", player.position) as Vector3
 
-	# Apply heading rotation to vehicle so it visually faces forward on the track
+	# Apply heading and banking (tilt) using a basis to avoid Euler gimbal flips.
 	var tilt_angle = float(lane_index - 1) * -0.14
-	vehicle_anchor.rotation.z = lerp_angle(vehicle_anchor.rotation.z, tilt_angle, delta * 9.0)
-	# Model is imported facing -Z by default; add 90deg shift so heading vector matches path forward.
-	vehicle_anchor.rotation.y = player_heading - PI / 2
+	var forward = Vector3(cos(player_heading), 0.0, sin(player_heading)).normalized()
+	var right = Vector3(-forward.z, 0.0, forward.x).normalized()
+	var world_up = Vector3.UP
+	var base_basis = Basis(right, world_up, forward).orthonormalized()
+	var banked_basis = base_basis.rotated(forward, tilt_angle)
+
+	vehicle_anchor.global_transform = Transform3D(banked_basis, player.position)
 
 
 func _load_group(group_name: String) -> void:
@@ -487,6 +563,7 @@ func _rebuild_shared_track_layout() -> void:
 			]
 		)
 	)
+	_update_debug_path_visual()
 
 
 func _start_next_word(
@@ -534,6 +611,8 @@ func _reset_word_state(reset_position: bool = false, use_countdown: bool = true)
 		)
 		player.position = reset_pose.get("position", Vector3.ZERO) as Vector3
 		player_heading = float(reset_pose.get("heading", 0.0))
+		# Initialize vehicle anchor to the exact target heading to prevent snap correction.
+		vehicle_anchor.rotation = Vector3(0.0, player_heading + PI / 2, 0.0)
 	next_target_index = 0
 	slowed_timer = 0.0
 	completion_timer = 0.0
@@ -711,6 +790,49 @@ func _build_course_geometry() -> void:
 
 	# Build the initial grid around the player
 	_update_grid()
+	_update_debug_path_visual()
+
+
+func _update_debug_path_visual() -> void:
+	if not debug_draw_path or shared_track_layout == null:
+		if debug_path_mesh_instance and is_instance_valid(debug_path_mesh_instance):
+			debug_path_mesh_instance.queue_free()
+			debug_path_mesh_instance = null
+		return
+
+	var curve_points: Array[Vector3] = []
+	var path_count := _get_layout_path_count()
+	if path_count <= 0 or track_tile_length <= 0.0:
+		return
+
+	var total_length: float = float(path_count) * track_tile_length
+	var sample_count: int = max(64, min(512, int(total_length / 1.0)))
+	for sample_i in range(sample_count):
+		var t := float(sample_i) / float(sample_count - 1)
+		var distance := t * total_length
+		var pose := _get_pose_at_path_distance(distance, 0.0)
+		if not pose.is_empty():
+			curve_points.append(pose.position)
+
+	if curve_points.size() < 2:
+		return
+
+	var line_mesh := ImmediateMesh.new()
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.2, 1.0, 0.3)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	line_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, material)
+	for point in curve_points:
+		line_mesh.surface_add_vertex(point)
+	line_mesh.surface_end()
+
+	if debug_path_mesh_instance == null or not is_instance_valid(debug_path_mesh_instance):
+		debug_path_mesh_instance = MeshInstance3D.new()
+		debug_path_mesh_instance.name = "DebugPath"
+		add_child(debug_path_mesh_instance)
+
+	debug_path_mesh_instance.mesh = line_mesh
 
 
 func _update_grid() -> void:
@@ -782,8 +904,8 @@ func _attach_player_model() -> void:
 
 	# Increase the car size so the player is more visible and feels closer to the camera.
 	model.scale = Vector3.ONE * 1.8
-	# Rotate the vehicle to face forward.
-	model.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+	# Model orientation is handled by the vehicle_anchor heading, no pre-rotation.
+	model.rotation_degrees = Vector3.ZERO
 	# Lower the vehicle so it sits closer to the road.
 	vehicle_anchor.position = Vector3(0.0, 0.05, 0.0)
 	vehicle_anchor.add_child(model)
@@ -963,17 +1085,26 @@ func _on_volume_changed(volume: float) -> void:
 	settings_store.apply_master_volume(volume)
 
 
+func _on_debug_path_toggled(enabled: bool) -> void:
+	debug_draw_path = enabled
+	settings["debug_draw_path"] = enabled
+	settings_store.save_settings(settings)
+	_update_debug_path_visual()
+	var status_text := "ON" if enabled else "OFF"
+	hud.flash_feedback("Path debug %s" % status_text, Color(0.4, 0.9, 0.4))
+
+
 func _on_phoneme_changed(label: String) -> void:
 	hud.set_phoneme(label)
 
 
 func _update_help_text() -> void:
 	if not control_profile:
-		hud.set_help("Left/Right or A/D to switch lanes   Esc/Tab: options")
+		hud.set_help("Left/Right or A/D to switch lanes   Esc/Tab: options   F10: path debug")
 		return
 
 	if control_profile is LaneChangeController:
-		hud.set_help("Left/Right or A/D to switch lanes   Esc/Tab: options")
+		hud.set_help("Left/Right or A/D to switch lanes   Esc/Tab: options   F10: path debug")
 	elif control_profile is SmoothSteeringController:
 		hud.set_help("Left/Right or A/D to steer smoothly   Esc/Tab: options")
 	elif control_profile is ThrottleSteeringController:

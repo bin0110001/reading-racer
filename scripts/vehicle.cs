@@ -145,7 +145,12 @@ public partial class Vehicle : Node3D
             input.Z = Input.GetAxis("back", "forward");
         }
 
-        sphere.AngularVelocity += vehicleModel.GlobalTransform.Basis.X * (linearSpeed * 100f) * delta;
+        // Use vehicle forward vector from the model's true local forward (-Z in Godot space).
+        // Forward to world is -Basis.Z for models oriented with nose pointing to -Z.
+        Vector3 forward = -vehicleModel.GlobalTransform.Basis.Z;
+        Vector3 torqueAxis = forward.Cross(Vector3.Up).Normalized();
+
+        sphere.AngularVelocity += torqueAxis * (linearSpeed * 100f) * delta;
     }
 
     private void EffectBody(float delta)

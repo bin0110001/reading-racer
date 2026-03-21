@@ -69,3 +69,26 @@ func test_required_scripts_exist() -> void:
 func test_reading_mode_scene_location() -> void:
 	var scene = load("res://scenes/reading_mode.tscn")
 	assert_that(scene).is_not_null()
+
+
+func test_reading_mode_path_smooth_corner() -> void:
+	var reading_mode = load("res://scripts/reading/reading_mode.gd").new()
+	var layout = load("res://scripts/reading/track_generator/TrackLayout.gd").new()
+	layout.path_cells = [
+		Vector3i(0, 0, 0),
+		Vector3i(1, 0, 0),
+		Vector3i(1, 0, 1),
+		Vector3i(0, 0, 1),
+	]
+	reading_mode.shared_track_layout = layout
+	reading_mode.layout_origin = Vector3.ZERO
+	reading_mode.track_tile_length = 10.0
+	reading_mode.track_tile_width = 10.0
+
+	var pose = reading_mode._get_pose_at_path_distance(15.0, 0.0)
+	assert_that(pose).contains("position")
+	assert_that(pose).contains("heading")
+	assert_that(pose.position.x).is_less(15.0)
+	assert_that(pose.position.z).is_greater(5.0)
+	assert_that(pose.heading).is_greater(0.0)
+	assert_that(pose.heading).is_less(PI / 2.0)

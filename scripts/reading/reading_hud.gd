@@ -5,6 +5,7 @@ signal control_mode_changed(mode_name: String)
 signal word_group_changed(group_name: String)
 signal volume_changed(volume: float)
 signal resume_requested
+signal debug_path_toggled(enabled: bool)
 
 var _status_label := Label.new()
 var _word_label := Label.new()
@@ -16,6 +17,7 @@ var _options_panel := PanelContainer.new()
 var _control_mode_option := OptionButton.new()
 var _word_group_option := OptionButton.new()
 var _volume_slider := HSlider.new()
+var _debug_path_checkbox := CheckBox.new()
 
 
 func _ready() -> void:
@@ -100,6 +102,12 @@ func _build_hud() -> void:
 	_volume_slider.max_value = 1.0
 	_volume_slider.step = 0.01
 	options_layout.add_child(_make_row("Volume", _volume_slider))
+
+	var path_checkbox := _debug_path_checkbox
+	path_checkbox.text = "Show path debug"
+	path_checkbox.set_pressed(true)
+	path_checkbox.toggled.connect(_on_debug_path_toggled)
+	options_layout.add_child(_make_row("Path Debug", path_checkbox))
 
 	var resume_button := Button.new()
 	resume_button.text = "Resume"
@@ -190,9 +198,17 @@ func set_volume(volume: float) -> void:
 	_volume_slider.value = clampf(volume, 0.0, 1.0)
 
 
+func set_debug_path(enabled: bool) -> void:
+	_debug_path_checkbox.set_pressed(enabled)
+
+
 func _on_control_mode_selected(index: int) -> void:
 	if index >= 0 and index < ReadingSettingsStore.CONTROL_MODES.size():
 		emit_signal("control_mode_changed", ReadingSettingsStore.CONTROL_MODES[index])
+
+
+func _on_debug_path_toggled(enabled: bool) -> void:
+	emit_signal("debug_path_toggled", enabled)
 
 
 func _on_word_group_selected(index: int) -> void:

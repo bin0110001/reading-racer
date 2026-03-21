@@ -352,7 +352,8 @@ func _ready() -> void:
 	camera_controller.focus_on(player.position, 15.0)
 	print("[ReadingMode] Camera controller initialized with smoothing")
 
-	_start_next_word(false, true, true)
+	# Start the first word in playing mode to avoid perceived 'no movement' startup wait
+	_start_next_word(false, false, true)
 	print("[ReadingMode] Initialization complete!")
 
 

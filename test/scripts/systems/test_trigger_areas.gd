@@ -77,3 +77,12 @@ func test_finish_gate_sets_pickups_state() -> void:
 
 	trigger.all_pickups_collected = true
 	assert_that(trigger.all_pickups_collected).is_true()
+
+
+func test_finish_gate_set_pickups_collected_method() -> void:
+	var trigger = ReadingFinishGateTrigger.new()
+	trigger.set_pickups_collected(false)
+	assert_that(trigger.all_pickups_collected).is_false()
+
+	trigger.set_pickups_collected(true)
+	assert_that(trigger.all_pickups_collected).is_true()

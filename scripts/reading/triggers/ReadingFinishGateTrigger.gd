@@ -38,5 +38,10 @@ func _on_area_entered(area: Area3D) -> void:
 		trigger_finish()
 
 
+func set_pickups_collected(collected: bool) -> void:
+	all_pickups_collected = collected
+
+
 func reset() -> void:
 	has_triggered = false
+	all_pickups_collected = false

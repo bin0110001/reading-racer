@@ -2,6 +2,9 @@ extends Node3D
 # gdlint: disable=max-file-lines
 
 const CameraController3DClass = preload("res://scripts/reading/CameraController3D.gd")
+const MovementSystem = preload("res://scripts/reading/systems/MovementSystem.gd")
+const MapDisplayManager = preload("res://scripts/reading/systems/MapDisplayManager.gd")
+const GameplayController = preload("res://scripts/reading/systems/GameplayController.gd")
 
 # Grid layout constants
 const GRID_WIDTH := 7  # Z-axis: 7 columns (decorations + 1 road + decorations)
@@ -11,7 +14,7 @@ const GRID_DEPTH := GRID_AHEAD + GRID_BEHIND  # Total 13 rows
 const GRID_CENTER_START := 3  # Column where the road is (col 3, centered)
 const GRID_CENTER_END := 3  # Last center column (inclusive)
 
-const LANE_WIDTH := 6.0
+const LANE_WIDTH := 4
 const LANE_HALF_WIDTH := LANE_WIDTH * 0.5
 const LANE_POSITIONS := [-LANE_WIDTH, 0.0, LANE_WIDTH]
 const PLAYER_START_X := -12.0
@@ -51,15 +54,15 @@ const DECORATION_MODELS := [
 @export var stream_tiles_behind: int = 3
 @export var debug_draw_path: bool = true
 
+# Systems (separation of concerns)
+var movement_system: MovementSystem = null
+var map_display_manager: MapDisplayManager = null
+var gameplay_controller: GameplayController = null
+
 # Member variables
 var track_generator: TrackGenerator
-var debug_path_mesh_instance: MeshInstance3D = null
-var shared_track_layout: Variant = null
-var current_segments: Array[TrackSegment] = []
-var control_profile: ControlProfile
 var settings_store := ReadingSettingsStore.new()
 var content_loader := ReadingContentLoader.new()
-var rng := RandomNumberGenerator.new()
 var camera_controller = null  # CameraController3D instance
 
 var settings: Dictionary = {}
@@ -68,38 +71,25 @@ var current_entries: Array[Dictionary] = []
 var current_entry: Dictionary = {}
 var current_entry_index := -1
 
-var pickup_triggers: Array[ReadingPickupTrigger] = []
-var obstacle_triggers: Array[ReadingObstacleTrigger] = []
-var finish_gate_trigger: ReadingFinishGateTrigger = null
-
-var lane_index := 1
-var next_target_index := 0
+# Game state
 var state := "loading"
 var state_before_pause := "countdown"
 var countdown_remaining := 3.0
-var slowed_timer := 0.0
 var completion_timer := 0.0
 var course_length := 120.0
 var finish_line_x := 0.0
 var farthest_spawned_x := 0.0
-var player_path_distance := 0.0
-var player_lane_offset := 0.0
-var layout_origin := Vector3.ZERO
-var layout_cell_entries: Array = []
 
+# Track layout data
+var shared_track_layout: Variant = null
 var track_tile_length := 0.0
 var track_tile_width := 0.0
-var grid_cells: Dictionary = {}  # Key: "x,z", Value: Node3D reference
-var current_tile_index := 0
+var layout_origin := Vector3.ZERO
 
+# Word progression state
 var current_word_start_x := WORD_START_X
 var next_word_start_x := WORD_START_X
 var next_spawn_entry_index := 0
-
-# Player movement and rotation
-var player_heading := 0.0  # Current player rotation in radians
-var player_forward_speed := PLAYER_SPEED
-var current_steering_input := 0.0  # From control profile
 
 @onready var road: Node3D = $Road
 @onready var spawn_root: Node3D = $SpawnRoot
@@ -109,6 +99,7 @@ var current_steering_input := 0.0  # From control profile
 @onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var hud: ReadingHUD = $ReadingHUD
 @onready var phoneme_player: PhonemePlayer = $PhonemePlayer
+@onready var control_profile: ControlProfile = null
 
 
 # Helper function to get the center Z position of the road (used consistently everywhere)
@@ -197,6 +188,12 @@ func _get_path_frame(path_index: int) -> Dictionary:
 	}
 
 
+func _get_max_lane_offset() -> float:
+	if track_tile_width > 0.0:
+		return min(LANE_WIDTH, (track_tile_width * 0.5) - 1.0)
+	return LANE_WIDTH
+
+
 func _get_pose_at_path_distance(path_distance: float, lane_offset: float) -> Dictionary:
 	var path_count := _get_layout_path_count()
 	if path_count <= 0 or track_tile_length <= 0.0:
@@ -207,6 +204,9 @@ func _get_pose_at_path_distance(path_distance: float, lane_offset: float) -> Dic
 	if wrapped_distance < 0.0:
 		wrapped_distance += loop_length
 
+	var lane_offset_clamped: float = clamp(
+		lane_offset, -_get_max_lane_offset(), _get_max_lane_offset()
+	)
 	var segment_float := wrapped_distance / track_tile_length
 	var segment_index := int(floor(segment_float))
 	var segment_progress := segment_float - float(segment_index)
@@ -231,8 +231,7 @@ func _get_pose_at_path_distance(path_distance: float, lane_offset: float) -> Dic
 		var right = Vector3(-fallback_forward.z, 0.0, fallback_forward.x)
 		return {
 			"center": center,
-			"position": center + right * lane_offset,
-			"forward": fallback_forward,
+			"position": center + right * lane_offset_clamped,
 			"right": right,
 			"heading": atan2(fallback_forward.z, fallback_forward.x),
 			"segment_index": segment_index,
@@ -246,32 +245,13 @@ func _get_pose_at_path_distance(path_distance: float, lane_offset: float) -> Dic
 
 	return {
 		"center": center,
-		"position": center + right * lane_offset,
+		"position": center + right * lane_offset_clamped,
 		"forward": forward,
 		"right": right,
 		"heading": atan2(forward.z, forward.x),
 		"segment_index": segment_index,
 		"segment_progress": segment_progress,
 	}
-
-
-func _is_point_in_stream_window(world_pos: Vector3) -> bool:
-	var forward := Vector3(cos(player_heading), 0.0, sin(player_heading))
-	if forward.length_squared() == 0.0:
-		forward = Vector3.RIGHT
-	var right := Vector3(-forward.z, 0.0, forward.x)
-	var flat_offset := world_pos - player.position
-	flat_offset.y = 0.0
-	var forward_distance := flat_offset.dot(forward)
-	var side_distance := absf(flat_offset.dot(right))
-	var ahead_limit := (float(stream_tiles_ahead) + 0.75) * track_tile_length
-	var behind_limit := (float(stream_tiles_behind) + 0.75) * track_tile_length
-	var side_limit := (float(stream_tiles_each_side) + 0.75) * track_tile_width
-	return (
-		forward_distance <= ahead_limit
-		and forward_distance >= -behind_limit
-		and side_distance <= side_limit
-	)
 
 
 func _get_word_anchor(word_index: int) -> Dictionary:
@@ -284,10 +264,9 @@ func _get_word_anchor(word_index: int) -> Dictionary:
 
 func _ready() -> void:
 	print("[ReadingMode._ready] Starting initialization...")
-	rng.randomize()
 	ReadingControlProfile.ensure_input_actions()
 	settings = settings_store.load_settings()
-	debug_draw_path = bool(settings.get("debug_draw_path", true))
+	var debug_draw_path = bool(settings.get("debug_draw_path", true))
 	print("[ReadingMode] Loaded settings: %s" % str(settings.keys()))
 	settings_store.apply_master_volume(float(settings.get("master_volume", 0.8)))
 	available_groups = content_loader.list_word_groups()
@@ -327,16 +306,41 @@ func _ready() -> void:
 
 	# Initialize control profile - starts with default, updated when word loads
 	var control_mode = str(settings.get("control_mode", "lane_change"))
-	_set_control_profile(control_mode)
+	_create_control_profile(control_mode)
 	print("[ReadingMode] Control profile set to: %s" % control_mode)
+
+	# Initialize Movement System
+	movement_system = MovementSystem.new(control_profile)
+	print("[ReadingMode] MovementSystem initialized")
 
 	_update_help_text()
 	_attach_player_model()
 	player.add_to_group("player")  # For trigger detection
 	print("[ReadingMode] Player model attached and added to 'player' group")
 	_load_group(requested_group)
+
+	# Initialize Map Display Manager early so _build_course_geometry can signal into it
+	map_display_manager = MapDisplayManager.new()
+	map_display_manager.set_nodes(road, spawn_root)
+	map_display_manager.stream_tiles_each_side = stream_tiles_each_side
+	map_display_manager.stream_tiles_ahead = stream_tiles_ahead
+	map_display_manager.stream_tiles_behind = stream_tiles_behind
+	print("[ReadingMode] MapDisplayManager initialized")
+
 	_build_course_geometry()
 	print("[ReadingMode] Course geometry built")
+
+	map_display_manager.update_debug_visualization(
+		debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
+	)
+
+	# Initialize Gameplay Controller
+	gameplay_controller = GameplayController.new(content_loader)
+	gameplay_controller.set_spawn_root(spawn_root)
+	gameplay_controller.pickup_collected.connect(_on_gameplay_pickup_collected)
+	gameplay_controller.obstacle_hit.connect(_on_gameplay_obstacle_hit)
+	gameplay_controller.word_completed.connect(_on_gameplay_word_completed)
+	print("[ReadingMode] GameplayController initialized")
 
 	# Initialize camera controller
 	camera_controller = CameraController3DClass.new()
@@ -357,18 +361,23 @@ func _unhandled_input(event: InputEvent) -> void:
 	if camera_controller and camera_controller.handle_input(event):
 		return
 
-	if control_profile:
-		control_profile.handle_input(event)
+	# Delegate input to movement system
+	if movement_system:
+		movement_system.handle_input(event)
+
 	if event.is_action_pressed(ReadingControlProfile.ACTION_TOGGLE_OPTIONS):
 		_toggle_options()
 		get_viewport().set_input_as_handled()
 		return
 
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F10:
-		debug_draw_path = not debug_draw_path
+		var debug_draw_path = not bool(settings.get("debug_draw_path", true))
 		settings["debug_draw_path"] = debug_draw_path
 		settings_store.save_settings(settings)
-		_update_debug_path_visual()
+		if map_display_manager:
+			map_display_manager.update_debug_visualization(
+				debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
+			)
 		var status_text := "ON" if debug_draw_path else "OFF"
 		hud.set_help("F10 toggles path debug - %s" % status_text)
 		hud.flash_feedback("Path debug %s" % status_text, Color(0.4, 0.9, 0.4))
@@ -385,7 +394,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-func _set_control_profile(mode_name: String) -> void:
+func _create_control_profile(mode_name: String) -> void:
 	# Create appropriate control profile based on mode
 	match mode_name:
 		"smooth_steering":
@@ -395,6 +404,10 @@ func _set_control_profile(mode_name: String) -> void:
 		_:
 			# Default to lane change for "lane_change" or any unknown mode
 			control_profile = LaneChangeController.new()
+
+	# Update movement system with new profile
+	if movement_system:
+		movement_system.set_control_profile(control_profile)
 
 
 func _physics_process(delta: float) -> void:
@@ -413,6 +426,14 @@ func _physics_process(delta: float) -> void:
 			hud.flash_feedback("GO!", Color(0.4, 1.0, 0.5))
 		else:
 			hud.set_status("Starting in %d" % int(ceil(countdown_remaining)))
+
+		# Always keep map tiles visible while waiting for countdown end.
+		if map_display_manager and movement_system:
+			map_display_manager.update_visible_cells(
+				player.position, movement_system.player_heading
+			)
+			_ensure_road_ahead()
+
 		_update_camera(delta)
 		return
 
@@ -422,37 +443,29 @@ func _physics_process(delta: float) -> void:
 			_start_next_word(true, false, false)
 		# allow the player to keep moving into the empty area
 
-	# Update control profile
-	if control_profile:
-		control_profile.update(delta)
+	# Update movement system
+	movement_system.update(delta)
 
-	slowed_timer = maxf(slowed_timer - delta, 0.0)
+	# Get track pose for current path distance
+	var track_pose := _get_pose_at_path_distance(
+		movement_system.player_path_distance, movement_system.player_lane_offset
+	)
 
-	# Get movement inputs based on control profile
-	var lane_delta = control_profile.consume_lane_delta(delta)
-	if lane_delta != 0:
-		lane_index = clampi(lane_index + lane_delta, 0, LANE_POSITIONS.size() - 1)
+	# Update player heading and position
+	movement_system.update_position_and_heading(delta, track_pose)
 
-	# Handle speed (slowing from obstacles)
-	var speed := SLOWED_SPEED if slowed_timer > 0.0 else PLAYER_SPEED
+	# Update player visuals
+	player.position = movement_system.get_player_position(track_pose)
+	var player_basis = movement_system.get_player_basis()
+	vehicle_anchor.global_transform = Transform3D(player_basis, player.position)
 
-	# For hard mode, use throttle control; for other modes, use automatic forward
-	if control_profile is ThrottleSteeringController:
-		var throttle = control_profile.get_throttle()
-		player_forward_speed = speed * maxf(0.0, throttle) if throttle >= 0 else -speed * throttle
-		# TODO: handle throttle value properly
-		speed = PLAYER_SPEED
-	else:
-		player_forward_speed = speed
+	# Update map display
+	if map_display_manager:
+		map_display_manager.update_visible_cells(player.position, movement_system.player_heading)
 
-	# Advance around the generated loop instead of moving along a fixed X strip.
-	player_path_distance += player_forward_speed * delta
-
-	# Update player heading and position based on track
-	_update_player_heading_and_position(delta)
-
-	# Update collisions (triggers)
-	_update_triggers()
+	# Update gameplay triggers
+	if gameplay_controller:
+		gameplay_controller.update_finish_gate_state()
 
 	_ensure_road_ahead()
 	_update_status()
@@ -460,60 +473,19 @@ func _physics_process(delta: float) -> void:
 
 
 func _ensure_road_ahead() -> void:
-	print(
-		(
-			"[ReadingMode._ensure_road_ahead] path_distance=%.1f active_tiles=%d"
-			% [player_path_distance, grid_cells.size()]
+	if map_display_manager:
+		var active_tiles_count = map_display_manager.grid_cells.size()
+		print(
+			(
+				"[ReadingMode._ensure_road_ahead] path_distance=%.1f active_tiles=%d"
+				% [movement_system.player_path_distance, active_tiles_count]
+			)
 		)
-	)
-	_update_grid()
 	_cleanup_spawned_content()
 	_ensure_words_ahead()
 
 
-func _update_player_heading_and_position(delta: float) -> void:
-	var target_lane_offset: float = LANE_POSITIONS[lane_index]
-	player_lane_offset = move_toward(
-		player_lane_offset, target_lane_offset, LANE_CHANGE_SPEED * delta
-	)
-	var track_pose: Dictionary = _get_pose_at_path_distance(
-		player_path_distance, player_lane_offset
-	)
-	if track_pose.is_empty():
-		return
-
-	var target_heading := float(track_pose.get("heading", player_heading))
-
-	# Apply control profile's steering influence
-	var steering_influence = control_profile.get_steering_influence(player_heading, target_heading)
-	var player_steering = 0.0
-
-	if control_profile is SmoothSteeringController:
-		player_steering = (control_profile as SmoothSteeringController).get_steering_angle()
-	elif control_profile is ThrottleSteeringController:
-		player_steering = (control_profile as ThrottleSteeringController).get_steering_angle()
-
-	# Blend steering: auto-steer influence + player input
-	var blended_heading = player_heading
-	if steering_influence > 0.0:
-		blended_heading = lerp_angle(
-			player_heading, target_heading, steering_influence * delta * 4.0
-		)
-	if player_steering != 0.0:
-		blended_heading += player_steering * (1.0 - steering_influence) * delta
-
-	player_heading = fmod(blended_heading + PI * 2.0, PI * 2.0)
-	player.position = track_pose.get("position", player.position) as Vector3
-
-	# Apply heading and banking (tilt) using a basis to avoid Euler gimbal flips.
-	var tilt_angle = float(lane_index - 1) * -0.14
-	var forward = Vector3(cos(player_heading), 0.0, sin(player_heading)).normalized()
-	var right = Vector3(-forward.z, 0.0, forward.x).normalized()
-	var world_up = Vector3.UP
-	var base_basis = Basis(right, world_up, forward).orthonormalized()
-	var banked_basis = base_basis.rotated(forward, tilt_angle)
-
-	vehicle_anchor.global_transform = Transform3D(banked_basis, player.position)
+# Movement update now handled by MovementSystem
 
 
 func _load_group(group_name: String) -> void:
@@ -530,6 +502,8 @@ func _load_group(group_name: String) -> void:
 		return
 
 	_rebuild_shared_track_layout()
+	if map_display_manager:
+		_build_course_geometry()
 
 
 func _rebuild_shared_track_layout() -> void:
@@ -563,7 +537,6 @@ func _rebuild_shared_track_layout() -> void:
 			]
 		)
 	)
-	_update_debug_path_visual()
 
 
 func _start_next_word(
@@ -587,6 +560,8 @@ func _start_next_word(
 	var clear_existing := current_entry_index == 0
 	_spawn_course_for_entry(current_entry, current_word_start_x, clear_existing)
 	phoneme_player.play_word(content_loader.get_word_stream(current_entry))
+	if map_display_manager and movement_system:
+		map_display_manager.update_visible_cells(player.position, movement_system.player_heading)
 	_update_status()
 
 
@@ -602,19 +577,20 @@ func _restart_current_word() -> void:
 
 
 func _reset_word_state(reset_position: bool = false, use_countdown: bool = true) -> void:
-	if reset_position:
-		lane_index = 1
-		player_lane_offset = 0.0
-		player_path_distance = current_word_start_x - WORD_START_OFFSET
+	if reset_position and movement_system:
+		var path_distance_offset = current_word_start_x - WORD_START_OFFSET
+		movement_system.reset(true, path_distance_offset)
 		var reset_pose: Dictionary = _get_pose_at_path_distance(
-			player_path_distance, player_lane_offset
+			movement_system.player_path_distance, movement_system.player_lane_offset
 		)
 		player.position = reset_pose.get("position", Vector3.ZERO) as Vector3
-		player_heading = float(reset_pose.get("heading", 0.0))
-		# Initialize vehicle anchor to the exact target heading to prevent snap correction.
-		vehicle_anchor.rotation = Vector3(0.0, player_heading + PI / 2, 0.0)
-	next_target_index = 0
-	slowed_timer = 0.0
+		# Initialize vehicle anchor to the exact target heading to prevent snap correction
+		var heading = float(reset_pose.get("heading", 0.0))
+		vehicle_anchor.rotation = Vector3(0.0, heading + PI / 2, 0.0)
+
+	if gameplay_controller:
+		gameplay_controller.reset()
+
 	completion_timer = 0.0
 	countdown_remaining = 3.0
 	if use_countdown:
@@ -626,20 +602,18 @@ func _reset_word_state(reset_position: bool = false, use_countdown: bool = true)
 
 func _spawn_course_for_entry(
 	entry: Dictionary,
-	_word_start_x: float,
+	_unused_word_start_x: float,
 	clear_existing: bool = true,
 	register_pickups: bool = true
 ) -> void:
-	if shared_track_layout == null:
+	if shared_track_layout == null or not gameplay_controller:
 		return
 
-	# When changing words we only want to reset the active pickups/obstacles, but we keep the
-	# previously spawned world geometry so the course feels continuous.
-	# Old spawned objects will be pruned as the player moves forward.
+	# When changing words, reset active pickups/obstacles but keep geometry (continuous feel)
 	if clear_existing:
 		for child in spawn_root.get_children():
 			child.queue_free()
-		# Reset the base course so the new word feels like a fresh run.
+		# Reset the base course so the new word feels like a fresh run
 		course_length = 120.0
 		finish_line_x = 0.0
 		farthest_spawned_x = 0.0
@@ -649,121 +623,36 @@ func _spawn_course_for_entry(
 			next_spawn_entry_index = 0
 		_build_course_geometry()
 
-	if register_pickups:
-		pickup_triggers.clear()
-		obstacle_triggers.clear()
+	# Load entry into gameplay controller
+	gameplay_controller.load_entry(entry, current_entry_index)
 
 	var word_anchor: Dictionary = _get_word_anchor(current_entry_index)
 	if word_anchor.is_empty():
 		return
+
+	# Spawn pickups and obstacles via gameplay controller
+	var get_path_frame_callable = Callable(self, "_get_path_frame")
+	var path_wrap_callable = Callable(self, "_wrap_path_index")
+	gameplay_controller.spawn_course_pickups_and_obstacles(
+		word_anchor, get_path_frame_callable, path_wrap_callable, register_pickups
+	)
+
+	# Update word progression state
 	var start_index: int = int(word_anchor.get("start_index", 0))
-	var letters: Array = entry.get("letters", []) as Array
-	var finish_index: int = _wrap_path_index(int(word_anchor.get("end_index", 0)) + 1)
+	var finish_index: int = path_wrap_callable.call(int(word_anchor.get("end_index", 0)) + 1)
 	finish_line_x = _path_index_to_distance(finish_index)
 	current_word_start_x = _path_index_to_distance(start_index)
-	var spawn_msg = "[ReadingMode] Spawning %d letters at path index %d"
-	print(spawn_msg % [letters.size(), start_index])
-
-	for letter_index in range(letters.size()):
-		var path_index := _wrap_path_index(start_index + letter_index)
-		var path_frame: Dictionary = _get_path_frame(path_index)
-		var segment_pos: Vector3 = path_frame.get("center", Vector3.ZERO) as Vector3
-		var segment_heading := float(path_frame.get("heading", 0.0))
-
-		# Create pickup trigger
-		var pickup_trigger = ReadingPickupTrigger.new()
-		pickup_trigger.position = segment_pos + Vector3(0.0, 2.3, 0.0)
-		pickup_trigger.rotation.y = segment_heading
-		pickup_trigger.word_index = current_entry_index
-		pickup_trigger.letter_index = letter_index
-		pickup_trigger.letter = str(letters[letter_index])
-		pickup_trigger.phoneme_label = content_loader.get_phoneme_label(entry, letter_index)
-		pickup_trigger.trigger_width = PICKUP_RADIUS_X * 2
-		pickup_trigger.trigger_depth = PICKUP_RADIUS_Z * 2
-		spawn_root.add_child(pickup_trigger)
-		await pickup_trigger.tree_entered
-		var pickup_msg = "[ReadingMode] Spawned pickup for '%s' at path index %d"
-		print(pickup_msg % [pickup_trigger.letter, path_index])
-
-		# Add visual label to pickup
-		var label_node = Label3D.new()
-		label_node.text = str(letters[letter_index]).to_upper()
-		label_node.font_size = 256
-		label_node.modulate = Color(1.0, 0.75, 0.0)  # Golden color
-		var light = OmniLight3D.new()
-		light.omni_range = 8.0
-		light.energy = 1.5
-		pickup_trigger.add_child(label_node)
-		pickup_trigger.add_child(light)
-
-		pickup_trigger.pickup_triggered.connect(_on_pickup_triggered.bindv([pickup_trigger]))
-		if register_pickups:
-			pickup_triggers.append(pickup_trigger)
-
-		# Spawn obstacles on both sides of the road
-		for side in [-1, 1]:
-			var obstacle_trigger = ReadingObstacleTrigger.new()
-			var path_right: Vector3 = path_frame.get("right", Vector3.RIGHT) as Vector3
-			obstacle_trigger.position = (
-				segment_pos + path_right * side * LANE_WIDTH + Vector3(0.0, 0.6, 0.0)
-			)
-			obstacle_trigger.rotation.y = segment_heading
-			obstacle_trigger.word_index = current_entry_index
-			var side_factor = 0 if side == -1 else 1
-			obstacle_trigger.obstacle_index = letter_index * 2 + side_factor
-			spawn_root.add_child(obstacle_trigger)
-			await obstacle_trigger.tree_entered
-			var obst_msg = "[ReadingMode] Spawned obstacle at path index %d (side=%d)"
-			print(obst_msg % [path_index, side])
-
-			# Add visual model to obstacle
-			var obstacle_visual := _instantiate_scene(OBSTACLE_MODEL_PATH)
-			if obstacle_visual != null:
-				obstacle_visual.scale = Vector3.ONE * 0.6
-				obstacle_trigger.add_child(obstacle_visual)
-
-			obstacle_trigger.obstacle_hit.connect(_on_obstacle_hit.bindv([obstacle_trigger]))
-			if register_pickups:
-				obstacle_triggers.append(obstacle_trigger)
-
-	# Create finish gate trigger
-	if register_pickups:
-		if finish_gate_trigger:
-			finish_gate_trigger.queue_free()
-		finish_gate_trigger = ReadingFinishGateTrigger.new()
-		var finish_frame: Dictionary = _get_path_frame(finish_index)
-		finish_gate_trigger.position = (
-			finish_frame.get("center", Vector3.ZERO) as Vector3 + Vector3(0.0, 1.0, 0.0)
-		)
-		finish_gate_trigger.rotation.y = float(finish_frame.get("heading", 0.0))
-		finish_gate_trigger.word_index = current_entry_index
-		finish_gate_trigger.trigger_width = SEGMENT_SPACING
-		finish_gate_trigger.trigger_depth = LANE_WIDTH * 2
-		spawn_root.add_child(finish_gate_trigger)
-		await finish_gate_trigger.tree_entered
-		finish_gate_trigger.finish_gate_reached.connect(
-			_on_finish_reached.bindv([finish_gate_trigger])
-		)
-		var finish_visual := _instantiate_scene(FINISH_MODEL_PATH)
-		if finish_visual != null:
-			finish_visual.scale = Vector3.ONE * ROAD_SCALE
-			finish_visual.rotation_degrees = Vector3(0.0, 90.0, 0.0)
-			finish_gate_trigger.add_child(finish_visual)
-		print("[ReadingMode] Spawned finish gate trigger at path index %d" % finish_index)
 
 	next_word_start_x = _path_index_to_distance(
 		finish_index + int(round(WORD_GAP / SEGMENT_SPACING))
 	)
 	farthest_spawned_x = max(farthest_spawned_x, finish_line_x)
 
-	_update_grid()
-
 
 func _build_course_geometry() -> void:
-	# Clear all existing grid cells
-	for child in road.get_children():
-		child.queue_free()
-	grid_cells.clear()
+	# Clear all existing grid cells via map display manager
+	if map_display_manager:
+		map_display_manager.clear_all_cells()
 
 	# Measure the track tile dimensions
 	track_tile_length = SEGMENT_SPACING
@@ -785,105 +674,19 @@ func _build_course_geometry() -> void:
 			0.0,
 			-float(shared_track_layout.size.z) * track_tile_width * 0.5
 		)
-		var layout_dict: Dictionary = shared_track_layout.to_dictionary()
-		layout_cell_entries = layout_dict.get("cells", []) as Array
 
-	# Build the initial grid around the player
-	_update_grid()
-	_update_debug_path_visual()
-
-
-func _update_debug_path_visual() -> void:
-	if not debug_draw_path or shared_track_layout == null:
-		if debug_path_mesh_instance and is_instance_valid(debug_path_mesh_instance):
-			debug_path_mesh_instance.queue_free()
-			debug_path_mesh_instance = null
-		return
-
-	var curve_points: Array[Vector3] = []
-	var path_count := _get_layout_path_count()
-	if path_count <= 0 or track_tile_length <= 0.0:
-		return
-
-	var total_length: float = float(path_count) * track_tile_length
-	var sample_count: int = max(64, min(512, int(total_length / 1.0)))
-	for sample_i in range(sample_count):
-		var t := float(sample_i) / float(sample_count - 1)
-		var distance := t * total_length
-		var pose := _get_pose_at_path_distance(distance, 0.0)
-		if not pose.is_empty():
-			curve_points.append(pose.position)
-
-	if curve_points.size() < 2:
-		return
-
-	var line_mesh := ImmediateMesh.new()
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = Color(0.2, 1.0, 0.3)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	line_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, material)
-	for point in curve_points:
-		line_mesh.surface_add_vertex(point)
-	line_mesh.surface_end()
-
-	if debug_path_mesh_instance == null or not is_instance_valid(debug_path_mesh_instance):
-		debug_path_mesh_instance = MeshInstance3D.new()
-		debug_path_mesh_instance.name = "DebugPath"
-		add_child(debug_path_mesh_instance)
-
-	debug_path_mesh_instance.mesh = line_mesh
-
-
-func _update_grid() -> void:
-	if shared_track_layout == null:
-		return
-
-	var desired_tiles: Dictionary = {}
-	for cell_entry in layout_cell_entries:
-		var cell: Vector3i = cell_entry.get("cell", Vector3i.ZERO) as Vector3i
-		var cell_data: Dictionary = cell_entry.get("data", {}) as Dictionary
-		var world_pos := _cell_to_world_center(cell)
-		if not _is_point_in_stream_window(world_pos):
-			continue
-		var key := "%d,%d,%d" % [cell.x, cell.y, cell.z]
-		desired_tiles[key] = {"cell": cell, "data": cell_data}
-
-	var tiles_to_remove: Array = []
-	for key in grid_cells.keys():
-		if not desired_tiles.has(key):
-			tiles_to_remove.append(key)
-
-	for key in tiles_to_remove:
-		if is_instance_valid(grid_cells[key]):
-			grid_cells[key].queue_free()
-		grid_cells.erase(key)
-
-	for key in desired_tiles.keys():
-		if grid_cells.has(key):
-			continue
-		var tile_request: Dictionary = desired_tiles[key] as Dictionary
-		_spawn_grid_cell(
-			tile_request.get("cell", Vector3i.ZERO) as Vector3i,
-			tile_request.get("data", {}) as Dictionary,
-			str(key)
+	# Update map display manager with dimensions
+	if map_display_manager:
+		map_display_manager.set_layout_data(
+			shared_track_layout, layout_origin, track_tile_length, track_tile_width
 		)
 
 
-func _spawn_grid_cell(cell: Vector3i, cell_data: Dictionary, key: String) -> void:
-	var cell_node: Node3D = null
-	var scene_path := str(cell_data.get("scene_path", ""))
-	if scene_path.is_empty():
-		return
-	cell_node = _instantiate_scene(scene_path)
-	if cell_node != null:
-		cell_node.scale = Vector3.ONE * ROAD_SCALE
-		cell_node.rotation_degrees = Vector3(0.0, float(cell_data.get("rotation_y", 0.0)), 0.0)
-		cell_node.position = _cell_to_world_center(cell)
-		road.add_child(cell_node)
+# Grid visualization now handled by MapDisplayManager
 
-	if cell_node != null:
-		grid_cells[key] = cell_node
+# Grid management now handled by MapDisplayManager
+
+# Removed - now handled by MapDisplayManager
 
 
 func _cleanup_spawned_content() -> void:
@@ -920,22 +723,6 @@ func _instantiate_scene(resource_path: String) -> Node3D:
 	return packed_scene.instantiate() as Node3D
 
 
-func _pick_decoration_path() -> String:
-	# Weighted selection: empty decorations are more common.
-	var total_weight := 0
-	for deco in DECORATION_MODELS:
-		total_weight += int(deco.weight)
-
-	var roll := rng.randi_range(1, total_weight)
-	for deco in DECORATION_MODELS:
-		roll -= int(deco.weight)
-		if roll <= 0:
-			return str(deco.path)
-
-	# Fallback in case weights are broken.
-	return DECORATION_MODEL_PATH
-
-
 func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 	if node is MeshInstance3D:
 		return node as MeshInstance3D
@@ -946,61 +733,7 @@ func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 	return null
 
 
-func _check_pickups() -> void:
-	# Replaced by collision trigger system - kept for compatibility
-	pass
-
-
-func _on_pickup_triggered(
-	_letter_index: int, _letter: String, _phoneme_label: String, trigger: ReadingPickupTrigger
-) -> void:
-	if trigger.word_index != current_entry_index:
-		return
-	if trigger.letter_index != next_target_index:
-		# Wrong letter - skip it and mark as missed
-		var phoneme_label = trigger.phoneme_label
-		var phoneme_stream = content_loader.get_phoneme_stream(phoneme_label)
-		phoneme_player.stop_phoneme()
-		phoneme_player.play_looping_phoneme(phoneme_label, phoneme_stream)
-		hud.flash_feedback("Missed %s" % trigger.letter.to_upper(), Color(1.0, 0.48, 0.38))
-		return
-
-	# Correct letter - play phoneme
-	phoneme_player.stop_phoneme()
-	var phoneme_stream = content_loader.get_phoneme_stream(trigger.phoneme_label)
-	phoneme_player.play_looping_phoneme(trigger.phoneme_label, phoneme_stream)
-	hud.flash_feedback(trigger.letter.to_upper(), Color(1.0, 0.94, 0.45))
-	next_target_index += 1
-
-
-func _check_obstacles() -> void:
-	# Replaced by collision trigger system - kept for compatibility
-	pass
-
-
-func _on_obstacle_hit(_obstacle_index: int, trigger: ReadingObstacleTrigger) -> void:
-	if trigger.word_index != current_entry_index:
-		return
-	slowed_timer = trigger.penalty_seconds
-	hud.flash_feedback("Bump", Color(1.0, 0.42, 0.32))
-
-
-func _check_finish_gate() -> void:
-	# Replaced by collision trigger system - kept for compatibility
-	pass
-
-
-func _on_finish_reached(trigger: ReadingFinishGateTrigger) -> void:
-	if trigger.word_index != current_entry_index:
-		return
-	_complete_word()
-
-
-func _update_triggers() -> void:
-	# This method is called each frame to check trigger states
-	# Actual triggering happens via Area3D signals, this is for updates only
-	if finish_gate_trigger:
-		finish_gate_trigger.set_pickups_collected(next_target_index >= pickup_triggers.size())
+# Old trigger methods removed - now handled by GameplayController
 
 
 func _complete_word() -> void:
@@ -1013,15 +746,17 @@ func _complete_word() -> void:
 
 
 func _update_camera(delta: float) -> void:
-	if camera_controller:
-		var pose := _get_pose_at_path_distance(player_path_distance, player_lane_offset)
+	if camera_controller and movement_system:
+		var pose := _get_pose_at_path_distance(
+			movement_system.player_path_distance, movement_system.player_lane_offset
+		)
 		if pose.is_empty():
 			return
 
 		var target_position := (
 			(pose.get("position", player.position) as Vector3) + Vector3(0.0, 1.5, 0.0)
 		)
-		var path_heading := float(pose.get("heading", player_heading))
+		var path_heading := float(pose.get("heading", movement_system.player_heading))
 		var camera_angle := 270.0 - rad_to_deg(path_heading)
 
 		camera_controller.set_target(target_position)
@@ -1031,16 +766,22 @@ func _update_camera(delta: float) -> void:
 
 
 func _update_status() -> void:
-	if current_entry.is_empty():
+	if current_entry.is_empty() or not gameplay_controller:
 		return
-	var total_letters := pickup_triggers.size()
+	var total_letters: int = gameplay_controller.get_total_letters()
 	var target_text := (
 		"Complete"
-		if next_target_index >= total_letters
-		else "Next: %s" % str(current_entry.get("letters", [])[next_target_index]).to_upper()
+		if gameplay_controller.is_word_complete()
+		else "Next: %s" % gameplay_controller.get_next_target_letter()
 	)
 	var mode_text := control_profile.mode_name.capitalize() if control_profile else "Unknown"
-	hud.set_status("%s   %d/%d   %s" % [target_text, next_target_index, total_letters, mode_text])
+	var status_format = "%s   %d/%d   %s"
+	hud.set_status(
+		(
+			status_format
+			% [target_text, gameplay_controller.next_target_index, total_letters, mode_text]
+		)
+	)
 
 
 func _toggle_options() -> void:
@@ -1066,7 +807,7 @@ func _close_options() -> void:
 func _on_control_mode_changed(mode_name: String) -> void:
 	settings["control_mode"] = mode_name
 	settings_store.save_settings(settings)
-	_set_control_profile(mode_name)
+	_create_control_profile(mode_name)
 	_update_help_text()
 	hud.flash_feedback("Controls: %s" % mode_name.capitalize(), Color(0.55, 0.85, 1.0))
 	_update_status()
@@ -1086,16 +827,38 @@ func _on_volume_changed(volume: float) -> void:
 
 
 func _on_debug_path_toggled(enabled: bool) -> void:
-	debug_draw_path = enabled
+	var debug_draw_path = enabled
 	settings["debug_draw_path"] = enabled
 	settings_store.save_settings(settings)
-	_update_debug_path_visual()
+	if map_display_manager:
+		map_display_manager.update_debug_visualization(
+			debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
+		)
 	var status_text := "ON" if enabled else "OFF"
 	hud.flash_feedback("Path debug %s" % status_text, Color(0.4, 0.9, 0.4))
 
 
 func _on_phoneme_changed(label: String) -> void:
 	hud.set_phoneme(label)
+
+
+# ============ Gameplay System Signal Handlers ============
+
+
+func _on_gameplay_pickup_collected(letter: String, phoneme_label: String) -> void:
+	var phoneme_stream = content_loader.get_phoneme_stream(phoneme_label)
+	phoneme_player.stop_phoneme()
+	phoneme_player.play_looping_phoneme(phoneme_label, phoneme_stream)
+	hud.flash_feedback(letter, Color(1.0, 0.94, 0.45))
+
+
+func _on_gameplay_obstacle_hit(duration: float) -> void:
+	movement_system.apply_slowdown(duration)
+	hud.flash_feedback("Bump", Color(1.0, 0.42, 0.32))
+
+
+func _on_gameplay_word_completed() -> void:
+	_complete_word()
 
 
 func _update_help_text() -> void:

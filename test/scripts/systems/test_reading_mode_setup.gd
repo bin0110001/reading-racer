@@ -1,6 +1,10 @@
 class_name TestReadingModeSetup
 extends GdUnitTestSuite
 
+const ReadingModeScript = preload("res://scripts/reading/reading_mode.gd")
+const TrackLayoutScript = preload("res://scripts/reading/track_generator/TrackLayout.gd")
+const MapDisplayManagerScript = preload("res://scripts/reading/systems/MapDisplayManager.gd")
+
 
 func before_all() -> void:
 	# no setup needed for these tests
@@ -72,23 +76,91 @@ func test_reading_mode_scene_location() -> void:
 
 
 func test_reading_mode_path_smooth_corner() -> void:
-	var reading_mode = load("res://scripts/reading/reading_mode.gd").new()
-	var layout = load("res://scripts/reading/track_generator/TrackLayout.gd").new()
-	layout.path_cells = [
+	var reading_mode = ReadingModeScript.new()
+	var layout = TrackLayoutScript.new()
+	var cells: Array[Vector3i] = [
 		Vector3i(0, 0, 0),
 		Vector3i(1, 0, 0),
 		Vector3i(1, 0, 1),
 		Vector3i(0, 0, 1),
 	]
+	layout.path_cells = cells
 	reading_mode.shared_track_layout = layout
 	reading_mode.layout_origin = Vector3.ZERO
 	reading_mode.track_tile_length = 10.0
 	reading_mode.track_tile_width = 10.0
 
 	var pose = reading_mode._get_pose_at_path_distance(15.0, 0.0)
-	assert_that(pose).contains("position")
-	assert_that(pose).contains("heading")
+	assert_true(pose.has("position"), "pose should contain 'position' key")
+	assert_true(pose.has("heading"), "pose should contain 'heading' key")
 	assert_that(pose.position.x).is_less(15.0)
 	assert_that(pose.position.z).is_greater(5.0)
 	assert_that(pose.heading).is_greater(0.0)
 	assert_that(pose.heading).is_less(PI / 2.0)
+
+
+func test_gameplay_controller_uses_light_light_energy_property() -> void:
+	var light = OmniLight3D.new()
+	light.light_energy = 1.5
+	assert_that(light.light_energy).is_equal(1.5)
+
+
+func test_gameplay_controller_does_not_use_invalid_energy_property() -> void:
+	var file = FileAccess.open(
+		"res://scripts/reading/systems/GameplayController.gd", FileAccess.READ
+	)
+	var text = file.get_as_text()
+	assert_that(text.find("light.energy")).is_equal(-1)
+
+
+func test_reading_mode_lane_offset_is_clamped_to_track_width() -> void:
+	var reading_mode = ReadingModeScript.new()
+	var layout = TrackLayoutScript.new()
+	var cells: Array[Vector3i] = [
+		Vector3i(0, 0, 0),
+		Vector3i(1, 0, 0),
+		Vector3i(1, 0, 1),
+		Vector3i(0, 0, 1),
+	]
+	layout.path_cells = cells
+	reading_mode.shared_track_layout = layout
+	reading_mode.layout_origin = Vector3.ZERO
+	reading_mode.track_tile_length = 10.0
+	reading_mode.track_tile_width = 10.0
+
+	assert_that(reading_mode._get_max_lane_offset()).is_equal(4.0)
+
+	var pose_max = reading_mode._get_pose_at_path_distance(15.0, 4.0)
+	var pose_extreme = reading_mode._get_pose_at_path_distance(15.0, 100.0)
+	assert_that(pose_max.position.distance_to(pose_extreme.position)).is_less_equal(0.001)
+
+
+func test_map_display_manager_populates_cell_entries() -> void:
+	var layout = TrackLayoutScript.new()
+	layout.initialize(Vector3i(4, 1, 4))
+	layout.set_cell(
+		Vector3i(0, 0, 0), {"scene_path": "res://models/track-straight.glb", "rotation_y": 0.0}
+	)
+
+	var manager = MapDisplayManagerScript.new()
+	manager.set_nodes(Node3D.new(), Node3D.new())
+	manager.set_layout_data(layout, Vector3.ZERO, 18.0, 18.0)
+
+	assert_that(manager.layout_cell_entries.size()).is_equal(1)
+
+
+func test_map_display_manager_spawns_visible_cells() -> void:
+	var layout = TrackLayoutScript.new()
+	layout.initialize(Vector3i(4, 1, 4))
+	layout.set_cell(
+		Vector3i(0, 0, 0), {"scene_path": "res://models/track-straight.glb", "rotation_y": 0.0}
+	)
+
+	var manager = MapDisplayManagerScript.new()
+	var road = Node3D.new()
+	var spawn_root = Node3D.new()
+	manager.set_nodes(road, spawn_root)
+	manager.set_layout_data(layout, Vector3.ZERO, 18.0, 18.0)
+	manager.update_visible_cells(Vector3.ZERO, 0.0)
+
+	assert_that(manager.grid_cells.size()).is_greater(0)

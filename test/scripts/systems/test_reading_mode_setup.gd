@@ -7,6 +7,13 @@ extends GdUnitTestSuite
 const ReadingModeScript = preload("res://scripts/reading/reading_mode.gd")
 const TrackLayoutScript = preload("res://scripts/reading/track_generator/TrackLayout.gd")
 const MapDisplayManagerScript = preload("res://scripts/reading/systems/MapDisplayManager.gd")
+const MovementSystemScript = preload("res://scripts/reading/systems/MovementSystem.gd")
+const GameplayControllerScript = preload("res://scripts/reading/systems/GameplayController.gd")
+const LaneChangeControllerScript = preload(
+	"res://scripts/reading/control_profiles/LaneChangeController.gd"
+)
+const ReadingHUDScript = preload("res://scripts/reading/reading_hud.gd")
+const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
 
 
 func before_all() -> void:
@@ -53,9 +60,7 @@ func test_reading_settings_store_methods_exist() -> void:
 
 
 func test_reading_hud_can_be_loaded() -> void:
-	# Try to load the ReadingHUD script to verify it exists and compiles
-	var hud_script = load("res://scripts/reading/reading_hud.gd") as Script
-	assert_that(hud_script).is_not_null()
+	assert_that(ReadingHUDScript).is_not_null()
 
 
 func test_phoneme_player_can_be_loaded() -> void:
@@ -90,7 +95,7 @@ func test_reading_mode_scene_location() -> void:
 
 
 func test_reading_mode_path_smooth_corner() -> void:
-	var reading_mode = ReadingModeScript.new()
+	var reading_mode: Variant = ReadingModeScript.new()
 	var layout = TrackLayoutScript.new()
 	var cells: Array[Vector3i] = [
 		Vector3i(0, 0, 0),
@@ -122,7 +127,7 @@ func test_gameplay_controller_does_not_use_invalid_energy_property() -> void:
 
 
 func test_reading_mode_lane_offset_is_clamped_to_track_width() -> void:
-	var reading_mode = ReadingModeScript.new()
+	var reading_mode: Variant = ReadingModeScript.new()
 	var layout = TrackLayoutScript.new()
 	var cells: Array[Vector3i] = [
 		Vector3i(0, 0, 0),
@@ -205,7 +210,7 @@ func test_map_display_manager_finish_cell_replaces_tile() -> void:
 
 
 func test_start_next_word_transition_resets_player_position() -> void:
-	var reading_mode = ReadingModeScript.new()
+	var reading_mode: Variant = ReadingModeScript.new()
 	reading_mode.movement_system = MovementSystem.new(LaneChangeController.new())
 	reading_mode.hud = ReadingHUD.new()
 	reading_mode.player = Node3D.new()
@@ -218,10 +223,11 @@ func test_start_next_word_transition_resets_player_position() -> void:
 		{"start_index": 6, "end_index": 8},
 	]
 	reading_mode.track_tile_length = 18.0
-	reading_mode.current_entries = [
+	var current_entries: Array[Dictionary] = [
 		{"text": "one", "letters": ["o", "n", "e"]},
 		{"text": "two", "letters": ["t", "w", "o"]},
 	]
+	reading_mode.current_entries = current_entries
 	reading_mode.current_entry_index = 0
 	reading_mode.current_entry = reading_mode.current_entries[0]
 	reading_mode.movement_system.player_path_distance = 100.0

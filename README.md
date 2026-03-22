@@ -225,11 +225,22 @@ python -m pip install -U gdtoolkit
 powershell -ExecutionPolicy Bypass -File .\tools\gdscript-check.ps1
 ```
 
+If Godot is not on `PATH`, set `GODOT_BIN` or pass `-GodotBin` when you run it.
+
+If you need to override which GDUnit test roots are executed, pass one or more `-GdUnitTarget` values:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\gdscript-check.ps1 -GdUnitTarget test/scripts
+powershell -ExecutionPolicy Bypass -File .\tools\gdscript-check.ps1 -GdUnitTarget test/scripts, tests/scripts
+```
+
 This runs:
 - **gdparse** to check syntax
 - **gdlint** to check code style
 - **gdformat** to check formatting
-- **Godot validation** (--headless --script --check-only) to catch strict parser errors like type inference violations
+- **Godot validation** (`--headless --check-only`) to catch strict parser errors like type inference violations
+- **GDUnit CLI** on discovered test roots, with results read from the current run's XML report
+- **Orphan-node detection** that fails the run and tells you to add `collect_orphan_node_details()` to the leaking test
 
 3) (Optional) Auto-format all scripts:
 

@@ -1,3 +1,4 @@
+class_name ReadingMode
 extends Node3D
 # gdlint: disable=max-file-lines
 
@@ -213,36 +214,31 @@ func _get_pose_at_path_distance(path_distance: float, lane_offset: float) -> Dic
 	var segment_index := int(floor(segment_float))
 	var segment_progress := segment_float - float(segment_index)
 
-	# Build smooth point via Catmull-Rom interpolation across neighboring path cells
 	var prev_cell := _get_path_cell(segment_index - 1)
 	var current_cell := _get_path_cell(segment_index)
 	var next_cell := _get_path_cell(segment_index + 1)
-	var next_next_cell := _get_path_cell(segment_index + 2)
 
 	var p0 := _cell_to_world_center(prev_cell)
 	var p1 := _cell_to_world_center(current_cell)
 	var p2 := _cell_to_world_center(next_cell)
-	var p3 := _cell_to_world_center(next_next_cell)
-	var center := _catmull_rom_point(p0, p1, p2, p3, segment_progress)
-	var tangent := _catmull_rom_tangent(p0, p1, p2, p3, segment_progress)
-	if tangent.length_squared() == 0.0:
-		# Fallback to linear segment direction
-		var fallback_forward := (p2 - p1).normalized()
-		if fallback_forward.length_squared() == 0.0:
-			fallback_forward = Vector3.RIGHT
-		var right = Vector3(-fallback_forward.z, 0.0, fallback_forward.x)
-		return {
-			"center": center,
-			"position": center + right * lane_offset_clamped,
-			"right": right,
-			"heading": atan2(fallback_forward.z, fallback_forward.x),
-			"segment_index": segment_index,
-			"segment_progress": segment_progress,
-		}
-
-	var forward := tangent.normalized()
+	var incoming := (p1 - p0).normalized()
+	var forward := (p2 - p1).normalized()
 	if forward.length_squared() == 0.0:
 		forward = Vector3.RIGHT
+	if incoming.length_squared() == 0.0:
+		incoming = forward
+
+	var corner_bias := Vector3.ZERO
+	if incoming.distance_to(forward) > 0.001:
+		corner_bias = (forward - incoming).normalized()
+
+	var corner_offset_scale: float = minf(track_tile_length, track_tile_width) * 0.25
+	var corner_offset: Vector3 = corner_bias * sin(segment_progress * PI) * corner_offset_scale
+	var center: Vector3 = p1.lerp(p2, segment_progress) + corner_offset
+	var heading := lerp_angle(
+		atan2(incoming.z, incoming.x), atan2(forward.z, forward.x), segment_progress
+	)
+	forward = Vector3(cos(heading), 0.0, sin(heading)).normalized()
 	var right := Vector3(-forward.z, 0.0, forward.x)
 
 	return {
@@ -250,7 +246,7 @@ func _get_pose_at_path_distance(path_distance: float, lane_offset: float) -> Dic
 		"position": center + right * lane_offset_clamped,
 		"forward": forward,
 		"right": right,
-		"heading": atan2(forward.z, forward.x),
+		"heading": heading,
 		"segment_index": segment_index,
 		"segment_progress": segment_progress,
 	}

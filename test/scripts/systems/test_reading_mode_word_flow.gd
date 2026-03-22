@@ -6,6 +6,30 @@ extends GdUnitTestSuite
 
 const ReadingModeScript = preload("res://scripts/reading/reading_mode.gd")
 const TrackLayoutScript = preload("res://scripts/reading/track_generator/TrackLayout.gd")
+const MovementSystemScript = preload("res://scripts/reading/systems/MovementSystem.gd")
+const GameplayControllerScript = preload("res://scripts/reading/systems/GameplayController.gd")
+const LaneChangeControllerScript = preload(
+	"res://scripts/reading/control_profiles/LaneChangeController.gd"
+)
+const ReadingHUDScript = preload("res://scripts/reading/reading_hud.gd")
+const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
+
+
+class TestReadingHUD:
+	extends ReadingHUD
+
+	func flash_feedback(_text_value: String, _color: Color = Color(1.0, 1.0, 1.0)) -> void:
+		pass
+
+
+class TestPhonemePlayer:
+	extends PhonemePlayer
+
+	func stop_phoneme() -> void:
+		pass
+
+	func play_word(_stream: AudioStream) -> void:
+		pass
 
 
 func _get_test_path_frame(path_index: int) -> Dictionary:
@@ -20,14 +44,25 @@ func _get_test_path_index(path_index: int) -> int:
 	return path_index
 
 
-func test_reading_mode_progresses_to_second_word_placement_grid() -> void:
-	var reading_mode = ReadingModeScript.new()
+func _create_reading_mode() -> Variant:
+	return ReadingModeScript.new()
+
+
+func _configure_reading_mode() -> Variant:
+	var reading_mode: Variant = _create_reading_mode()
 	reading_mode.movement_system = MovementSystem.new(LaneChangeController.new())
-	reading_mode.hud = ReadingHUD.new()
+	reading_mode.hud = TestReadingHUD.new()
+	reading_mode.phoneme_player = TestPhonemePlayer.new()
 	reading_mode.player = Node3D.new()
 	reading_mode.vehicle_anchor = Node3D.new()
 	reading_mode.spawn_root = Node3D.new()
 	reading_mode.gameplay_controller = GameplayController.new(ReadingContentLoader.new())
+	reading_mode.gameplay_controller.set_spawn_root(reading_mode.spawn_root)
+	return reading_mode
+
+
+func test_reading_mode_progresses_to_second_word_placement_grid() -> void:
+	var reading_mode: Variant = _configure_reading_mode()
 
 	var layout = TrackLayoutScript.new()
 	layout.path_cells = [
@@ -46,10 +81,11 @@ func test_reading_mode_progresses_to_second_word_placement_grid() -> void:
 	reading_mode.track_tile_width = 18.0
 	reading_mode.layout_origin = Vector3.ZERO
 
-	reading_mode.current_entries = [
+	var current_entries: Array[Dictionary] = [
 		{"text": "a", "letters": ["a"], "phonemes": ["ae"]},
 		{"text": "b", "letters": ["b"], "phonemes": ["b"]},
 	]
+	reading_mode.current_entries = current_entries
 	reading_mode.current_entry_index = -1
 
 	reading_mode._start_next_word(false, false, true)
@@ -62,13 +98,7 @@ func test_reading_mode_progresses_to_second_word_placement_grid() -> void:
 
 
 func test_reading_mode_complete_word_transitions_next_entry() -> void:
-	var reading_mode = ReadingModeScript.new()
-	reading_mode.movement_system = MovementSystem.new(LaneChangeController.new())
-	reading_mode.hud = ReadingHUD.new()
-	reading_mode.player = Node3D.new()
-	reading_mode.vehicle_anchor = Node3D.new()
-	reading_mode.spawn_root = Node3D.new()
-	reading_mode.gameplay_controller = GameplayController.new(ReadingContentLoader.new())
+	var reading_mode: Variant = _configure_reading_mode()
 
 	var layout = TrackLayoutScript.new()
 	layout.path_cells = [Vector3i(0, 0, 0), Vector3i(1, 0, 0), Vector3i(2, 0, 0)]
@@ -81,10 +111,11 @@ func test_reading_mode_complete_word_transitions_next_entry() -> void:
 	reading_mode.track_tile_width = 18.0
 	reading_mode.layout_origin = Vector3.ZERO
 
-	reading_mode.current_entries = [
+	var current_entries: Array[Dictionary] = [
 		{"text": "a", "letters": ["a"], "phonemes": ["ae"]},
 		{"text": "b", "letters": ["b"], "phonemes": ["b"]},
 	]
+	reading_mode.current_entries = current_entries
 	reading_mode.current_entry_index = -1
 	reading_mode.random_word_order = false
 

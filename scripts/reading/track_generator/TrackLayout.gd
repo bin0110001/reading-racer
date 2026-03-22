@@ -3,10 +3,10 @@ extends RefCounted
 
 var size: Vector3i = Vector3i.ZERO
 var cells: Array = []
-var path_cells: Array[Vector3i] = []
-var word_anchors: Array[Dictionary] = []
-var checkpoints: Array[Dictionary] = []
-var start_positions: Array[Dictionary] = []
+var path_cells: Array = []
+var word_anchors: Array = []
+var checkpoints: Array = []
+var start_positions: Array = []
 var metadata: Dictionary = {}
 
 

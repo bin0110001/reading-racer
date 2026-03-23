@@ -223,28 +223,42 @@ func _get_pose_at_path_distance(path_distance: float, lane_offset: float) -> Dic
 	var prev_cell := _get_path_cell(segment_index - 1)
 	var current_cell := _get_path_cell(segment_index)
 	var next_cell := _get_path_cell(segment_index + 1)
+	var next2_cell := _get_path_cell(segment_index + 2)
 
 	var p0 := _cell_to_world_center(prev_cell)
 	var p1 := _cell_to_world_center(current_cell)
 	var p2 := _cell_to_world_center(next_cell)
-	var incoming := (p1 - p0).normalized()
-	var forward := (p2 - p1).normalized()
-	if forward.length_squared() == 0.0:
-		forward = Vector3.RIGHT
-	if incoming.length_squared() == 0.0:
-		incoming = forward
+	var p3 := _cell_to_world_center(next2_cell)
 
-	var corner_bias := Vector3.ZERO
-	if incoming.distance_to(forward) > 0.001:
-		corner_bias = (forward - incoming).normalized()
+	var center: Vector3
+	var heading: float
+	var forward: Vector3
 
-	var corner_offset_scale: float = minf(track_tile_length, track_tile_width) * 0.25
-	var corner_offset: Vector3 = corner_bias * sin(segment_progress * PI) * corner_offset_scale
-	var center: Vector3 = p1.lerp(p2, segment_progress) + corner_offset
-	var heading := lerp_angle(
-		atan2(incoming.z, incoming.x), atan2(forward.z, forward.x), segment_progress
-	)
-	forward = Vector3(cos(heading), 0.0, sin(heading)).normalized()
+	if _get_layout_path_count() >= 4:
+		center = _catmull_rom_point(p0, p1, p2, p3, segment_progress)
+		var tangent := _catmull_rom_tangent(p0, p1, p2, p3, segment_progress)
+		if tangent.length_squared() > 0.0:
+			forward = tangent.normalized()
+			heading = atan2(forward.z, forward.x)
+		else:
+			center = p1.lerp(p2, segment_progress)
+			var incoming := (p1 - p0).normalized()
+			var next_forward := (p2 - p1).normalized()
+			heading = lerp_angle(
+				atan2(incoming.z, incoming.x),
+				atan2(next_forward.z, next_forward.x),
+				segment_progress
+			)
+			forward = Vector3(cos(heading), 0.0, sin(heading)).normalized()
+	else:
+		center = p1.lerp(p2, segment_progress)
+		var incoming := (p1 - p0).normalized()
+		var next_forward := (p2 - p1).normalized()
+		heading = lerp_angle(
+			atan2(incoming.z, incoming.x), atan2(next_forward.z, next_forward.x), segment_progress
+		)
+		forward = Vector3(cos(heading), 0.0, sin(heading)).normalized()
+
 	var right := Vector3(-forward.z, 0.0, forward.x)
 
 	return {

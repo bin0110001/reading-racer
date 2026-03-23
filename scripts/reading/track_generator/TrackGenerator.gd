@@ -655,7 +655,8 @@ func _get_tile_rotation_degrees(
 			outgoing_dir.z,
 		]
 	)
-	return float(corner_map.get(key, 0.0))
+	var base_rotation := float(corner_map.get(key, 0.0))
+	return fmod(base_rotation + 180.0, 360.0)
 
 
 func _compute_seed(word_entries: Array) -> int:

@@ -77,3 +77,22 @@ func test_load_word_entries_phonemes_array() -> void:
 	var phonemes: Array = entry.get("phonemes", []) as Array
 	assert_that(phonemes).is_instance_of(Array)
 	assert_that(phonemes.size()).is_greater_equal(0)
+
+
+func test_load_word_entries_csv_breakdown_is_used() -> void:
+	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var entries: Array[Dictionary] = loader.load_word_entries("sightwords")
+	assert_that(entries).is_not_empty()
+
+	var found: Dictionary = {}
+	for entry in entries:
+		if str(entry.get("text", "")).to_lower() == "go":
+			found = entry
+			break
+	assert_that(found.is_empty()).is_false()
+	var letters: Array = found.get("letters", []) as Array
+	var phonemes: Array = found.get("phonemes", []) as Array
+	assert_that(letters.size()).is_equal_to(2)
+	assert_that(phonemes.size()).is_equal_to(2)
+	assert_that(phonemes[0]).is_equal_to("ɡ")
+	assert_that(phonemes[1]).is_equal_to("oʊ")

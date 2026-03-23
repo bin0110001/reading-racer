@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://clhphblmp8e4d"
+
+[deps]
+
+files=["res://audio/words/can_cat/Words.IPA.translation", "res://audio/words/can_cat/Words.Grapheme to Phoneme Breakdown.translation"]
+
+source_file="res://audio/words/can_cat/Words.csv"
+dest_files=["res://audio/words/can_cat/Words.IPA.translation", "res://audio/words/can_cat/Words.Grapheme to Phoneme Breakdown.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

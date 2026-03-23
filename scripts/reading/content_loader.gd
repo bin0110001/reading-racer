@@ -3,6 +3,7 @@ class_name ReadingContentLoader extends Object
 
 const PHONEME_ROOT := "res://audio/phenomes"
 const WORD_ROOT := "res://audio/words"
+const WORD_CSV_FILE_NAMES := ["Words.csv", "words.csv"]
 
 const LETTER_TO_PHONEME := {}
 
@@ -18,44 +19,57 @@ func _init() -> void:
 func list_word_groups() -> Array[String]:
 	var groups: Array[String] = []
 	for directory_name in DirAccess.get_directories_at(WORD_ROOT):
-		var json_path := "%s/%s/words.json" % [WORD_ROOT, directory_name]
-		if FileAccess.file_exists(json_path):
+		if _group_has_word_csv(directory_name):
 			groups.append(directory_name)
 	groups.sort()
 	return groups
 
 
 func load_word_entries(group_name: String) -> Array[Dictionary]:
-	var json_path := "%s/%s/words.json" % [WORD_ROOT, group_name]
-	var file := FileAccess.open(json_path, FileAccess.READ)
+	var csv_path := _find_group_csv_path(group_name)
+	if csv_path.is_empty():
+		return []
+
+	var file := FileAccess.open(csv_path, FileAccess.READ)
 	if not file:
 		return []
-	var json_text := file.get_as_text()
+
+	var raw_text := file.get_as_text()
 	file.close()
-	var json := JSON.new()
-	var error := json.parse(json_text)
-	if error != OK:
-		return []
-	var data: Variant = json.get_data()
-	if not data is Dictionary or not data.has("words"):
-		return []
-	var words: Array = data["words"] as Array
+	var lines := raw_text.split("\n")
 	var entries: Array[Dictionary] = []
-	for word_text in words:
-		word_text = str(word_text).strip_edges().to_lower()
+
+	for i in range(lines.size()):
+		var line := str(lines[i]).strip_edges()
+		if line.is_empty():
+			continue
+		if i == 0 and line.to_lower().begins_with("word"):
+			continue
+
+		var columns: Array[String] = _parse_csv_line(line)
+		if columns.size() < 1:
+			continue
+
+		var word_text := str(columns[0]).strip_edges().to_lower()
 		if word_text.is_empty():
 			continue
+
 		var audio_path: String = _word_audio_paths.get(word_text, "") as String
 		if audio_path.is_empty():
 			continue
-		var phonemes: Array[String] = []
+
+		var breakdown: String = ""
+		if columns.size() >= 3:
+			breakdown = str(columns[2]).strip_edges()
+
 		var letters: Array[String] = []
 		for character in word_text:
 			letters.append(character)
-			var phoneme_alias: String = LETTER_TO_PHONEME.get(character, character) as String
-			if not _phoneme_paths.has(phoneme_alias):
-				phoneme_alias = _find_first_existing_alias([character, phoneme_alias, "uh"])
-			phonemes.append(phoneme_alias)
+
+		var phonemes: Array[String] = _phonemes_from_breakdown(word_text, breakdown)
+		if phonemes.is_empty():
+			phonemes = _phonemes_from_letters(word_text)
+
 		(
 			entries
 			. append(
@@ -68,8 +82,121 @@ func load_word_entries(group_name: String) -> Array[Dictionary]:
 				}
 			)
 		)
+
 	entries.sort_custom(_sort_entries)
 	return entries
+
+
+func _group_has_word_csv(group_name: String) -> bool:
+	for file_name in WORD_CSV_FILE_NAMES:
+		var path := "%s/%s/%s" % [WORD_ROOT, group_name, file_name]
+		if FileAccess.file_exists(path):
+			return true
+	return false
+
+
+func _find_group_csv_path(group_name: String) -> String:
+	for file_name in WORD_CSV_FILE_NAMES:
+		var path := "%s/%s/%s" % [WORD_ROOT, group_name, file_name]
+		if FileAccess.file_exists(path):
+			return path
+	return ""
+
+
+func _parse_csv_line(line: String) -> Array[String]:
+	var values: Array[String] = []
+	var buffer := ""
+	var in_quotes := false
+	for char in line:
+		if char == '"':
+			in_quotes = not in_quotes
+			continue
+		if char == "," and not in_quotes:
+			values.append(buffer.strip_edges())
+			buffer = ""
+			continue
+		buffer += char
+	values.append(buffer.strip_edges())
+	return values
+
+
+func _phonemes_from_breakdown(word_text: String, breakdown: String) -> Array[String]:
+	if breakdown.is_empty():
+		return []
+
+	var mapping = _parse_grapheme_to_phoneme_breakdown(breakdown)
+	if mapping.size() == 0:
+		return []
+
+	var lower_word := word_text.to_lower()
+	var result: Array[String] = []
+	var i := 0
+	while i < lower_word.length():
+		var match_grapheme := ""
+		var match_phoneme := ""
+
+		for pair in mapping:
+			var g := str(pair.get("grapheme", "")).to_lower()
+			if g == "":
+				continue
+			if lower_word.substr(i, g.length()) == g and g.length() > match_grapheme.length():
+				match_grapheme = g
+				match_phoneme = str(pair.get("phoneme", ""))
+
+		if match_grapheme == "":
+			var char := lower_word[i]
+			var alias := LETTER_TO_PHONEME.get(char, char) as String
+			if not _phoneme_paths.has(alias):
+				alias = _find_first_existing_alias([char, alias, "uh"])
+			result.append(alias)
+			i += 1
+			continue
+
+		for idx in range(match_grapheme.length()):
+			result.append(match_phoneme)
+		i += match_grapheme.length()
+
+	return result
+
+
+func _parse_grapheme_to_phoneme_breakdown(breakdown: String) -> Array[Dictionary]:
+	var pairs: Array[Dictionary] = []
+	var parts := breakdown.split(",")
+	for part in parts:
+		var trimmed := str(part).strip_edges()
+		if trimmed == "":
+			continue
+
+		var arrow := ""
+		if trimmed.find("→") >= 0:
+			arrow = "→"
+		elif trimmed.find("->") >= 0:
+			arrow = "->"
+		if arrow == "":
+			continue
+
+		var items := trimmed.split(arrow, false)
+		if items.size() != 2:
+			continue
+
+		var grapheme := str(items[0]).strip_edges().to_lower()
+		var phoneme := str(items[1]).strip_edges()
+		if phoneme.begins_with("/") and phoneme.ends_with("/"):
+			phoneme = phoneme.substr(1, phoneme.length() - 2)
+
+		pairs.append({"grapheme": grapheme, "phoneme": phoneme})
+
+	return pairs
+
+
+func _phonemes_from_letters(word_text: String) -> Array[String]:
+	var phonemes: Array[String] = []
+	for character in word_text:
+		var phoneme_alias: String = LETTER_TO_PHONEME.get(character, character) as String
+		if not _phoneme_paths.has(phoneme_alias):
+			phoneme_alias = _find_first_existing_alias([character, phoneme_alias, "uh"])
+		phonemes.append(phoneme_alias)
+	return phonemes
 
 
 func _sort_entries(a: Dictionary, b: Dictionary) -> bool:

@@ -117,6 +117,11 @@ func test_reading_mode_path_smooth_corner() -> void:
 	assert_that(pose.heading).is_greater(0.0)
 	assert_that(pose.heading).is_less(PI / 2.0)
 
+	# Ensure heading is smoothly interpolated across the corner segment
+	var before_pose = reading_mode._get_pose_at_path_distance(14.5, 0.0)
+	var after_pose = reading_mode._get_pose_at_path_distance(15.5, 0.0)
+	assert_that(absf(after_pose.heading - before_pose.heading)).is_less_equal(0.8)
+
 
 func test_gameplay_controller_does_not_use_invalid_energy_property() -> void:
 	var file = FileAccess.open(

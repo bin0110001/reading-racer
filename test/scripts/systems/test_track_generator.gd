@@ -12,6 +12,22 @@ func test_track_generator_initialization() -> void:
 	assert_that(generator).is_not_null()
 
 
+func test_track_generator_corner_rotation_is_180_degrees() -> void:
+	var generator = TrackGenerator.new()
+
+	# A right turn corner rotation before adding 180 degrees is 180
+	var rotation = generator._get_tile_rotation_degrees(
+		Vector3i(1, 0, 0), Vector3i(0, 0, 1), TrackGenerator.TRACK_TILE_CORNER
+	)
+	assert_that(rotation).is_equal(0.0)
+
+	# A left turn corner rotation before adding 180 degrees is 90
+	rotation = generator._get_tile_rotation_degrees(
+		Vector3i(0, 0, 1), Vector3i(-1, 0, 0), TrackGenerator.TRACK_TILE_CORNER
+	)
+	assert_that(rotation).is_equal(270.0)
+
+
 func test_track_generator_init() -> void:
 	var generator = TrackGenerator.new()
 	var start_pos = Vector3(0.0, 0.0, 0.0)

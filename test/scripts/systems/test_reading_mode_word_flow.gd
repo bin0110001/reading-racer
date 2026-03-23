@@ -32,6 +32,19 @@ class TestPhonemePlayer:
 		pass
 
 
+class TestContentLoader:
+	extends ReadingContentLoader
+
+	func get_word_stream(_entry: Dictionary) -> AudioStream:  # gdlint: disable=unused-argument
+		return null
+
+	func get_phoneme_label(entry: Dictionary, index: int) -> String:
+		var phonemes: Array = entry.get("phonemes", []) as Array
+		if index < 0 or index >= phonemes.size():
+			return ""
+		return str(phonemes[index])
+
+
 func _get_test_path_frame(path_index: int) -> Dictionary:
 	return {
 		"center": Vector3(float(path_index) * 10.0, 0.0, 0.0),
@@ -50,13 +63,15 @@ func _create_reading_mode() -> Variant:
 
 func _configure_reading_mode() -> Variant:
 	var reading_mode: Variant = _create_reading_mode()
+	var content_loader = TestContentLoader.new()
 	reading_mode.movement_system = MovementSystem.new(LaneChangeController.new())
 	reading_mode.hud = TestReadingHUD.new()
 	reading_mode.phoneme_player = TestPhonemePlayer.new()
 	reading_mode.player = Node3D.new()
 	reading_mode.vehicle_anchor = Node3D.new()
 	reading_mode.spawn_root = Node3D.new()
-	reading_mode.gameplay_controller = GameplayController.new(ReadingContentLoader.new())
+	reading_mode.content_loader = content_loader
+	reading_mode.gameplay_controller = GameplayController.new(content_loader)
 	reading_mode.gameplay_controller.set_spawn_root(reading_mode.spawn_root)
 	return reading_mode
 

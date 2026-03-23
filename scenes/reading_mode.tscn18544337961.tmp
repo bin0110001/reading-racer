@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://b3gl4gc55argt"]
+
+[ext_resource type="Script" uid="uid://ml73gfprcrpf" path="res://scripts/reading/reading_mode.gd" id="1_reading_mode"]
+[ext_resource type="Environment" uid="uid://c3bs0wfxpri8g" path="res://scenes/main-environment.tres" id="2_environment"]
+[ext_resource type="Script" uid="uid://der3y613vpmds" path="res://scripts/reading/reading_hud.gd" id="3_reading_hud"]
+[ext_resource type="Script" uid="uid://dydf4mmdw0x1l" path="res://scripts/reading/phoneme_player.gd" id="4_phoneme_player"]
+
+[node name="ReadingMode" type="Node3D" unique_id=1388531464]
+script = ExtResource("1_reading_mode")
+
+[node name="Environment" type="WorldEnvironment" parent="." unique_id=599490795]
+environment = ExtResource("2_environment")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=2082590000]
+transform = Transform3D(-0.511864, -0.564863, 0.646877, 0, 0.753356, 0.657615, -0.859066, 0.336635, -0.385035, 0, 0, 0)
+light_energy = 2.2
+shadow_enabled = true
+
+[node name="Road" type="Node3D" parent="." unique_id=845429793]
+
+[node name="SpawnRoot" type="Node3D" parent="." unique_id=1539171548]
+
+[node name="Player" type="Node3D" parent="." unique_id=862413089]
+
+[node name="VehicleAnchor" type="Node3D" parent="Player" unique_id=1276057858]
+
+[node name="CameraRig" type="Node3D" parent="." unique_id=220955330]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 13, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=381774192]
+current = true
+fov = 42.0
+far = 250.0
+
+[node name="ReadingHUD" type="CanvasLayer" parent="." unique_id=1082301838]
+script = ExtResource("3_reading_hud")
+
+[node name="PhonemePlayer" type="Node" parent="." unique_id=1368063568]
+script = ExtResource("4_phoneme_player")

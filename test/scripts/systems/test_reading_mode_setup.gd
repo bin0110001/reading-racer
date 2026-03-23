@@ -34,12 +34,12 @@ func _get_test_path_index(path_index: int) -> int:
 
 
 func test_reading_content_loader_creation() -> void:
-	var loader = ReadingContentLoader.new()
+	var loader: ReadingContentLoader = ReadingContentLoader.new()
 	assert_that(loader).is_not_null()
 
 
 func test_reading_content_loader_methods_exist() -> void:
-	var loader = ReadingContentLoader.new()
+	var loader: ReadingContentLoader = ReadingContentLoader.new()
 	assert_that(loader.has_method("list_word_groups")).is_true()
 	assert_that(loader.has_method("load_word_entries")).is_true()
 	assert_that(loader.has_method("get_word_stream")).is_true()

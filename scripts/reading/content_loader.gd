@@ -1,94 +1,79 @@
-class_name ReadingContentLoader
-extends RefCounted
+# This is a class
+class_name ReadingContentLoader extends Object
 
 const PHONEME_ROOT := "res://audio/phenomes"
 const WORD_ROOT := "res://audio/words"
 
-const LETTER_TO_PHONEME := {
-	"a": "ae",
-	"b": "b",
-	"c": "k",
-	"d": "d",
-	"e": "ɛ",
-	"f": "f",
-	"g": "ɡ",
-	"h": "H",
-	"i": "ɪ",
-	"j": "dʒ",
-	"k": "k",
-	"l": "l",
-	"m": "m",
-	"n": "n",
-	"o": "ɒ",
-	"p": "p",
-	"q": "k",
-	"r": "r",
-	"s": "s",
-	"t": "t",
-	"u": "ʌ",
-	"v": "v",
-	"w": "w",
-	"x": "s",
-	"y": "j",
-	"z": "z",
-}
+const LETTER_TO_PHONEME := {}
 
 var _phoneme_paths: Dictionary = {}
+var _word_audio_paths: Dictionary = {}
 
 
 func _init() -> void:
 	_refresh_phoneme_paths()
+	_refresh_word_audio_paths()
 
 
 func list_word_groups() -> Array[String]:
 	var groups: Array[String] = []
 	for directory_name in DirAccess.get_directories_at(WORD_ROOT):
-		groups.append(directory_name)
+		var json_path := "%s/%s/words.json" % [WORD_ROOT, directory_name]
+		if FileAccess.file_exists(json_path):
+			groups.append(directory_name)
 	groups.sort()
 	return groups
 
 
 func load_word_entries(group_name: String) -> Array[Dictionary]:
-	var group_path := "%s/%s" % [WORD_ROOT, group_name]
+	var json_path := "%s/%s/words.json" % [WORD_ROOT, group_name]
+	var file := FileAccess.open(json_path, FileAccess.READ)
+	if not file:
+		return []
+	var json_text := file.get_as_text()
+	file.close()
+	var json := JSON.new()
+	var error := json.parse(json_text)
+	if error != OK:
+		return []
+	var data: Variant = json.get_data()
+	if not data is Dictionary or not data.has("words"):
+		return []
+	var words: Array = data["words"] as Array
 	var entries: Array[Dictionary] = []
-	var matcher := RegEx.new()
-	matcher.compile("^[a-z]+$")
-
-	for file_name in DirAccess.get_files_at(group_path):
-		var extension := file_name.get_extension().to_lower()
-		if extension not in ["wav", "ogg", "mp3"]:
+	for word_text in words:
+		word_text = str(word_text).strip_edges().to_lower()
+		if word_text.is_empty():
 			continue
-
-		var text_value := file_name.get_basename().strip_edges().to_lower()
-		if matcher.search(text_value) == null:
+		var audio_path: String = _word_audio_paths.get(word_text, "") as String
+		if audio_path.is_empty():
 			continue
-
 		var phonemes: Array[String] = []
 		var letters: Array[String] = []
-		for character in text_value:
+		for character in word_text:
 			letters.append(character)
 			var phoneme_alias: String = LETTER_TO_PHONEME.get(character, character) as String
 			if not _phoneme_paths.has(phoneme_alias):
-				phoneme_alias = _find_first_existing_alias([character, phoneme_alias, "ə"])
+				phoneme_alias = _find_first_existing_alias([character, phoneme_alias, "uh"])
 			phonemes.append(phoneme_alias)
-
 		(
 			entries
 			. append(
 				{
-					"text": text_value,
+					"text": word_text,
 					"letters": letters,
 					"phonemes": phonemes,
-					"word_audio_path": "%s/%s" % [group_path, file_name],
+					"word_audio_path": audio_path,
 					"group": group_name,
 				}
 			)
 		)
-
-	entries.sort_custom(
-		func(a: Dictionary, b: Dictionary) -> bool: return str(a["text"]) < str(b["text"])
-	)
+	entries.sort_custom(_sort_entries)
 	return entries
+
+
+func _sort_entries(a: Dictionary, b: Dictionary) -> bool:
+	return str(a["text"]) < str(b["text"])
 
 
 func get_phoneme_stream(phoneme_alias: String) -> AudioStream:
@@ -117,6 +102,19 @@ func _refresh_phoneme_paths() -> void:
 			continue
 		var alias := file_name.get_basename()
 		_phoneme_paths[alias] = "%s/%s" % [PHONEME_ROOT, file_name]
+
+
+func _refresh_word_audio_paths() -> void:
+	_word_audio_paths.clear()
+	for group in list_word_groups():
+		var group_path := "%s/%s" % [WORD_ROOT, group]
+		for file_name in DirAccess.get_files_at(group_path):
+			var extension := file_name.get_extension().to_lower()
+			if extension not in ["wav", "ogg", "mp3"]:
+				continue
+			var word := file_name.get_basename().strip_edges().to_lower()
+			var path := "%s/%s" % [group_path, file_name]
+			_word_audio_paths[word] = path
 
 
 func _find_first_existing_alias(candidates: Array) -> String:

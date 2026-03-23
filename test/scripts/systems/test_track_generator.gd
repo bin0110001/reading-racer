@@ -45,7 +45,13 @@ func test_track_generator_builds_closed_loop_layout() -> void:
 
 	var layout: TrackLayout = (
 		generator.generate_loop_layout(
-			entries, {"word_gap_cells": 2, "padding_cells": 6, "decoration_margin": 3}
+			entries,
+			{
+				"word_gap_cells": 2,
+				"padding_cells": 6,
+				"decoration_margin": 3,
+				"path_style": "serpentine"
+			}
 		)
 		as TrackLayout
 	)
@@ -71,7 +77,9 @@ func test_track_generator_loop_layout_does_not_repeat_cells() -> void:
 		{"text": "racer", "letters": ["r", "a", "c", "e", "r"]},
 	]
 
-	var layout: TrackLayout = generator.generate_loop_layout(entries) as TrackLayout
+	var layout: TrackLayout = (
+		generator.generate_loop_layout(entries, {"path_style": "circular"}) as TrackLayout
+	)
 	var seen: Dictionary = {}
 	for cell in layout.path_cells:
 		var key: String = "%d,%d,%d" % [cell.x, cell.y, cell.z]
@@ -88,7 +96,10 @@ func test_track_generator_loop_layout_is_straight_heavy_and_filled() -> void:
 	]
 
 	var layout: TrackLayout = (
-		generator.generate_loop_layout(entries, {"decoration_margin": 4}) as TrackLayout
+		generator.generate_loop_layout(
+			entries, {"decoration_margin": 4, "path_style": "serpentine"}
+		)
+		as TrackLayout
 	)
 	var straight_count := int(layout.metadata.get("straight_count", 0))
 	var corner_count := int(layout.metadata.get("corner_count", 0))

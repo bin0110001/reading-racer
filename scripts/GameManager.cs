@@ -107,6 +107,11 @@ public partial class GameManager : Node
     private void OnWaitingStart()
     {
         countdownTimer = 0.0f;
+        foreach (var data in players.Values)
+        {
+            if (data["vehicle"] is Vehicle v)
+                v.StopRacing();
+        }
         if (raceHud is RaceHUD hud)
             hud.ShowWaiting();
     }
@@ -132,8 +137,8 @@ public partial class GameManager : Node
         raceStartTime = OS.GetTicksMsec() / 1000.0f;
         foreach (var data in players.Values)
         {
-            if (data["vehicle"] is Node3D v)
-                v.SetPhysicsProcess(true);
+            if (data["vehicle"] is Vehicle v)
+                v.StartRacing();
         }
         if (raceHud is RaceHUD hud)
             hud.ShowRaceHud();
@@ -194,8 +199,10 @@ public partial class GameManager : Node
     private void OnRaceFinished()
     {
         foreach (var data in players.Values)
-            if (data["vehicle"] is Node3D v)
-                v.SetPhysicsProcess(false);
+        {
+            if (data["vehicle"] is Vehicle v)
+                v.StopRacing();
+        }
         if (raceHud is RaceHUD hud)
             hud.ShowResults(playerCompletionOrder, players);
         EmitSignal(nameof(RaceFinishedEventHandler));
@@ -206,9 +213,11 @@ public partial class GameManager : Node
         return players.ContainsKey(playerId) ? players[playerId] : new Dictionary<string, object>();
     }
 
-    public RaceState GetRaceState()
+    /// <summary>Get the current race state as an integer.</summary>
+    /// <returns>0=WAITING, 1=COUNTDOWN, 2=RACING, 3=FINISHED</returns>
+    public int GetRaceState()
     {
-        return currentState;
+        return (int)currentState;
     }
 
     public int GetPlayersCount()

@@ -42,6 +42,11 @@ var stream_tiles_behind: int = 3
 
 var rng := RandomNumberGenerator.new()
 
+var _last_player_position := Vector3.INF
+var _last_player_heading := 0.0
+var _min_map_update_distance_sq := 0.09  # 0.3m squared
+var _min_map_update_heading := deg_to_rad(1.0)
+
 
 func _init() -> void:
 	rng.randomize()
@@ -152,6 +157,16 @@ func measure_track_tile(track_sample: Node3D) -> void:
 func update_visible_cells(player_position: Vector3, player_heading: float) -> void:
 	if shared_track_layout == null:
 		return
+
+	# Skip if player moved very little since last map update.
+	if _last_player_position != Vector3.INF:
+		var move_dist_sq = player_position.distance_squared_to(_last_player_position)
+		var heading_delta = absf(player_heading - _last_player_heading)
+		if move_dist_sq < _min_map_update_distance_sq and heading_delta < _min_map_update_heading:
+			return
+
+	_last_player_position = player_position
+	_last_player_heading = player_heading
 
 	var desired_tiles: Dictionary = {}
 	for cell_entry in layout_cell_entries:

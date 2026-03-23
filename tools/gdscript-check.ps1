@@ -344,6 +344,56 @@ function Get-GdScriptFiles {
 }
 
 
+function Check-DuplicateGlobalClassNames {
+    param(
+        [string[]]$GdFiles
+    )
+
+    Write-Host '[gdscript-check] Scanning for duplicate global class names...'
+    
+    $classNameMap = @{}
+    $duplicates = @()
+    
+    foreach ($file in $GdFiles) {
+        try {
+            $content = Get-Content -Path $file -Raw -ErrorAction SilentlyContinue
+            if ([string]::IsNullOrWhiteSpace($content)) {
+                continue
+            }
+            
+            $match = [regex]::Match($content, '^class_name\s+(\w+)', [System.Text.RegularExpressions.RegexOptions]::Multiline)
+            if ($match.Success) {
+                $className = $match.Groups[1].Value
+                if ($classNameMap.ContainsKey($className)) {
+                    $existing = $classNameMap[$className]
+                    $duplicates += @{
+                        ClassName = $className
+                        Files = @($existing, $file)
+                    }
+                } else {
+                    $classNameMap[$className] = $file
+                }
+            }
+        } catch {
+            Write-Host "[gdscript-check] Warning: Could not read file $file`: $_" -ForegroundColor Yellow
+        }
+    }
+    
+    if ($duplicates.Count -gt 0) {
+        Write-Host '[gdscript-check] ERROR: Found duplicate global class names:' -ForegroundColor Red
+        foreach ($dup in $duplicates) {
+            Write-Host "  class_name `"$($dup.ClassName)`" is defined in multiple files:" -ForegroundColor Red
+            foreach ($dupFile in $dup.Files) {
+                Write-Host "    - $dupFile" -ForegroundColor Red
+            }
+        }
+        throw (New-CheckException -Message '[gdscript-check] Duplicate global class names detected.' -ExitCode 1)
+    }
+    
+    Write-Host '[gdscript-check] No duplicate global class names found.'
+}
+
+
 function Get-GodotExecutablePath {
     param(
         [string]$ConfiguredPath = $null
@@ -681,30 +731,45 @@ function Invoke-GodotCompilationChecks {
         [string]$RepoRoot,
         [string]$GodotExe,
         [string]$Label,
+        [string[]]$GdFiles,
         [int]$TimeoutSeconds = 0
     )
 
     Write-Host "[gdscript-check] Running Godot validation for $Label"
 
-    $result = Invoke-PowerShellExternalCommand -FilePath $GodotExe -Arguments @('--headless', '--path', $RepoRoot, '--check-only')
-    $issues = @(Get-GodotCompilerIssues -OutputText $result.CombinedOutput)
-
-    if ($result.ExitCode -ne 0 -or $issues.Count -gt 0) {
-        $failure = [pscustomobject]@{
-            FilePath = $RepoRoot
-            ResPath = 'res://'
-            ExitCode = $result.ExitCode
-            Issues = @($issues)
-            Stdout = $result.Stdout
-            Stderr = $result.Stderr
-        }
-        Write-GodotValidationFailures -Failures @($failure) -Label $Label
-        throw (New-CheckException -Message "[gdscript-check] Godot validation failed for $Label scripts." -ExitCode 1)
+    # Create a temporary script to preload all GDScript files for full type checking
+    $tempFile = [System.IO.Path]::GetTempFileName() + ".gd"
+    $content = "extends SceneTree`nfunc _init():`n"
+    foreach ($file in $GdFiles) {
+        $relative = $file.Replace($RepoRoot, "").Replace("\", "/").TrimStart("/")
+        $resPath = "res://$relative"
+        $content += "`tpreload(`"$resPath`")`n"
     }
+    $content += "`tquit()`n"
+    Set-Content -Path $tempFile -Value $content -Encoding UTF8
 
-    Write-Host "[gdscript-check] Godot validation passed for $Label."
-    return @()
+    try {
+        $result = Invoke-PowerShellExternalCommand -FilePath $GodotExe -Arguments @('--headless', '--path', $RepoRoot, '--script', $tempFile)
+        $issues = @(Get-GodotCompilerIssues -OutputText $result.CombinedOutput)
 
+        if ($result.ExitCode -ne 0 -or $issues.Count -gt 0) {
+            $failure = [pscustomobject]@{
+                FilePath = $RepoRoot
+                ResPath = 'res://'
+                ExitCode = $result.ExitCode
+                Issues = @($issues)
+                Stdout = $result.Stdout
+                Stderr = $result.Stderr
+            }
+            Write-GodotValidationFailures -Failures @($failure) -Label $Label
+            throw (New-CheckException -Message "[gdscript-check] Godot validation failed for $Label scripts." -ExitCode 1)
+        }
+
+        Write-Host "[gdscript-check] Godot validation passed for $Label."
+        return @()
+    } finally {
+        Remove-Item -Path $tempFile -ErrorAction SilentlyContinue
+    }
 }
 
 
@@ -920,7 +985,7 @@ function Invoke-GdScriptCheck {
     $gdUnitTargets = @(Get-GdUnitTargetResPaths -RepoRoot $repoRoot -TestFiles $testFiles -ConfiguredTargets $GdUnitTarget)
     $godotExe = Get-GodotExecutablePath -ConfiguredPath $GodotBin
     $gdUnitCommand = Get-GdUnitCommandInfo -ProjectRoot $repoRoot
-    $script:CheckTotalSteps = 3
+    $script:CheckTotalSteps = 4
     if ($godotExe) {
         $script:CheckTotalSteps++
         if ($testFiles.Count -gt 0 -and $gdUnitCommand) {
@@ -977,6 +1042,10 @@ function Invoke-GdScriptCheck {
     }
     Assert-ProgramSucceeded -Result $formatResult -Context 'gdformat'
 
+    $script:CheckCurrentStep++
+    Write-StepStatus -Activity 'Check duplicate global class names' -Step $script:CheckCurrentStep -Total $script:CheckTotalSteps
+    Check-DuplicateGlobalClassNames -GdFiles $gdFiles
+
     if (-not (Test-Path $godotExe)) {
         Write-Host '[gdscript-check] Warning: Godot executable was not found. Set -GodotBin or GODOT_BIN to enable Godot validation.' -ForegroundColor Yellow
         Write-Host '[gdscript-check] Note: test files are not validated via Godot/GDUnit when Godot is unavailable.'
@@ -986,7 +1055,7 @@ function Invoke-GdScriptCheck {
 
     $script:CheckCurrentStep++
     Write-StepStatus -Activity 'Godot compile project scripts' -Step $script:CheckCurrentStep -Total $script:CheckTotalSteps
-    Invoke-GodotCompilationChecks -RepoRoot $repoRoot -GodotExe $godotExe -Label 'project scripts' -TimeoutSeconds $TimeoutSeconds
+    Invoke-GodotCompilationChecks -RepoRoot $repoRoot -GodotExe $godotExe -Label 'project scripts' -GdFiles $gdFiles -TimeoutSeconds $TimeoutSeconds
 
     if ($testFiles.Count -gt 0) {
         if (-not $gdUnitCommand) {

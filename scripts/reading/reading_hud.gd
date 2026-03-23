@@ -6,6 +6,8 @@ signal word_group_changed(group_name: String)
 signal volume_changed(volume: float)
 signal resume_requested
 signal debug_path_toggled(enabled: bool)
+signal steering_type_changed(steering_type: String)
+signal map_style_changed(map_style: String)
 
 var _status_label := Label.new()
 var _word_label := Label.new()
@@ -16,6 +18,8 @@ var _feedback_label := Label.new()
 var _options_panel := PanelContainer.new()
 var _control_mode_option := OptionButton.new()
 var _word_group_option := OptionButton.new()
+var _steering_type_option := OptionButton.new()
+var _map_style_option := OptionButton.new()
 var _volume_slider := HSlider.new()
 var _debug_path_checkbox := CheckBox.new()
 
@@ -96,6 +100,8 @@ func _build_hud() -> void:
 	options_layout.add_child(title)
 
 	options_layout.add_child(_make_row("Controls", _control_mode_option))
+	options_layout.add_child(_make_row("Steering", _steering_type_option))
+	options_layout.add_child(_make_row("Map Style", _map_style_option))
 	options_layout.add_child(_make_row("Word Group", _word_group_option))
 
 	_volume_slider.min_value = 0.0
@@ -116,6 +122,8 @@ func _build_hud() -> void:
 
 	_control_mode_option.item_selected.connect(_on_control_mode_selected)
 	_word_group_option.item_selected.connect(_on_word_group_selected)
+	_steering_type_option.item_selected.connect(_on_steering_type_selected)
+	_map_style_option.item_selected.connect(_on_map_style_selected)
 	_volume_slider.value_changed.connect(_on_volume_changed)
 
 
@@ -133,11 +141,25 @@ func configure(groups: Array[String], settings: Dictionary) -> void:
 	for mode_name in ReadingSettingsStore.CONTROL_MODES:
 		_control_mode_option.add_item(mode_name.capitalize())
 
+	_steering_type_option.clear()
+	for steering_type in ReadingSettingsStore.STEERING_TYPES:
+		_steering_type_option.add_item(steering_type.capitalize().replace("_", " "))
+
+	_map_style_option.clear()
+	for map_style in ReadingSettingsStore.MAP_STYLES:
+		_map_style_option.add_item(map_style.capitalize())
+
 	_word_group_option.clear()
 	for group_name in groups:
 		_word_group_option.add_item(group_name)
 
 	set_control_mode(str(settings.get("control_mode", ReadingSettingsStore.CONTROL_MODE_KEYBOARD)))
+	var steering = str(
+		settings.get("steering_type", ReadingSettingsStore.STEERING_TYPE_LANE_CHANGE)
+	)
+	set_steering_type(steering)
+	var map = str(settings.get("map_style", ReadingSettingsStore.MAP_STYLE_CIRCULAR))
+	set_map_style(map)
 	set_word_group(str(settings.get("word_group", "sightwords")))
 	set_volume(float(settings.get("master_volume", 0.8)))
 
@@ -187,6 +209,18 @@ func set_control_mode(mode_name: String) -> void:
 		_control_mode_option.select(index)
 
 
+func set_steering_type(steering_type: String) -> void:
+	var index := ReadingSettingsStore.STEERING_TYPES.find(steering_type)
+	if index >= 0:
+		_steering_type_option.select(index)
+
+
+func set_map_style(map_style: String) -> void:
+	var index := ReadingSettingsStore.MAP_STYLES.find(map_style)
+	if index >= 0:
+		_map_style_option.select(index)
+
+
 func set_word_group(group_name: String) -> void:
 	for index in range(_word_group_option.item_count):
 		if _word_group_option.get_item_text(index) == group_name:
@@ -205,6 +239,16 @@ func set_debug_path(enabled: bool) -> void:
 func _on_control_mode_selected(index: int) -> void:
 	if index >= 0 and index < ReadingSettingsStore.CONTROL_MODES.size():
 		emit_signal("control_mode_changed", ReadingSettingsStore.CONTROL_MODES[index])
+
+
+func _on_steering_type_selected(index: int) -> void:
+	if index >= 0 and index < ReadingSettingsStore.STEERING_TYPES.size():
+		emit_signal("steering_type_changed", ReadingSettingsStore.STEERING_TYPES[index])
+
+
+func _on_map_style_selected(index: int) -> void:
+	if index >= 0 and index < ReadingSettingsStore.MAP_STYLES.size():
+		emit_signal("map_style_changed", ReadingSettingsStore.MAP_STYLES[index])
 
 
 func _on_debug_path_toggled(enabled: bool) -> void:

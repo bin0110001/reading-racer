@@ -1,6 +1,6 @@
 class_name ReadingMode
 extends Node3D
-# gdlint: disable=max-file-lines
+# gdlint: disable=max-file-lines,class-definitions-order
 
 const CameraController3DClass = preload("res://scripts/reading/CameraController3D.gd")
 const MovementSystem = preload("res://scripts/reading/systems/MovementSystem.gd")
@@ -63,7 +63,7 @@ var gameplay_controller: GameplayController = null
 # Member variables
 var track_generator: TrackGenerator
 var settings_store := ReadingSettingsStore.new()
-var content_loader := ReadingContentLoader.new()
+var content_loader: ReadingContentLoader = ReadingContentLoader.new()
 var camera_controller = null  # CameraController3D instance
 
 var settings: Dictionary = {}
@@ -82,6 +82,12 @@ var finish_line_x := 0.0
 var farthest_spawned_x := 0.0
 var random_word_order := false
 var rng := RandomNumberGenerator.new()
+
+# Optimized map streaming update (avoid full rebuild each frame)
+var _map_update_timer := 0.0
+var _map_update_interval := 0.05  # 20 updates/sec
+var _last_map_update_pos := Vector3.INF
+var _last_map_update_heading := 0.0
 
 # Track layout data
 var shared_track_layout: Variant = null
@@ -263,6 +269,8 @@ func _get_word_anchor(word_index: int) -> Dictionary:
 func _ready() -> void:
 	print("[ReadingMode._ready] Starting initialization...")
 	ReadingControlProfile.ensure_input_actions()
+	if content_loader == null:
+		content_loader = ReadingContentLoader.new()
 	settings = settings_store.load_settings()
 	var debug_draw_path = bool(settings.get("debug_draw_path", true))
 	random_word_order = bool(settings.get("random_word_order", false))
@@ -288,6 +296,8 @@ func _ready() -> void:
 	hud.configure(available_groups, settings)
 	hud.set_debug_path(debug_draw_path)
 	hud.control_mode_changed.connect(_on_control_mode_changed)
+	hud.steering_type_changed.connect(_on_steering_type_changed)
+	hud.map_style_changed.connect(_on_map_style_changed)
 	hud.word_group_changed.connect(_on_word_group_changed)
 	hud.volume_changed.connect(_on_volume_changed)
 	hud.debug_path_toggled.connect(_on_debug_path_toggled)
@@ -305,9 +315,9 @@ func _ready() -> void:
 	print("[ReadingMode] Generated %d initial track segments" % initial_segments.size())
 
 	# Initialize control profile - starts with default, updated when word loads
-	var control_mode = str(settings.get("control_mode", "lane_change"))
-	_create_control_profile(control_mode)
-	print("[ReadingMode] Control profile set to: %s" % control_mode)
+	var steering_type = str(settings.get("steering_type", "lane_change"))
+	_create_control_profile(steering_type)
+	print("[ReadingMode] Control profile set to: %s" % steering_type)
 
 	# Initialize Movement System
 	movement_system = MovementSystem.new(control_profile)
@@ -395,15 +405,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-func _create_control_profile(mode_name: String) -> void:
-	# Create appropriate control profile based on mode
-	match mode_name:
+func _create_control_profile(steering_type: String) -> void:
+	# Create appropriate control profile based on steering type
+	match steering_type:
 		"smooth_steering":
 			control_profile = SmoothSteeringController.new()
 		"throttle_steering":
 			control_profile = ThrottleSteeringController.new()
 		_:
-			# Default to lane change for "lane_change" or any unknown mode
+			# Default to lane change for "lane_change" or any unknown type
 			control_profile = LaneChangeController.new()
 
 	# Update movement system with new profile
@@ -460,9 +470,19 @@ func _physics_process(delta: float) -> void:
 	var player_basis = movement_system.get_player_basis()
 	vehicle_anchor.global_transform = Transform3D(player_basis, player.position)
 
-	# Update map display
-	if map_display_manager:
-		map_display_manager.update_visible_cells(player.position, movement_system.player_heading)
+	# Update map display (throttled)
+	if map_display_manager and movement_system:
+		_map_update_timer += delta
+		if _map_update_timer >= _map_update_interval:
+			var move_dist_sq := player.position.distance_squared_to(_last_map_update_pos)
+			var heading_diff := absf(movement_system.player_heading - _last_map_update_heading)
+			if move_dist_sq > 0.01 or heading_diff > 0.01 or _last_map_update_pos == Vector3.INF:
+				map_display_manager.update_visible_cells(
+					player.position, movement_system.player_heading
+				)
+				_last_map_update_pos = player.position
+				_last_map_update_heading = movement_system.player_heading
+				_map_update_timer = 0.0
 
 	# Update gameplay triggers
 	if gameplay_controller:
@@ -475,15 +495,17 @@ func _physics_process(delta: float) -> void:
 
 func _ensure_road_ahead() -> void:
 	if map_display_manager:
-		var active_tiles_count = map_display_manager.grid_cells.size()
-		print(
-			(
-				"[ReadingMode._ensure_road_ahead] path_distance=%.1f active_tiles=%d"
-				% [movement_system.player_path_distance, active_tiles_count]
-			)
-		)
-	_cleanup_spawned_content()
-	_ensure_words_ahead()
+		# WARNING: Printing this every frame can severely degrade performance.
+		# Keep this disabled during normal gameplay.
+		# var active_tiles_count = map_display_manager.grid_cells.size()
+		# print(
+		# 	(
+		# 		"[ReadingMode._ensure_road_ahead] path_distance=%.1f active_tiles=%d"
+		# 	% [movement_system.player_path_distance, active_tiles_count]
+		# 	)
+		# )
+		_cleanup_spawned_content()
+		_ensure_words_ahead()
 
 
 # Movement update now handled by MovementSystem
@@ -513,6 +535,7 @@ func _rebuild_shared_track_layout() -> void:
 		return
 
 	var word_gap_cells: int = max(1, int(round(WORD_GAP / SEGMENT_SPACING)))
+	var map_style = str(settings.get("map_style", "circular"))
 	shared_track_layout = (
 		track_generator
 		. generate_loop_layout(
@@ -522,6 +545,7 @@ func _rebuild_shared_track_layout() -> void:
 				"cell_world_length": SEGMENT_SPACING,
 				"start_slots": 8,
 				"checkpoint_count": 4,
+				"path_style": map_style,
 			}
 		)
 	)
@@ -827,10 +851,24 @@ func _close_options() -> void:
 func _on_control_mode_changed(mode_name: String) -> void:
 	settings["control_mode"] = mode_name
 	settings_store.save_settings(settings)
-	_create_control_profile(mode_name)
 	_update_help_text()
 	hud.flash_feedback("Controls: %s" % mode_name.capitalize(), Color(0.55, 0.85, 1.0))
 	_update_status()
+
+
+func _on_steering_type_changed(steering_type: String) -> void:
+	settings["steering_type"] = steering_type
+	settings_store.save_settings(settings)
+	_create_control_profile(steering_type)
+	var display = steering_type.capitalize().replace("_", " ")
+	hud.flash_feedback("Steering: %s" % display, Color(0.55, 0.85, 1.0))
+
+
+func _on_map_style_changed(map_style: String) -> void:
+	settings["map_style"] = map_style
+	settings_store.save_settings(settings)
+	_rebuild_shared_track_layout()
+	hud.flash_feedback("Map style: %s" % map_style.capitalize(), Color(0.55, 0.85, 1.0))
 
 
 func _on_word_group_changed(group_name: String) -> void:

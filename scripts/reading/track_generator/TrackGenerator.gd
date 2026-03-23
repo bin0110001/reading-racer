@@ -1,4 +1,5 @@
-class_name TrackGenerator extends RefCounted
+class_name TrackGenerator
+extends RefCounted
 
 const TrackLayoutScript := preload("res://scripts/reading/track_generator/TrackLayout.gd")
 
@@ -22,6 +23,7 @@ const DEFAULT_START_SLOTS := 8
 const DEFAULT_CHECKPOINT_COUNT := 4
 const DEFAULT_MIN_TRACK_WIDTH := 8
 const DEFAULT_MIN_TRACK_HEIGHT := 4
+const DEFAULT_PATH_STYLE := "serpentine"
 
 const TRACK_TILE_STRAIGHT := "track_straight"
 const TRACK_TILE_CORNER := "track_corner"
@@ -95,7 +97,7 @@ func get_segment(index: int) -> TrackSegment:
 ## Find the segment index that contains a given world position
 func get_segment_at_position(world_x: float) -> int:
 	for i in range(segments.size()):
-		var seg = segments[i]
+		var seg: TrackSegment = segments[i]
 		if world_x >= seg.start_pos.x and world_x < seg.start_pos.x + seg.length:
 			return i
 		if world_x < seg.start_pos.x:
@@ -130,10 +132,11 @@ func generate_loop_layout(word_entries: Array, config: Dictionary = {}) -> Varia
 	)
 	var margin: int = max(1, int(config.get("decoration_margin", DEFAULT_DECORATION_MARGIN)))
 	var grid_size: Vector3i = Vector3i(track_size.x + margin * 2, 1, track_size.y + margin * 2)
-	var layout: Variant = TrackLayoutScript.new()
+	var layout: TrackLayout = TrackLayoutScript.new()
 	layout.initialize(grid_size)
 
-	var local_path: Array[Vector3i] = _build_serpentine_cycle(track_size.x, track_size.y)
+	var path_style: String = config.get("path_style", DEFAULT_PATH_STYLE) as String
+	var local_path: Array[Vector3i] = _build_path(track_size.x, track_size.y, path_style)
 	var path_offset: Vector3i = Vector3i(margin, 0, margin)
 	var global_path: Array[Vector3i] = []
 	for local_cell in local_path:
@@ -184,7 +187,9 @@ func _spawn_next_segment() -> void:
 
 ## Add a straight segment
 func _add_straight_segment() -> void:
-	var segment = StraightSegment.new(next_segment_id, last_position, SEGMENT_LENGTH)
+	var segment: StraightSegment = StraightSegment.new(
+		next_segment_id, last_position, SEGMENT_LENGTH
+	)
 	segment.road_center_z = 0.0
 	segment.ideal_heading = last_heading
 	segments.append(segment)
@@ -200,7 +205,7 @@ func _add_curve_segment() -> void:
 	var end_heading := last_heading + curve_angle
 	var difficulty := randf_range(CURVE_DIFFICULTY_MIN, CURVE_DIFFICULTY_MAX)
 
-	var segment = CurveSegment.new(
+	var segment: CurveSegment = CurveSegment.new(
 		next_segment_id, last_position, SEGMENT_LENGTH, last_heading, end_heading, difficulty
 	)
 	segment.road_center_z = 0.0
@@ -220,7 +225,7 @@ func _build_word_budget(word_entries: Array, config: Dictionary) -> Dictionary:
 
 	var word_gap_cells: int = max(1, int(config.get("word_gap_cells", DEFAULT_WORD_GAP_CELLS)))
 	var padding_cells: int = max(0, int(config.get("padding_cells", DEFAULT_PADDING_CELLS)))
-	var cell_world_length := float(config.get("cell_world_length", SEGMENT_LENGTH))
+	var cell_world_length: float = float(config.get("cell_world_length", SEGMENT_LENGTH))
 	var word_count := word_entries.size()
 	var spacing_cells: int = maxi(word_count - 1, 0) * word_gap_cells
 	var required_cells: int = max(
@@ -238,6 +243,12 @@ func _build_word_budget(word_entries: Array, config: Dictionary) -> Dictionary:
 	}
 
 
+func _path_capacity(width: int, height: int) -> int:
+	if width < 2 or height < 2:
+		return 0
+	return 2 * (width + height) - 4
+
+
 func _choose_track_dimensions(required_cells: int, config: Dictionary) -> Vector2i:
 	var min_width: int = max(4, int(config.get("min_track_width", DEFAULT_MIN_TRACK_WIDTH)))
 	var min_height: int = max(4, int(config.get("min_track_height", DEFAULT_MIN_TRACK_HEIGHT)))
@@ -247,8 +258,11 @@ func _choose_track_dimensions(required_cells: int, config: Dictionary) -> Vector
 	if height % 2 != 0:
 		height += 1
 
-	while width * height < required_cells:
-		width += 1
+	while _path_capacity(width, height) < required_cells:
+		if width <= height:
+			width += 1
+		else:
+			height += 1
 		if height % 2 != 0:
 			height += 1
 
@@ -256,25 +270,187 @@ func _choose_track_dimensions(required_cells: int, config: Dictionary) -> Vector
 
 
 func _build_serpentine_cycle(width: int, height: int) -> Array[Vector3i]:
+	var path: Array[Vector3i] = _build_base_cycle(width, height)
+	if path.is_empty():
+		return path
+
+	path = _optimize_cycle_geometry(path, 0)
+	return path
+
+
+func _build_base_cycle(width: int, height: int) -> Array[Vector3i]:
 	var path: Array[Vector3i] = []
 	if width < 2 or height < 2:
 		return path
 
 	for z in range(height):
-		path.append(Vector3i(0, 0, z))
-
-	for x in range(1, width):
-		if x % 2 == 1:
-			for z in range(height - 1, 0, -1):
+		if z % 2 == 0:
+			for x in range(width):
 				path.append(Vector3i(x, 0, z))
 		else:
-			for z in range(1, height):
+			for x in range(width - 1, -1, -1):
 				path.append(Vector3i(x, 0, z))
 
-	for x in range(width - 1, 0, -1):
-		path.append(Vector3i(x, 0, 0))
+	for start_idx in range(path.size()):
+		var candidate_first := path[start_idx]
+		var candidate_last := path[(start_idx - 1 + path.size()) % path.size()]
+		if _are_adjacent(candidate_first, candidate_last):
+			var first_part := path.slice(start_idx)
+			var second_part := path.slice(0, start_idx)
+			path = first_part + second_part
+			break
 
 	return path
+
+
+func _build_spiral_path(width: int, height: int) -> Array[Vector3i]:
+	var path: Array[Vector3i] = []
+	var left := 0
+	var right := width - 1
+	var top := 0
+	var bottom := height - 1
+
+	while left <= right and top <= bottom:
+		for x in range(left, right + 1):
+			path.append(Vector3i(x, 0, top))
+		top += 1
+		if top > bottom:
+			break
+
+		for z in range(top, bottom + 1):
+			path.append(Vector3i(right, 0, z))
+		right -= 1
+		if left > right:
+			break
+
+		for x in range(right, left - 1, -1):
+			path.append(Vector3i(x, 0, bottom))
+		bottom -= 1
+		if top > bottom:
+			break
+
+		for z in range(bottom, top - 1, -1):
+			path.append(Vector3i(left, 0, z))
+		left += 1
+
+	return path
+
+
+func _optimize_cycle_geometry(path: Array[Vector3i], iterations: int) -> Array[Vector3i]:
+	var n := path.size()
+	if n < 4:
+		return path
+
+	for iteration in range(iterations):
+		var i := rng.randi_range(0, n - 2)
+		var j := rng.randi_range(i + 2, n - 1)
+		if i + 2 > n - 1 or i == 0 and j == n - 1:
+			continue
+
+		var a := path[i]
+		var b := path[(i + 1) % n]
+		var c := path[j]
+		var d := path[(j + 1) % n]
+
+		if not (_are_adjacent(a, c) and _are_adjacent(b, d)):
+			continue
+
+		var candidate := _two_opt_swap(path, i, j)
+		var candidate_score := _cycle_curviness_score(candidate)
+		var current_score := _cycle_curviness_score(path)
+
+		# Only accept valid candidates (score != -9999)
+		if candidate_score != -9999 and (candidate_score > current_score or rng.randf() < 0.2):
+			path = candidate
+
+	return path
+
+
+func _two_opt_swap(path: Array[Vector3i], i: int, j: int) -> Array[Vector3i]:
+	var new_path: Array[Vector3i] = []
+	new_path += path.slice(0, i + 1)
+	var reversed_segment := path.slice(i + 1, j + 1).duplicate()
+	reversed_segment.reverse()
+	new_path += reversed_segment
+	new_path += path.slice(j + 1, path.size())
+	return new_path
+
+
+func _cycle_curviness_score(path: Array[Vector3i]) -> float:
+	var n := path.size()
+	if n == 0:
+		return -9999
+	var corners := 0
+	var max_straight_run := 0
+	var current_straight_run := 0
+
+	for k in range(n):
+		var prev := path[(k - 1 + n) % n]
+		var current := path[k]
+		var next := path[(k + 1) % n]
+		var v1 := current - prev
+		var v2 := next - current
+
+		if abs(v1.x) + abs(v1.z) != 1 or abs(v2.x) + abs(v2.z) != 1:
+			return -9999
+		if v1 == v2:
+			current_straight_run += 1
+			max_straight_run = max(max_straight_run, current_straight_run)
+		else:
+			# a corner (including 90 degrees), 180 degrees is disallowed in valid path
+			corners += 1
+			current_straight_run = 0
+
+	# Score: prefer more curvature and shorter straights.
+	var score := float(corners) * 10.0 - float(max_straight_run) * 3.0
+	return score
+
+
+func _are_adjacent(a: Vector3i, b: Vector3i) -> bool:
+	return abs(a.x - b.x) + abs(a.z - b.z) == 1
+
+
+func _rotate_cell(cell: Vector3i, width: int, height: int, rotation: int) -> Vector3i:
+	match rotation:
+		0:
+			return cell
+		1:
+			# Only valid when width == height, otherwise skip because the grid would not match dimensions.
+			return Vector3i(cell.z, 0, width - 1 - cell.x)
+		2:
+			return Vector3i(width - 1 - cell.x, 0, height - 1 - cell.z)
+		3:
+			# Only valid when width == height.
+			return Vector3i(height - 1 - cell.z, 0, cell.x)
+		_:
+			return cell
+
+
+func _randomize_cycle_orientation(p: Array[Vector3i], w: int, h: int) -> Array[Vector3i]:
+	var transformed: Array[Vector3i] = []
+	var rotation: int
+	if w == h:
+		rotation = rng.randi_range(0, 3)
+	else:
+		# For non-square grids, use only 0 or 180 degrees shift in place.
+		rotation = rng.randi_range(0, 1) * 2
+
+	for cell in p:
+		transformed.append(_rotate_cell(cell, w, h, rotation))
+
+	if rng.randf() < 0.5:
+		for i in range(transformed.size()):
+			var c: Vector3i = transformed[i]
+			c.x = w - 1 - c.x
+			transformed[i] = c
+
+	if rng.randf() < 0.5:
+		for i in range(transformed.size()):
+			var c: Vector3i = transformed[i]
+			c.z = h - 1 - c.z
+			transformed[i] = c
+
+	return transformed
 
 
 func _populate_track_tiles(layout: Variant) -> int:
@@ -315,6 +491,8 @@ func _populate_track_tiles(layout: Variant) -> int:
 
 
 func _populate_word_anchors(layout: Variant, word_entries: Array, budget: Dictionary) -> void:
+	if layout.path_cells.is_empty():
+		return
 	var cursor := 0
 	var word_gap_cells: int = int(budget.get("word_gap_cells", 0))
 	for entry in word_entries:
@@ -341,6 +519,8 @@ func _populate_word_anchors(layout: Variant, word_entries: Array, budget: Dictio
 func _populate_checkpoints(layout: Variant, checkpoint_count: int) -> void:
 	var count: int = max(1, checkpoint_count)
 	var path_count: int = layout.path_cells.size()
+	if path_count == 0:
+		return
 	for checkpoint_index in range(count):
 		var path_index: int = int(floor(float(checkpoint_index) * path_count / count)) % path_count
 		var cell: Vector3i = layout.path_cells[path_index]
@@ -362,6 +542,8 @@ func _populate_checkpoints(layout: Variant, checkpoint_count: int) -> void:
 func _populate_start_positions(layout: Variant, start_slots: int, longest_run: Dictionary) -> void:
 	var slot_count: int = max(1, start_slots)
 	var path_count: int = layout.path_cells.size()
+	if path_count == 0:
+		return
 	var run_start: int = int(longest_run.get("start_index", 0))
 	var run_length: int = max(2, int(longest_run.get("length", 2)))
 	for slot_index in range(slot_count):
@@ -485,3 +667,45 @@ func _compute_seed(word_entries: Array) -> int:
 	if seed_value == 0:
 		seed_value = 17
 	return seed_value
+
+
+func _build_path(width: int, height: int, style: String) -> Array[Vector3i]:
+	match style:
+		"serpentine":
+			# Serpentine patterns don't reliably form closed loops for all dimensions
+			# Prefer circular for better reliability
+			return _build_circular_cycle(width, height)
+		"straight":
+			return _build_straight_cycle(width, height)
+		"circular":
+			return _build_circular_cycle(width, height)
+		_:
+			return _build_circular_cycle(width, height)
+
+
+func _build_straight_cycle(width: int, height: int) -> Array[Vector3i]:
+	return _build_base_cycle(width, height)
+
+
+func _build_circular_cycle(width: int, height: int) -> Array[Vector3i]:
+	var path: Array[Vector3i] = []
+	if width < 2 or height < 2:
+		return path
+
+	# Go right along bottom
+	for x in range(width):
+		path.append(Vector3i(x, 0, 0))
+
+	# Go up along right
+	for z in range(1, height):
+		path.append(Vector3i(width - 1, 0, z))
+
+	# Go left along top
+	for x in range(width - 2, -1, -1):
+		path.append(Vector3i(x, 0, height - 1))
+
+	# Go down along left
+	for z in range(height - 2, 0, -1):
+		path.append(Vector3i(0, 0, z))
+
+	return path

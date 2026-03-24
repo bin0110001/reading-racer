@@ -6,7 +6,7 @@
 [ext_resource type="Script" uid="uid://dydf4mmdw0x1l" path="res://scripts/reading/phoneme_player.gd" id="4_phoneme_player"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_player"]
-size = Vector3(4, 3, 6)
+size = Vector3(1.33, 3, 6)
 
 [node name="ReadingMode" type="Node3D" unique_id=1388531464]
 script = ExtResource("1_reading_mode")

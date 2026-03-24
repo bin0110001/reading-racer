@@ -210,6 +210,39 @@ func get_phoneme_stream(phoneme_alias: String) -> AudioStream:
 	return load(resolved_path) as AudioStream
 
 
+func get_phoneme_stream_for_label(phoneme_label: String, letter: String = "") -> AudioStream:
+	# Try exact label first.
+	var aliases: Array[String] = []
+	if phoneme_label != "":
+		aliases.append(phoneme_label)
+		aliases.append(phoneme_label.to_lower())
+
+	if letter != "":
+		aliases.append(letter.to_lower())
+		aliases.append(letter)
+		var mapped = LETTER_TO_PHONEME.get(letter.to_lower(), "") as String
+		if mapped != "":
+			aliases.append(mapped)
+
+	# Common safe fallback alias.
+	aliases.append("uh")
+	aliases.append("a")
+
+	for alias in aliases:
+		if alias == "":
+			continue
+		var stream = get_phoneme_stream(str(alias))
+		if stream != null:
+			return stream
+
+	# If no match, pick first available phoneme sample and continue.
+	if _phoneme_paths.size() > 0:
+		var fallback_alias: String = str(_phoneme_paths.keys()[0])
+		return get_phoneme_stream(fallback_alias)
+
+	return null
+
+
 func get_word_stream(entry: Dictionary) -> AudioStream:
 	return load(str(entry.get("word_audio_path", ""))) as AudioStream
 

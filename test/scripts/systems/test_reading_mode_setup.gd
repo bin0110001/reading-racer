@@ -15,10 +15,16 @@ const LaneChangeControllerScript = preload(
 const ReadingHUDScript = preload("res://scripts/reading/reading_hud.gd")
 const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
 
+var obstacle_hit_signaled: bool = false
+
 
 func before_all() -> void:
 	# no setup needed for these tests
 	pass
+
+
+func _on_test_obstacle_hit(_duration: float) -> void:
+	obstacle_hit_signaled = true
 
 
 func _get_test_path_frame(path_index: int) -> Dictionary:

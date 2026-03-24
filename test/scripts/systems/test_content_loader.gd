@@ -79,6 +79,12 @@ func test_load_word_entries_phonemes_array() -> void:
 	assert_that(phonemes.size()).is_greater_equal(0)
 
 
+func test_get_phoneme_stream_for_label_fallback() -> void:
+	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var stream = loader.get_phoneme_stream_for_label("XXXX")
+	assert_that(stream).is_not_null()
+
+
 func test_load_word_entries_csv_breakdown_is_used() -> void:
 	var loader: ReadingContentLoader = ReadingContentLoader.new()
 	var entries: Array[Dictionary] = loader.load_word_entries("sightwords")

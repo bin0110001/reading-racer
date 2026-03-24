@@ -7,8 +7,8 @@ signal obstacle_hit(obstacle_index: int)
 
 @export var word_index: int = 0
 @export var obstacle_index: int = 0
-@export var trigger_width: float = 5.4  # X-axis width (±2.7)
-@export var trigger_depth: float = 4.0  # Z-axis depth (±2.0)
+@export var trigger_width: float = 1.35  # X-axis width (±0.675)
+@export var trigger_depth: float = 1.0  # Z-axis depth (±0.5)
 @export var penalty_seconds: float = 0.75
 
 var has_triggered := false

@@ -11,20 +11,26 @@ signal word_completed
 ## Constants
 const PICKUP_RADIUS_X := 4.0
 const PICKUP_RADIUS_Z := 3.0
-const OBSTACLE_RADIUS_X := 2.7
-const OBSTACLE_RADIUS_Z := 2.0
+const OBSTACLE_RADIUS_X := 0.675
+const OBSTACLE_RADIUS_Z := 0.5
 const OBSTACLE_MODEL_PATH := "res://models/track-bump.glb"
 const FINISH_MODEL_PATH := "res://models/track-finish.glb"
 const SEGMENT_SPACING := 18.0
 const WORD_START_SKIP_MARKERS := 2
 const POST_CORNER_SKIP_MARKERS := 2
 const DEFAULT_LANE_COUNT := 3
+
+# When a pickup and obstacle share the same letter index window, prefer pickup behavior.
+const PICKUP_OBSTACLE_SUPPRESSION_WINDOW_MS := 250
+const PICKUP_OBSTACLE_DISTANCE_THRESHOLD := (PICKUP_RADIUS_X * 4.0) / 2.0 + OBSTACLE_RADIUS_X + 0.5
+
 const LETTER_MODEL_PREFAB_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.prefab"
 const LETTER_MODEL_FBX_BASE := "res://Assets/PolygonIcons/Models/SM_Icon_Text_%s.fbx"
 const LETTER_MODEL_SCENE_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.tscn"
 
 ## References to content
 var content_loader: ReadingContentLoader = null
+var player: Area3D = null
 
 ## Game state
 var current_entry: Dictionary = {}
@@ -44,6 +50,10 @@ var placement_grid: Array = []
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
+# Tracking purpose-built pickup-versus-obstacle suppression.
+var _last_pickup_letter_index: int = -1
+var _last_pickup_time_ms: int = -1000
+
 
 func _init(p_content_loader: ReadingContentLoader) -> void:
 	content_loader = p_content_loader
@@ -53,6 +63,9 @@ func _init(p_content_loader: ReadingContentLoader) -> void:
 ## Set the spawn root node for triggers
 func set_spawn_root(p_spawn_root: Node3D) -> void:
 	spawn_root = p_spawn_root
+
+func set_player(p_player: Area3D) -> void:
+	player = p_player
 
 
 ## Load entry and prepare gameplay
@@ -724,6 +737,17 @@ func _on_pickup_triggered(
 ) -> void:
 	if trigger.word_index != current_entry_index:
 		return
+
+	# Track last pickup by letter index in case obstacle and pickup collide together.
+	_last_pickup_letter_index = trigger.letter_index
+	_last_pickup_time_ms = Time.get_ticks_msec()
+
+	# Clean up collected pickup so old pickups do not suppress future obstacles indefinitely.
+	if pickup_triggers.has(trigger):
+		pickup_triggers.erase(trigger)
+		if trigger.is_inside_tree():
+			trigger.queue_free()
+
 	if trigger.letter_index != next_target_index:
 		# Wrong letter - emit signal to play "missed" phoneme
 		var phoneme_label = trigger.phoneme_label
@@ -738,6 +762,36 @@ func _on_pickup_triggered(
 func _on_obstacle_hit(_obstacle_index: int, trigger: ReadingObstacleTrigger) -> void:
 	if trigger.word_index != current_entry_index:
 		return
+
+	# Do not apply obstacle penalty while a pickup from the same letter index is active.
+	var obstacle_letter_index := int(floor(float(_obstacle_index) / 2.0))
+	var time_since_last_pickup := Time.get_ticks_msec() - _last_pickup_time_ms
+	var letter_same_recently := obstacle_letter_index == _last_pickup_letter_index
+	if time_since_last_pickup <= PICKUP_OBSTACLE_SUPPRESSION_WINDOW_MS and letter_same_recently:
+		return
+
+	# Also avoid bump penalties when a nearby pickup zone overlaps the obstacle.
+	# This includes a pickup that may have just triggered and is being cleaned up.
+	for pickup in pickup_triggers:
+		if pickup.word_index != current_entry_index:
+			continue
+		if pickup.position.distance_to(trigger.position) <= PICKUP_OBSTACLE_DISTANCE_THRESHOLD:
+			return
+
+	# Safety guard: require the player to be close before applying slowdown.
+	if player != null and player.is_inside_tree():
+		var player_pos := player.global_transform.origin
+		var obstacle_pos := trigger.global_transform.origin
+		var x_dist : float = abs(player_pos.x - obstacle_pos.x)
+		var z_dist : float= abs(player_pos.z - obstacle_pos.z)
+		var min_x := (trigger.trigger_width * 0.5) + 2.0
+		var min_z := (trigger.trigger_depth * 0.5) + 3.0
+		if x_dist > min_x or z_dist > min_z:
+			var warn_msg = "[GameplayController] Obstacle hit suppressed due player too far "
+			warn_msg += "(x=%.2f z=%.2f) trigger=(%.2f %.2f)" % [x_dist, z_dist, trigger.trigger_width, trigger.trigger_depth]
+			push_warning(warn_msg)
+			return
+
 	obstacle_hit.emit(trigger.penalty_seconds)
 
 

@@ -110,6 +110,8 @@ var course_plan_summary: Dictionary = {}
 @onready var hud: ReadingHUD = $ReadingHUD
 @onready var phoneme_player: PhonemePlayer = $PhonemePlayer
 @onready var control_profile: ControlProfile = null
+@onready var debug_collision_root: Node3D = null
+var debug_draw_colliders: bool = false
 
 
 # Helper function to get the center Z position of the road (used consistently everywhere)
@@ -281,6 +283,28 @@ func _get_word_anchor(word_index: int) -> Dictionary:
 	return shared_track_layout.word_anchors[word_index] as Dictionary
 
 
+func _setup_simple_skybox() -> void:
+	var env_node: WorldEnvironment = $Environment
+	if env_node == null or env_node.environment == null:
+		push_warning("[ReadingMode] No WorldEnvironment found; cannot set SimpleSky.")
+		return
+
+	var sky_material = load("res://Assets/SimpleSky/Materials/SimpleSky.material")
+	if sky_material == null:
+		push_warning("[ReadingMode] SimpleSky material not found at path; using existing sky.")
+		return
+
+	var sky = Sky.new()
+	if sky == null:
+		push_warning("[ReadingMode] Unable to create Sky resource.")
+		return
+
+	sky.sky_material = sky_material
+	env_node.environment.background_mode = Environment.BG_SKY
+	env_node.environment.sky = sky
+	print("[ReadingMode] SimpleSky skybox applied.")
+
+
 func _ready() -> void:
 	print("[ReadingMode._ready] Starting initialization...")
 	ReadingControlProfile.ensure_input_actions()
@@ -319,6 +343,9 @@ func _ready() -> void:
 	hud.resume_requested.connect(_close_options)
 	phoneme_player.phoneme_changed.connect(_on_phoneme_changed)
 	print("[ReadingMode] HUD configured with group: %s" % requested_group)
+
+	# Set up skybox from SimpleSky material
+	_setup_simple_skybox()
 
 	# Initialize track generator
 	print("[ReadingMode] Initializing TrackGenerator...")
@@ -362,6 +389,7 @@ func _ready() -> void:
 	# Initialize Gameplay Controller
 	gameplay_controller = GameplayController.new(content_loader)
 	gameplay_controller.set_spawn_root(spawn_root)
+	gameplay_controller.set_player(player)
 	gameplay_controller.pickup_collected.connect(_on_gameplay_pickup_collected)
 	gameplay_controller.obstacle_hit.connect(_on_gameplay_obstacle_hit)
 	gameplay_controller.word_completed.connect(_on_gameplay_word_completed)
@@ -376,6 +404,11 @@ func _ready() -> void:
 	camera_controller.set_vertical_angle(-30.0)  # Look down at the car
 	camera_controller.focus_on(player.position, 15.0)
 	print("[ReadingMode] Camera controller initialized with smoothing")
+
+	# Debug collision helper root
+	debug_collision_root = Node3D.new()
+	debug_collision_root.name = "DebugCollision"
+	add_child(debug_collision_root)
 
 	# Start the first word in playing mode to avoid perceived 'no movement' startup wait
 	_start_next_word(false, false, true)
@@ -400,13 +433,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		var debug_draw_path = not bool(settings.get("debug_draw_path", true))
 		settings["debug_draw_path"] = debug_draw_path
 		settings_store.save_settings(settings)
+		debug_draw_colliders = debug_draw_path
 		if map_display_manager:
 			map_display_manager.update_debug_visualization(
 				debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
 			)
+		_update_debug_collision_visuals()
 		var status_text := "ON" if debug_draw_path else "OFF"
-		hud.set_help("F10 toggles path debug - %s" % status_text)
-		hud.flash_feedback("Path debug %s" % status_text, Color(0.4, 0.9, 0.4))
+		hud.set_help("F10 toggles path + collision debug - %s" % status_text)
+		hud.flash_feedback("Path + collision debug %s" % status_text, Color(0.4, 0.9, 0.4))
 		get_viewport().set_input_as_handled()
 		return
 
@@ -481,10 +516,11 @@ func _physics_process(delta: float) -> void:
 	# Update player heading and position
 	movement_system.update_position_and_heading(delta, track_pose)
 
-	# Update player visuals
-	player.position = movement_system.get_player_position(track_pose)
+	# Update player physics and visuals to rotate with path heading
+	var player_position = movement_system.get_player_position(track_pose)
 	var player_basis = movement_system.get_player_basis()
-	vehicle_anchor.global_transform = Transform3D(player_basis, player.position)
+	player.global_transform = Transform3D(player_basis, player_position)
+	vehicle_anchor.global_transform = Transform3D(player_basis, player_position)
 
 	# Update map display (throttled)
 	if map_display_manager and movement_system:
@@ -504,6 +540,9 @@ func _physics_process(delta: float) -> void:
 	if gameplay_controller:
 		gameplay_controller.update_finish_gate_state()
 
+	if debug_draw_colliders:
+		_update_debug_collision_visuals()
+
 	_ensure_road_ahead()
 	_update_status()
 	_update_camera(delta)
@@ -522,6 +561,73 @@ func _ensure_road_ahead() -> void:
 		# )
 		_cleanup_spawned_content()
 		_ensure_words_ahead()
+
+
+func _update_debug_collision_visuals() -> void:
+	if not debug_collision_root:
+		return
+
+	# Clear previous debug colliders
+	for child in debug_collision_root.get_children():
+		child.queue_free()
+
+	if not debug_draw_colliders or not gameplay_controller:
+		return
+
+	# Draw Pickup colliders in green
+	for pickup in gameplay_controller.pickup_triggers:
+		if not is_instance_valid(pickup):
+			continue
+		var cube = _create_debug_box(
+			Vector3(pickup.trigger_width, 2.0, pickup.trigger_depth),
+			pickup.global_transform,
+			Color(0.0, 1.0, 0.2, 0.25)
+		)
+		debug_collision_root.add_child(cube)
+
+	# Draw Obstacle colliders in red
+	for obstacle in gameplay_controller.obstacle_triggers:
+		if not is_instance_valid(obstacle):
+			continue
+		var cube = _create_debug_box(
+			Vector3(obstacle.trigger_width, 2.0, obstacle.trigger_depth),
+			obstacle.global_transform,
+			Color(1.0, 0.2, 0.2, 0.25)
+		)
+		debug_collision_root.add_child(cube)
+
+	# Draw player collider in blue (for visual alignment between physics and model)
+	if player != null and player.is_inside_tree():
+		var player_collision = player.get_node_or_null("CollisionShape3D")
+		if player_collision and player_collision.shape is BoxShape3D:
+			var box_shape = player_collision.shape as BoxShape3D
+			var player_cube = _create_debug_box(
+				box_shape.size,
+				player.global_transform,
+				Color(0.2, 0.6, 1.0, 0.25)
+			)
+			debug_collision_root.add_child(player_cube)
+
+
+func _create_debug_box(size: Vector3, transform: Transform3D, color: Color) -> MeshInstance3D:
+	var box = BoxMesh.new()
+	box.size = size
+	var mesh_instance = MeshInstance3D.new()
+	mesh_instance.mesh = box
+	mesh_instance.transform = transform
+
+	var material = StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = color
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.transparency_enabled = true
+	material.albedo_color = color
+	material.emission = color
+	material.emission_enabled = true
+	material.opacity = 0.25
+	mesh_instance.material_override = material
+
+	return mesh_instance
 
 
 # Movement update now handled by MovementSystem
@@ -919,8 +1025,10 @@ func _on_debug_path_toggled(enabled: bool) -> void:
 		map_display_manager.update_debug_visualization(
 			debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
 		)
+	debug_draw_colliders = enabled
+	_update_debug_collision_visuals()
 	var status_text := "ON" if enabled else "OFF"
-	hud.flash_feedback("Path debug %s" % status_text, Color(0.4, 0.9, 0.4))
+	hud.flash_feedback("Path + collision debug %s" % status_text, Color(0.4, 0.9, 0.4))
 
 
 func _on_phoneme_changed(label: String) -> void:
@@ -931,7 +1039,15 @@ func _on_phoneme_changed(label: String) -> void:
 
 
 func _on_gameplay_pickup_collected(letter: String, phoneme_label: String) -> void:
-	var phoneme_stream = content_loader.get_phoneme_stream(phoneme_label)
+	var phoneme_stream = content_loader.get_phoneme_stream_for_label(
+		phoneme_label,
+		letter,
+	)
+	if phoneme_stream == null:
+		push_warning(
+			"[ReadingMode] missing phoneme stream for label '%s' letter '%s'".format(phoneme_label, letter),
+		)
+
 	phoneme_player.stop_phoneme()
 	phoneme_player.play_looping_phoneme(phoneme_label, phoneme_stream)
 	hud.flash_feedback(letter, Color(1.0, 0.94, 0.45))

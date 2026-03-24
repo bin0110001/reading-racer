@@ -45,6 +45,13 @@ class TestContentLoader:
 		return str(phonemes[index])
 
 
+var obstacle_hit_signaled: bool = false
+
+
+func _on_test_obstacle_hit(_duration: float) -> void:
+	obstacle_hit_signaled = true
+
+
 func _get_test_path_frame(path_index: int) -> Dictionary:
 	return {
 		"center": Vector3(float(path_index) * 10.0, 0.0, 0.0),
@@ -125,6 +132,61 @@ func test_reading_mode_progresses_to_second_word_placement_grid() -> void:
 
 	reading_mode._start_next_word(false, false, true)
 	assert_that(_find_lane_for_type(reading_mode.gameplay_controller, 7, "pickup")).is_not_equal(-1)
+
+
+func test_gameplay_controller_suppresses_obstacle_hit_during_pickup_collision() -> void:
+	var controller = GameplayController.new(TestContentLoader.new())
+	controller.current_entry_index = 0
+
+	var pickup_trigger = ReadingPickupTrigger.new()
+	pickup_trigger.word_index = 0
+	pickup_trigger.letter_index = 0
+	controller.pickup_triggers.append(pickup_trigger)
+
+	controller.obstacle_hit.connect(Callable.new(self, "_on_test_obstacle_hit"))
+
+	controller._on_pickup_triggered(0, "a", "ae", pickup_trigger)
+
+	# Pickup trigger should be removed from pool after collection.
+	# This avoids stale pickup presence suppressing future obstacle hits.
+	assert_that(controller.pickup_triggers.size()).is_equal(0)
+
+	var obstacle_trigger = ReadingObstacleTrigger.new()
+	obstacle_trigger.word_index = 0
+	obstacle_trigger.obstacle_index = 0
+
+	obstacle_hit_signaled = false
+	controller._on_obstacle_hit(0, obstacle_trigger)
+	assert_that(obstacle_hit_signaled).is_false()
+
+	# Force suppression window to expire, then obstacle should hit.
+	var expire_ms := GameplayController.PICKUP_OBSTACLE_SUPPRESSION_WINDOW_MS + 10
+	controller._last_pickup_time_ms = Time.get_ticks_msec() - expire_ms
+	obstacle_hit_signaled = false
+	controller._on_obstacle_hit(0, obstacle_trigger)
+	assert_that(obstacle_hit_signaled).is_true()
+
+
+func test_gameplay_controller_suppresses_obstacle_hit_when_pickup_has_triggered() -> void:
+	var controller = GameplayController.new(TestContentLoader.new())
+	controller.current_entry_index = 0
+
+	var pickup_trigger = ReadingPickupTrigger.new()
+	pickup_trigger.word_index = 0
+	pickup_trigger.letter_index = 0
+	pickup_trigger.position = Vector3.ZERO
+	pickup_trigger.has_triggered = true
+	controller.pickup_triggers.append(pickup_trigger)
+
+	var obstacle_trigger = ReadingObstacleTrigger.new()
+	obstacle_trigger.word_index = 0
+	obstacle_trigger.obstacle_index = 0
+	obstacle_trigger.position = Vector3.ZERO
+
+	obstacle_hit_signaled = false
+	controller.obstacle_hit.connect(Callable.new(self, "_on_test_obstacle_hit"))
+	controller._on_obstacle_hit(0, obstacle_trigger)
+	assert_that(obstacle_hit_signaled).is_false()
 
 
 func test_reading_mode_complete_word_transitions_next_entry() -> void:

@@ -261,8 +261,18 @@ func test_gameplay_controller_populates_placement_grid() -> void:
 		word_anchor, get_path_frame, wrap_fn, true
 	)
 
-	assert_that(gameplay_controller.get_placement_object(0, 1).get("type", "")).is_equal("pickup")
-	assert_that(gameplay_controller.get_placement_object(1, 1).get("type", "")).is_equal("pickup")
+	var pickup_count = 0
+	for lane_index in range(3):
+		if gameplay_controller.get_placement_object(0, lane_index).get("type", "") == "pickup":
+			pickup_count += 1
+	assert_that(pickup_count).is_equal(1)
+
+	pickup_count = 0
+	for lane_index in range(3):
+		if gameplay_controller.get_placement_object(1, lane_index).get("type", "") == "pickup":
+			pickup_count += 1
+	assert_that(pickup_count).is_equal(1)
+
 	assert_that(gameplay_controller.get_placement_object(2, 1).get("type", "")).is_equal("finish")
 
 

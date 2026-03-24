@@ -788,7 +788,9 @@ func _on_obstacle_hit(_obstacle_index: int, trigger: ReadingObstacleTrigger) -> 
 		var min_z := (trigger.trigger_depth * 0.5) + 3.0
 		if x_dist > min_x or z_dist > min_z:
 			var warn_msg = "[GameplayController] Obstacle hit suppressed due player too far "
-			warn_msg += "(x=%.2f z=%.2f) trigger=(%.2f %.2f)" % [x_dist, z_dist, trigger.trigger_width, trigger.trigger_depth]
+			var detail_format = "(x=%.2f z=%.2f) trigger=(%.2f %.2f)"
+			var detail = detail_format % [x_dist, z_dist, trigger.trigger_width, trigger.trigger_depth]
+			warn_msg += detail
 			push_warning(warn_msg)
 			return
 

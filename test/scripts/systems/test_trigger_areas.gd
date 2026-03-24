@@ -41,6 +41,21 @@ func test_obstacle_trigger_has_signal() -> void:
 	assert_that(trigger.has_signal("obstacle_hit")).is_true()
 
 
+func test_obstacle_trigger_plays_sound_and_flies_on_hit() -> void:
+	var trigger = ReadingObstacleTrigger.new()
+	# In tests, _ready may not be called automatically until added to scene tree
+	trigger._ready()
+	assert_that(trigger.has_method("trigger_obstacle")).is_true()
+
+	trigger.trigger_obstacle()
+	assert_that(trigger.has_triggered).is_true()
+
+	var sound_player = trigger.get_node_or_null("HitSoundPlayer") as AudioStreamPlayer3D
+	assert_that(sound_player).is_not_null()
+	if sound_player != null:
+		assert_that(sound_player.stream).is_not_null()
+
+
 func test_obstacle_trigger_properties() -> void:
 	var trigger = ReadingObstacleTrigger.new()
 	trigger.obstacle_index = 0

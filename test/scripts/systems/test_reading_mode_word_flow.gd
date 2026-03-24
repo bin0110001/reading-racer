@@ -57,6 +57,18 @@ func _get_test_path_index(path_index: int) -> int:
 	return path_index
 
 
+func _find_lane_for_type(
+	gameplay_controller: GameplayController, path_index: int, item_type: String
+) -> int:
+	for lane_index in range(3):
+		if (
+			gameplay_controller.get_placement_object(path_index, lane_index).get("type", "")
+			== item_type
+		):
+			return lane_index
+	return -1
+
+
 func _create_reading_mode() -> Variant:
 	return ReadingModeScript.new()
 
@@ -86,10 +98,14 @@ func test_reading_mode_progresses_to_second_word_placement_grid() -> void:
 		Vector3i(2, 0, 0),
 		Vector3i(3, 0, 0),
 		Vector3i(4, 0, 0),
+		Vector3i(5, 0, 0),
+		Vector3i(6, 0, 0),
+		Vector3i(7, 0, 0),
+		Vector3i(8, 0, 0),
 	]
 	layout.word_anchors = [
 		{"text": "a", "start_index": 0, "end_index": 0, "letter_count": 1},
-		{"text": "b", "start_index": 3, "end_index": 3, "letter_count": 1},
+		{"text": "b", "start_index": 5, "end_index": 5, "letter_count": 1},
 	]
 	reading_mode.shared_track_layout = layout
 	reading_mode.track_tile_length = 18.0
@@ -104,12 +120,11 @@ func test_reading_mode_progresses_to_second_word_placement_grid() -> void:
 	reading_mode.current_entry_index = -1
 
 	reading_mode._start_next_word(false, false, true)
-	var first_pickup = reading_mode.gameplay_controller.get_placement_object(0, 1).get("type", "")
-	assert_that(first_pickup).is_equal("pickup")
+	assert_that(_find_lane_for_type(reading_mode.gameplay_controller, 2, "pickup")).is_not_equal(-1)
+	assert_that(_find_lane_for_type(reading_mode.gameplay_controller, 7, "pickup")).is_not_equal(-1)
 
 	reading_mode._start_next_word(false, false, true)
-	var second_pickup = reading_mode.gameplay_controller.get_placement_object(3, 1).get("type", "")
-	assert_that(second_pickup).is_equal("pickup")
+	assert_that(_find_lane_for_type(reading_mode.gameplay_controller, 7, "pickup")).is_not_equal(-1)
 
 
 func test_reading_mode_complete_word_transitions_next_entry() -> void:

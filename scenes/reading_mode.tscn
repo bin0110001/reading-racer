@@ -5,6 +5,9 @@
 [ext_resource type="Script" uid="uid://der3y613vpmds" path="res://scripts/reading/reading_hud.gd" id="3_reading_hud"]
 [ext_resource type="Script" uid="uid://dydf4mmdw0x1l" path="res://scripts/reading/phoneme_player.gd" id="4_phoneme_player"]
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_player"]
+size = Vector3(4, 3, 6)
+
 [node name="ReadingMode" type="Node3D" unique_id=1388531464]
 script = ExtResource("1_reading_mode")
 
@@ -20,7 +23,10 @@ shadow_enabled = true
 
 [node name="SpawnRoot" type="Node3D" parent="." unique_id=1539171548]
 
-[node name="Player" type="Node3D" parent="." unique_id=862413089]
+[node name="Player" type="Area3D" parent="." unique_id=862413089]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1574000912]
+shape = SubResource("BoxShape3D_player")
 
 [node name="VehicleAnchor" type="Node3D" parent="Player" unique_id=1276057858]
 

@@ -99,6 +99,7 @@ var layout_origin := Vector3.ZERO
 var current_word_start_x := WORD_START_X
 var next_word_start_x := WORD_START_X
 var next_spawn_entry_index := 0
+var course_plan_summary: Dictionary = {}
 
 @onready var road: Node3D = $Road
 @onready var spawn_root: Node3D = $SpawnRoot
@@ -650,17 +651,10 @@ func _reset_word_state(reset_position: bool = false, use_countdown: bool = true)
 
 
 func _spawn_course_for_entry(
-	entry: Dictionary,
-	_unused_word_start_x: float,
-	clear_existing: bool = true,
-	register_pickups: bool = true
+	entry: Dictionary, _unused_word_start_x: float, clear_existing: bool = true
 ) -> void:
 	if shared_track_layout == null or not gameplay_controller:
 		return
-
-	# Reset active pickups/obstacles for the new word while optionally rebuilding track geometry.
-	for child in spawn_root.get_children():
-		child.queue_free()
 
 	if clear_existing:
 		# Reset base course state for first-load or forced re-build.
@@ -683,23 +677,41 @@ func _spawn_course_for_entry(
 	# Spawn pickups and obstacles via gameplay controller
 	var get_path_frame_callable = Callable(self, "_get_path_frame")
 	var path_wrap_callable = Callable(self, "_wrap_path_index")
-	if shared_track_layout != null:
+	if shared_track_layout != null and clear_existing:
 		gameplay_controller.initialize_placement_grid(
 			shared_track_layout.path_cells.size(), LANE_POSITIONS.size()
 		)
-	gameplay_controller.spawn_course_pickups_and_obstacles(
-		word_anchor, get_path_frame_callable, path_wrap_callable, register_pickups
-	)
+
+	if clear_existing:
+		course_plan_summary = (
+			gameplay_controller
+			. spawn_loop_course_pickups_and_obstacles(
+				current_entries,
+				shared_track_layout.word_anchors,
+				get_path_frame_callable,
+				path_wrap_callable,
+				current_entry_index,
+				true,
+			)
+		)
+		if map_display_manager != null:
+			var finish_cells: Array[Vector3i] = []
+			for finish_index in gameplay_controller.get_all_finish_indices():
+				if finish_index >= 0:
+					finish_cells.append(_get_path_cell(finish_index))
+			map_display_manager.set_finish_cells(finish_cells)
+	else:
+		gameplay_controller.load_entry(entry, current_entry_index)
 
 	# Update word progression state
-	var start_index: int = int(word_anchor.get("start_index", 0))
-	var finish_index: int = path_wrap_callable.call(int(word_anchor.get("end_index", 0)) + 1)
+	var start_index: int = gameplay_controller.get_word_start_index(current_entry_index)
+	if start_index < 0:
+		start_index = int(word_anchor.get("start_index", 0))
+	var finish_index: int = gameplay_controller.get_word_finish_index(current_entry_index)
+	if finish_index < 0:
+		finish_index = int(word_anchor.get("end_index", 0))
 	finish_line_x = _path_index_to_distance(finish_index)
 	current_word_start_x = _path_index_to_distance(start_index)
-
-	if map_display_manager != null:
-		var finish_cell: Vector3i = _get_path_cell(finish_index)
-		map_display_manager.set_finish_cell(finish_cell)
 
 	next_word_start_x = _path_index_to_distance(
 		finish_index + int(round(WORD_GAP / SEGMENT_SPACING))

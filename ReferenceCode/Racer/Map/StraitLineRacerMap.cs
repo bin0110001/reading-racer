@@ -334,7 +334,7 @@ public class StraitLineRacerMap: MonoBehaviour
 
         int EndIndex = UnityEngine.Random.Range(0, this.EndingTiles.Length);
         GameObject end = GameObject.Instantiate(this.EndingTiles[EndIndex], this.transform);
-        float offset = zLimits.Item2 * RoadTileWidth;
+        float offset = zLimits.Item2 * RoadTileLength;
         //Debug.Log("Spawning End at offset: " + offset);
         end.transform.position = new Vector3(0, 0, offset);
     }

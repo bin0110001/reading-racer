@@ -88,19 +88,40 @@ public class SpellingRacer : RacerController
                 Debug.LogError("Config is not of type SpellingRacerConfig, cannot load level");
         }
 
+        // Reset per-word spawning state for repeated rounds
+        PhenomesToPlayAtPoint.Clear();
+
+        if (Map != null)
+        {
+            Map.TileSpawned -= Map_TileSpawned;
+            Map.TileChanged -= VerticalSegmentReached;
+
+            // Destroy previous tile objects to avoid persistence across reloads
+            for (int i = Map.transform.childCount - 1; i >= 0; i--)
+            {
+                Destroy(Map.transform.GetChild(i).gameObject);
+            }
+
+            Map.ChunkedGrid = new Chunked3DGrid();
+        }
+
         Map = this.LevelGeometry.GetComponent<StraitLineRacerMap>();
-        if(Map == null)
+        if (Map == null)
         {
             Map = this.LevelGeometry.AddComponent<StraitLineRacerMap>();
         }
-        ChosenWord = SpellingTypedConfig.GetRandomWord();
-        Map.zLimits = (0, ChosenWord.Word.Length * SpellingTypedConfig.TilesPerLetter + 5); // Set the zLimits based on the word length
 
-        NumberOfTilesWide = (ChosenWord.Word.Length + 1) * 5;
+        ChosenWord = SpellingTypedConfig.GetRandomWord();
+
+        int totalTilesForWord = (ChosenWord.Word.Length + 2) * SpellingTypedConfig.TilesPerLetter;
+        totalTilesForWord = Mathf.Max(totalTilesForWord, (ChosenWord.Word.Length * SpellingTypedConfig.TilesPerLetter) + 5);
+        NumberOfTilesWide = totalTilesForWord;
+
         Map.MapInitialize(SpellingTypedConfig.VerticalRoadSlicePrefabs, 
             SpellingTypedConfig.StartPrefabs,
             SpellingTypedConfig.EndPrefabs,
-            zMax : NumberOfTilesWide);
+            zMax: totalTilesForWord);
+        Map.zLimits = (0, totalTilesForWord); // Keep map limits consistent
         Map.TileSpawned += Map_TileSpawned;
 
 
@@ -260,11 +281,11 @@ public class SpellingRacer : RacerController
     private void SpawnLetterAtVerticalAndHorizontalIndexes(int verticalIndex, int horizontalIndex, GameObject VerticalObject)
     {
         // This method can be used to spawn a letter at specific vertical and horizontal indexes
-        if(verticalIndex % SpellingTypedConfig.TilesPerLetter != 0) return;
+        if (verticalIndex <= 0 || verticalIndex % SpellingTypedConfig.TilesPerLetter != 0) return;
 
         int LetterIndex = (verticalIndex / SpellingTypedConfig.TilesPerLetter) - 1;
 
-        if (LetterIndex >= ChosenWord.PhoneticList.Count || LetterIndex < 0)
+        if (LetterIndex < 0 || LetterIndex >= ChosenWord.PhoneticList.Count)
         {
             return;
         }

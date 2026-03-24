@@ -33,6 +33,28 @@ func _get_test_path_index(path_index: int) -> int:
 	return path_index
 
 
+func _get_cornered_test_path_frame(path_index: int) -> Dictionary:
+	var centers := [
+		Vector3(0.0, 0.0, 0.0),
+		Vector3(10.0, 0.0, 0.0),
+		Vector3(20.0, 0.0, 0.0),
+		Vector3(20.0, 0.0, 10.0),
+		Vector3(30.0, 0.0, 10.0),
+		Vector3(40.0, 0.0, 10.0),
+		Vector3(50.0, 0.0, 10.0),
+	]
+	var current_index := clampi(path_index, 0, centers.size() - 1)
+	var next_index := clampi(path_index + 1, 0, centers.size() - 1)
+	var forward := (centers[next_index] - centers[current_index]).normalized()
+	if forward.length_squared() == 0.0:
+		forward = Vector3.RIGHT
+	return {
+		"center": centers[current_index],
+		"heading": atan2(forward.z, forward.x),
+		"right": Vector3(-forward.z, 0.0, forward.x),
+	}
+
+
 func test_reading_content_loader_creation() -> void:
 	var loader: ReadingContentLoader = ReadingContentLoader.new()
 	assert_that(loader).is_not_null()
@@ -92,6 +114,18 @@ func test_required_scripts_exist() -> void:
 
 func test_reading_mode_scene_location() -> void:
 	assert_that(ResourceLoader.exists("res://scenes/reading_mode.tscn")).is_true()
+
+
+func test_reading_mode_scene_player_has_trigger_hitbox() -> void:
+	var packed_scene := load("res://scenes/reading_mode.tscn") as PackedScene
+	assert_that(packed_scene).is_not_null()
+
+	var instance := packed_scene.instantiate()
+	var player := instance.get_node_or_null("Player")
+	assert_that(player != null).is_true()
+	assert_that(player is Area3D).is_true()
+	assert_that(player.get_node_or_null("CollisionShape3D") != null).is_true()
+	instance.queue_free()
 
 
 func test_reading_mode_path_smooth_corner() -> void:
@@ -263,17 +297,47 @@ func test_gameplay_controller_populates_placement_grid() -> void:
 
 	var pickup_count = 0
 	for lane_index in range(3):
-		if gameplay_controller.get_placement_object(0, lane_index).get("type", "") == "pickup":
+		if gameplay_controller.get_placement_object(2, lane_index).get("type", "") == "pickup":
 			pickup_count += 1
 	assert_that(pickup_count).is_equal(1)
 
 	pickup_count = 0
 	for lane_index in range(3):
-		if gameplay_controller.get_placement_object(1, lane_index).get("type", "") == "pickup":
+		if gameplay_controller.get_placement_object(3, lane_index).get("type", "") == "pickup":
 			pickup_count += 1
 	assert_that(pickup_count).is_equal(1)
 
-	assert_that(gameplay_controller.get_placement_object(2, 1).get("type", "")).is_equal("finish")
+	assert_that(gameplay_controller.get_placement_object(4, 1).get("type", "")).is_equal("finish")
+
+
+func test_gameplay_controller_places_finish_after_last_safe_marker() -> void:
+	var gameplay_controller = GameplayController.new(ReadingContentLoader.new())
+	gameplay_controller.set_spawn_root(Node3D.new())
+	gameplay_controller.initialize_placement_grid(10, 3)
+	gameplay_controller.load_entry({"text": "ab", "letters": ["a", "b"]}, 0)
+
+	var word_anchor = {"start_index": 0, "end_index": 1}
+	var get_path_frame = Callable(self, "_get_cornered_test_path_frame")
+	var wrap_fn = Callable(self, "_get_test_path_index")
+	var finish_index: int = gameplay_controller.spawn_course_pickups_and_obstacles(
+		word_anchor, get_path_frame, wrap_fn, true
+	)
+
+	assert_that(finish_index).is_equal(5)
+
+	var pickup_count_at_three := 0
+	for lane_index in range(3):
+		if gameplay_controller.get_placement_object(3, lane_index).get("type", "") == "pickup":
+			pickup_count_at_three += 1
+	assert_that(pickup_count_at_three).is_equal(1)
+
+	var pickup_count_at_four := 0
+	for lane_index in range(3):
+		if gameplay_controller.get_placement_object(4, lane_index).get("type", "") == "pickup":
+			pickup_count_at_four += 1
+	assert_that(pickup_count_at_four).is_equal(1)
+
+	assert_that(gameplay_controller.get_placement_object(5, 1).get("type", "")).is_equal("finish")
 
 
 func test_gameplay_controller_resets_pickups_between_words() -> void:

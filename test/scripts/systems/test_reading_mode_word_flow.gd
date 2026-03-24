@@ -160,3 +160,37 @@ func test_reading_mode_complete_word_transitions_next_entry() -> void:
 
 	assert_that(reading_mode.current_entry_index).is_equal(1)
 	assert_that(reading_mode.current_entry.get("text", "")).is_equal("b")
+
+
+func test_reading_mode_does_not_teleport_at_end_of_word() -> void:
+	var reading_mode: Variant = _configure_reading_mode()
+	var layout = TrackLayoutScript.new()
+	layout.path_cells = [Vector3i(0, 0, 0), Vector3i(1, 0, 0), Vector3i(2, 0, 0)]
+	layout.word_anchors = [
+		{"text": "a", "start_index": 0, "end_index": 0, "letter_count": 1},
+		{"text": "b", "start_index": 2, "end_index": 2, "letter_count": 1},
+	]
+	reading_mode.shared_track_layout = layout
+	reading_mode.track_tile_length = 18.0
+	reading_mode.track_tile_width = 18.0
+	reading_mode.layout_origin = Vector3.ZERO
+
+	var current_entries: Array[Dictionary] = [
+		{"text": "a", "letters": ["a"], "phonemes": ["ae"]},
+		{"text": "b", "letters": ["b"], "phonemes": ["b"]},
+	]
+	reading_mode.current_entries = current_entries
+	reading_mode.current_entry_index = -1
+	reading_mode.random_word_order = false
+
+	reading_mode._start_next_word(false, false, true)
+	reading_mode.movement_system.player_path_distance = 10.0
+
+	reading_mode._complete_word()
+	reading_mode._physics_process(2.1)
+
+	assert_that(reading_mode.current_entry_index).is_equal(1)
+	assert_that(reading_mode.movement_system.player_path_distance).is_greater_than(10.0)
+	assert_that(reading_mode.movement_system.player_path_distance).is_not_equal(
+		reading_mode.current_word_start_x - reading_mode.WORD_START_OFFSET
+	)

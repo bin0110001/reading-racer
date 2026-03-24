@@ -466,7 +466,8 @@ func _physics_process(delta: float) -> void:
 	if state == "transition":
 		completion_timer -= delta
 		if completion_timer <= 0.0:
-			_start_next_word(true, false, true)
+			# Continue along the track at word boundary instead of teleporting.
+			_start_next_word(true, false, false)
 		# allow the player to keep moving into the empty area
 
 	# Update movement system

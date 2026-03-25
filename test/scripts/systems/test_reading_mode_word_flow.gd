@@ -197,6 +197,18 @@ func test_reading_mode_complete_word_transitions_next_entry() -> void:
 	assert_that(reading_mode.current_entry.get("text", "")).is_equal("b")
 
 
+func test_reading_mode_plays_phoneme_for_pickup() -> void:
+	var reading_mode: Variant = _configure_reading_mode()
+	reading_mode.content_loader = ReadingContentLoader.new()
+	reading_mode.phoneme_player = PhonemePlayer.new()
+	reading_mode.hud = ReadingHUD.new()
+
+	reading_mode._on_gameplay_pickup_collected("B", "")
+
+	assert_that(reading_mode.phoneme_player._current_label).is_equal_to("b")
+	assert_that(reading_mode.hud._phoneme_label.text).is_equal_to("Phoneme: b")
+
+
 func test_reading_mode_does_not_teleport_at_end_of_word() -> void:
 	var reading_mode: Variant = _configure_reading_mode()
 	var layout = TrackLayoutScript.new()

@@ -1,3 +1,9 @@
+Path to Godot:
+
+    D:\Gadot\Godot_v4.6-stable_mono_win64\Godot_v4.6-stable_mono_win64\Godot_v4.6-stable_mono_win64.exe
+
+
+
 After updating a GDScript file, run the repository helper script to parse, lint, check formatting, validate with Godot, and test scenes all at once.
 
 1) Install or update the gdtoolkit CLI:
@@ -64,20 +70,21 @@ powershell -ExecutionPolicy Bypass -File .\tools\gdscript-check.ps1 -RunTests
 The validation pipeline now catches four categories of errors before launch:
 
 1. **Syntax & Code Quality** (gdparse, gdlint, gdformat)
-   - Syntax errors, parse failures
-   - Code style violations 
-   - Formatting issues
 
+   - Syntax errors, parse failures
+   - Code style violations
+   - Formatting issues
 2. **Global Scope Conflicts** (NEW - Check-DuplicateGlobalClassNames)
+
    - Duplicate `class_name` declarations across files
    - Example: having both `scripts/CameraController3D.gd` and `scripts/reading/CameraController3D.gd` is caught immediately
-
 3. **Type & Load Failures** (Godot validation)
+
    - Script compilation errors
    - Missing dependencies
    - Type mismatches
-
 4. **Scene & Gameplay Integration** (GDUnit Scene Runner tests - NEW)
+
    - Scene structure and node hierarchy integrity
    - Signal connections and initialization
    - No orphaned nodes during gameplay
@@ -91,10 +98,12 @@ The validation pipeline now catches four categories of errors before launch:
 Scene Runner tests are GDUnit integration tests that validate entire scenes with simulated input/gameplay.
 
 Files:
+
 - `test/scripts/scenes/test_scene_loader.gd` — Basic smoke tests (all scenes load)
 - `test/scripts/scenes/test_scene_runner_integration.gd` — Advanced gameplay tests (reading_mode.tscn input, state, updates)
 
 These tests:
+
 - ✅ Verify all .tscn files can be instantiated without errors
 - ✅ Simulate gameplay (player input, frame advancement)
 - ✅ Check scene state transitions

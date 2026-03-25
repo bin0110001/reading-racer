@@ -7,6 +7,7 @@ using Assets.UIElements;
 using CartoonFX;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -342,6 +343,7 @@ public class SpellingRacer : RacerController
                 Source.PlayOneShot(clip.Item2);
                 ExhaustAudioClipToPlay = clip.Item2;
                 DelayBetweenExhaustSounds = clip.Item2.length;
+                Debug.Log("Playing audio clip for segment: " + Segment + ", clip name: " + clip.Item2.name);
             }
             else
             {

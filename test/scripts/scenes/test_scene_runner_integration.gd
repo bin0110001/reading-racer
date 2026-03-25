@@ -98,3 +98,59 @@ func test_reading_mode_no_orphan_nodes() -> void:
 	# This test ensures the scene can run without creating leaked nodes
 	assert_that(runner.scene()).is_not_null()
 	assert_that(runner.scene().is_inside_tree()).is_true()
+
+
+func test_scene_runner_navigation_smoke_flow() -> void:
+	"""Smoke test: instantiate all main UI scenes and exercise navigation actions."""
+
+	# Main scene basic startup check
+	var main_runner = _create_scene_runner(MAIN_SCENE)
+	await main_runner.simulate_frames(2)
+	assert_that(main_runner.scene()).is_not_null()
+	assert_that(main_runner.scene().is_inside_tree()).is_true()
+
+	# Level select scene UI navigation check
+	var level_runner = _create_scene_runner(LEVEL_SELECT_SCENE)
+	await level_runner.simulate_frames(2)
+	var level_scene = level_runner.scene()
+	assert_that(level_scene).is_not_null()
+
+	var config_button: Button = level_scene.get_node("Panel/VBoxContainer/ConfigButton")
+	var start_button: Button = level_scene.get_node("Panel/VBoxContainer/StartButton")
+	var config_page: Control = level_scene.get_node("ConfigPage")
+
+	assert_that(config_button).is_not_null()
+	assert_that(start_button).is_not_null()
+	assert_that(config_page).is_not_null()
+
+	# Open and close configuration panel
+	config_button.press()
+	await level_runner.simulate_frames(1)
+	assert_that(config_page.visible).is_true()
+
+	var cancel_button: Button = level_scene.get_node("ConfigPage/VBoxContainer/CancelButton")
+	cancel_button.press()
+	await level_runner.simulate_frames(1)
+	assert_that(config_page.visible).is_false()
+
+	# Ensure start path exists (method accessible)
+	assert_that(level_scene.has_method("_on_start_pressed")).is_true()
+
+	# Simulate user pressing Start Race and validate scene transition to ReadingMode
+	start_button.press()
+	await level_runner.simulate_frames(5, 100)
+
+	var tree_current_scene = level_scene.get_tree().current_scene
+	assert_that(tree_current_scene).is_not_null()
+	assert_that(tree_current_scene.get_name()).is_equal("ReadingMode")
+	assert_that(tree_current_scene.is_inside_tree()).is_true()
+
+	# Optionally check reading mode UI content exists
+	var reading_hud = tree_current_scene.get_node_or_null("ReadingHUD")
+	assert_that(reading_hud).is_not_null()
+
+	# Keep a dedicated runner check for reading mode as final smoke endpoint
+	var reading_runner = _create_scene_runner(READING_MODE_SCENE)
+	await reading_runner.simulate_frames(10, 100)
+	assert_that(reading_runner.scene()).is_not_null()
+	assert_that(reading_runner.scene().is_inside_tree()).is_true()

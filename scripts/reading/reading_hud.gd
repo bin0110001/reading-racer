@@ -8,6 +8,7 @@ signal resume_requested
 signal debug_path_toggled(enabled: bool)
 signal steering_type_changed(steering_type: String)
 signal map_style_changed(map_style: String)
+signal play_debug_audio(selected_word: String, selected_phoneme: String)
 
 var _status_label := Label.new()
 var _word_label := Label.new()
@@ -22,6 +23,10 @@ var _steering_type_option := OptionButton.new()
 var _map_style_option := OptionButton.new()
 var _volume_slider := HSlider.new()
 var _debug_path_checkbox := CheckBox.new()
+
+var _debug_word_option := OptionButton.new()
+var _debug_phoneme_option := OptionButton.new()
+var _debug_play_button := Button.new()
 
 
 func _ready() -> void:
@@ -73,13 +78,13 @@ func _build_hud() -> void:
 	add_child(_feedback_label)
 
 	_options_panel.anchor_left = 0.5
-	_options_panel.anchor_top = 0.5
+	_options_panel.anchor_top = 0.3
 	_options_panel.anchor_right = 0.5
-	_options_panel.anchor_bottom = 0.5
+	_options_panel.anchor_bottom = 0.3
 	_options_panel.offset_left = -210
 	_options_panel.offset_top = -140
 	_options_panel.offset_right = 210
-	_options_panel.offset_bottom = 140
+	_options_panel.offset_bottom = 260
 	_options_panel.visible = false
 	add_child(_options_panel)
 
@@ -103,6 +108,16 @@ func _build_hud() -> void:
 	options_layout.add_child(_make_row("Steering", _steering_type_option))
 	options_layout.add_child(_make_row("Map Style", _map_style_option))
 	options_layout.add_child(_make_row("Word Group", _word_group_option))
+
+	# Debug Audio Controls
+	_debug_word_option.name = "DebugWordOption"
+	_debug_phoneme_option.name = "DebugPhonemeOption"
+	_debug_play_button.text = "Play"
+	_debug_play_button.pressed.connect(_on_debug_play_pressed)
+
+	options_layout.add_child(_make_row("Debug Word", _debug_word_option))
+	options_layout.add_child(_make_row("Debug Phoneme", _debug_phoneme_option))
+	options_layout.add_child(_make_row("Debug Play", _debug_play_button))
 
 	_volume_slider.min_value = 0.0
 	_volume_slider.max_value = 1.0
@@ -153,6 +168,9 @@ func configure(groups: Array[String], settings: Dictionary) -> void:
 	for group_name in groups:
 		_word_group_option.add_item(group_name)
 
+	_debug_word_option.clear()
+	_debug_phoneme_option.clear()
+
 	set_control_mode(str(settings.get("control_mode", ReadingSettingsStore.CONTROL_MODE_KEYBOARD)))
 	var steering = str(
 		settings.get("steering_type", ReadingSettingsStore.STEERING_TYPE_LANE_CHANGE)
@@ -181,6 +199,28 @@ func set_phoneme(text_value: String) -> void:
 
 func set_help(text_value: String) -> void:
 	_help_label.text = text_value
+
+
+func set_debug_audio_options(words: Array[String], phonemes: Array[String]) -> void:
+	_debug_word_option.clear()
+	for w in words:
+		_debug_word_option.add_item(str(w))
+
+	_debug_phoneme_option.clear()
+	for p in phonemes:
+		_debug_phoneme_option.add_item(str(p))
+
+
+func _on_debug_play_pressed() -> void:
+	var selected_word = ""
+	if _debug_word_option.get_selected_id() >= 0 and _debug_word_option.item_count > 0:
+		selected_word = _debug_word_option.get_item_text(_debug_word_option.get_selected_id())
+	var selected_phoneme = ""
+	if _debug_phoneme_option.get_selected_id() >= 0 and _debug_phoneme_option.item_count > 0:
+		selected_phoneme = _debug_phoneme_option.get_item_text(
+			_debug_phoneme_option.get_selected_id()
+		)
+	emit_signal("play_debug_audio", selected_word, selected_phoneme)
 
 
 func flash_feedback(text_value: String, color: Color = Color(1.0, 1.0, 1.0)) -> void:

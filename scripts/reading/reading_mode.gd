@@ -6,6 +6,7 @@ const CameraController3DClass = preload("res://scripts/reading/CameraController3
 const MovementSystem = preload("res://scripts/reading/systems/MovementSystem.gd")
 const MapDisplayManager = preload("res://scripts/reading/systems/MapDisplayManager.gd")
 const GameplayController = preload("res://scripts/reading/systems/GameplayController.gd")
+const PlayerVehicleLibrary = preload("res://scripts/reading/player_vehicle_library.gd")
 
 # Grid layout constants
 const GRID_WIDTH := 7  # Z-axis: 7 columns (decorations + 1 road + decorations)
@@ -36,7 +37,6 @@ const MIN_ROAD_AHEAD := SEGMENT_SPACING * 10
 const WORD_START_OFFSET := WORD_START_X - PLAYER_START_X
 const ROAD_CLEAR_GAP := SEGMENT_SPACING
 
-const PLAYER_MODEL_PATH := "res://models/vehicle-truck-yellow.glb"
 const ROAD_MODEL_PATH := "res://models/track-straight.glb"
 const ROAD_SCALE := 2.0
 const OBSTACLE_MODEL_PATH := "res://models/track-bump.glb"
@@ -342,6 +342,7 @@ func _ready() -> void:
 	hud.volume_changed.connect(_on_volume_changed)
 	hud.debug_path_toggled.connect(_on_debug_path_toggled)
 	hud.resume_requested.connect(_close_options)
+	hud.play_debug_audio.connect(_on_debug_play_audio)
 	phoneme_player.phoneme_changed.connect(_on_phoneme_changed)
 	print("[ReadingMode] HUD configured with group: %s" % requested_group)
 
@@ -371,6 +372,7 @@ func _ready() -> void:
 	player.add_to_group("player")  # For trigger detection
 	print("[ReadingMode] Player model attached and added to 'player' group")
 	_load_group(requested_group)
+	_update_debug_audio_options()
 
 	# Initialize Map Display Manager early so _build_course_geometry can signal into it
 	map_display_manager = MapDisplayManager.new()
@@ -649,6 +651,8 @@ func _load_group(group_name: String) -> void:
 	if map_display_manager:
 		_build_course_geometry()
 
+	_update_debug_audio_options()
+
 
 func _rebuild_shared_track_layout() -> void:
 	if track_generator == null or current_entries.is_empty():
@@ -877,19 +881,26 @@ func _ensure_words_ahead() -> void:
 
 
 func _attach_player_model() -> void:
+	if vehicle_anchor == null:
+		return
+
 	for child in vehicle_anchor.get_children():
 		child.queue_free()
 
-	var model := _instantiate_scene(PLAYER_MODEL_PATH)
+	var vehicle_settings := settings
+	if vehicle_settings.is_empty():
+		vehicle_settings = settings_store.load_settings()
+
+	var model := PlayerVehicleLibrary.instantiate_vehicle_from_settings(
+		vehicle_settings, PlayerVehicleLibrary.RUNTIME_MAX_DIMENSION
+	)
 	if model == null:
 		return
 
-	# Increase the car size so the player is more visible and feels closer to the camera.
-	model.scale = Vector3.ONE * 1.8
 	# Model orientation is handled by the vehicle_anchor heading, no pre-rotation.
 	model.rotation_degrees = Vector3.ZERO
 	# Lower the vehicle so it sits closer to the road.
-	vehicle_anchor.position = Vector3(0.0, 0.05, 0.0)
+	vehicle_anchor.position = Vector3(0.0, 0.08, 0.0)
 	vehicle_anchor.add_child(model)
 
 
@@ -1033,6 +1044,29 @@ func _on_debug_path_toggled(enabled: bool) -> void:
 	hud.flash_feedback("Path + collision debug %s" % status_text, Color(0.4, 0.9, 0.4))
 
 
+func _update_debug_audio_options() -> void:
+	var words: Array[String] = []
+	for entry in current_entries:
+		words.append(str(entry.get("text", "")))
+	var phonemes: Array[String] = content_loader.list_phonemes()
+	if hud != null:
+		hud.set_debug_audio_options(words, phonemes)
+
+
+func _on_debug_play_audio(selected_word: String, selected_phoneme: String) -> void:
+	if selected_phoneme != "":
+		var phoneme_stream = content_loader.get_phoneme_stream_for_label(selected_phoneme)
+		if phoneme_stream != null:
+			phoneme_player.play_looping_phoneme(selected_phoneme, phoneme_stream)
+			return
+
+	if selected_word != "":
+		for entry in current_entries:
+			if str(entry.get("text", "")) == selected_word:
+				phoneme_player.play_word(content_loader.get_word_stream(entry))
+				return
+
+
 func _on_phoneme_changed(label: String) -> void:
 	hud.set_phoneme(label)
 
@@ -1041,22 +1075,39 @@ func _on_phoneme_changed(label: String) -> void:
 
 
 func _on_gameplay_pickup_collected(letter: String, phoneme_label: String) -> void:
+	var resolved_label := phoneme_label
+	if resolved_label == "":
+		resolved_label = letter.to_lower()
+
 	var phoneme_stream = (
 		content_loader
 		. get_phoneme_stream_for_label(
-			phoneme_label,
+			resolved_label,
 			letter,
 		)
 	)
+
+	print(
+		"[ReadingMode] pickup collected: letter='%s', phoneme_label='%s'," % [letter, phoneme_label]
+	)
+	print("[ReadingMode]  resolved_label='%s'" % resolved_label)
 	if phoneme_stream == null:
 		push_warning(
 			"[ReadingMode] missing phoneme stream for label '%s' letter '%s'".format(
-				phoneme_label, letter
+				resolved_label, letter
 			),
 		)
+	else:
+		print("[ReadingMode] phoneme stream resolved successfully for '%s'" % resolved_label)
 
 	phoneme_player.stop_phoneme()
-	phoneme_player.play_looping_phoneme(phoneme_label, phoneme_stream)
+	if phoneme_stream == null:
+		print("[ReadingMode] WARNING: phoneme_stream is null, cannot play looping phoneme")
+	else:
+		phoneme_player.play_looping_phoneme(resolved_label, phoneme_stream)
+
+	# Update HUD phoneme text immediately (important for tests and direct event calls)
+	_on_phoneme_changed(resolved_label)
 	hud.flash_feedback(letter, Color(1.0, 0.94, 0.45))
 
 

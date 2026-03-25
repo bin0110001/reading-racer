@@ -204,7 +204,8 @@ func _sort_entries(a: Dictionary, b: Dictionary) -> bool:
 
 
 func get_phoneme_stream(phoneme_alias: String) -> AudioStream:
-	var resolved_path: String = _phoneme_paths.get(phoneme_alias, "") as String
+	var normalized_alias: String = str(phoneme_alias).strip_edges().to_lower()
+	var resolved_path: String = _phoneme_paths.get(normalized_alias, "") as String
 	if resolved_path.is_empty():
 		return null
 	return load(resolved_path) as AudioStream
@@ -243,6 +244,14 @@ func get_phoneme_stream_for_label(phoneme_label: String, letter: String = "") ->
 	return null
 
 
+func list_phonemes() -> Array[String]:
+	var phonemes: Array[String] = []
+	for key in _phoneme_paths.keys():
+		phonemes.append(str(key))
+	phonemes.sort()
+	return phonemes
+
+
 func get_word_stream(entry: Dictionary) -> AudioStream:
 	return load(str(entry.get("word_audio_path", ""))) as AudioStream
 
@@ -260,7 +269,7 @@ func _refresh_phoneme_paths() -> void:
 		var extension := file_name.get_extension().to_lower()
 		if extension not in ["wav", "ogg", "mp3"]:
 			continue
-		var alias := file_name.get_basename()
+		var alias := file_name.get_basename().to_lower()
 		_phoneme_paths[alias] = "%s/%s" % [PHONEME_ROOT, file_name]
 
 
@@ -279,7 +288,7 @@ func _refresh_word_audio_paths() -> void:
 
 func _find_first_existing_alias(candidates: Array) -> String:
 	for candidate in candidates:
-		var value := str(candidate)
+		var value := str(candidate).strip_edges().to_lower()
 		if _phoneme_paths.has(value):
 			return value
 	return ""

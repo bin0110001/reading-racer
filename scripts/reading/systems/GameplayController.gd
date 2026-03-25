@@ -82,14 +82,28 @@ func load_entry(entry: Dictionary, entry_index: int) -> void:
 	finish_gate_trigger = null
 
 	if word_pickup_registry.has(entry_index):
+		var valid_pickups: Array = []
 		for pickup_trigger in word_pickup_registry[entry_index]:
-			pickup_triggers.append(pickup_trigger)
+			if is_instance_valid(pickup_trigger):
+				pickup_triggers.append(pickup_trigger)
+				valid_pickups.append(pickup_trigger)
+		word_pickup_registry[entry_index] = valid_pickups
 	if word_obstacle_registry.has(entry_index):
+		var valid_obstacles: Array = []
 		for obstacle_trigger in word_obstacle_registry[entry_index]:
-			obstacle_triggers.append(obstacle_trigger)
+			if is_instance_valid(obstacle_trigger):
+				obstacle_triggers.append(obstacle_trigger)
+				valid_obstacles.append(obstacle_trigger)
+		word_obstacle_registry[entry_index] = valid_obstacles
 	if word_finish_registry.has(entry_index):
-		finish_gate_trigger = word_finish_registry[entry_index] as ReadingFinishGateTrigger
-		finish_gate_trigger.set_pickups_collected(false)
+		var candidate_finish: ReadingFinishGateTrigger = (
+			word_finish_registry[entry_index] as ReadingFinishGateTrigger
+		)
+		if candidate_finish != null and is_instance_valid(candidate_finish):
+			finish_gate_trigger = candidate_finish
+			finish_gate_trigger.set_pickups_collected(false)
+		else:
+			word_finish_registry.erase(entry_index)
 
 
 func spawn_loop_course_pickups_and_obstacles(
@@ -797,6 +811,9 @@ func _on_pickup_triggered(
 		pickup_triggers.erase(trigger)
 		if trigger.is_inside_tree():
 			trigger.queue_free()
+
+	if word_pickup_registry.has(trigger.word_index):
+		word_pickup_registry[trigger.word_index].erase(trigger)
 
 	if trigger.letter_index != next_target_index:
 		# Wrong letter - emit signal to play "missed" phoneme

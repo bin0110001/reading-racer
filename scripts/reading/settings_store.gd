@@ -1,6 +1,8 @@
 class_name ReadingSettingsStore
 extends RefCounted
 
+const PlayerVehicleLibrary = preload("res://scripts/reading/player_vehicle_library.gd")
+
 const SAVE_PATH := "user://reading_racer_settings.cfg"
 const CONTROL_MODE_KEYBOARD := "keyboard"
 const CONTROL_MODE_SWIPE := "swipe"
@@ -48,6 +50,11 @@ static func default_settings() -> Dictionary:
 		"map_style": MAP_STYLE_CIRCULAR,
 		"holiday_mode": HOLIDAY_MODE_AUTO,
 		"holiday_name": HOLIDAY_NONE,
+		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID: PlayerVehicleLibrary.DEFAULT_VEHICLE_ID,
+		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH:
+		PlayerVehicleLibrary.get_vehicle_scene_path(PlayerVehicleLibrary.DEFAULT_VEHICLE_ID),
+		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR:
+		PlayerVehicleLibrary.DEFAULT_PAINT_COLOR_HEX,
 	}
 
 
@@ -77,6 +84,27 @@ func load_settings() -> Dictionary:
 	settings["holiday_name"] = str(
 		config.get_value("reading", "holiday_name", settings["holiday_name"])
 	)
+	settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID] = str(
+		config.get_value(
+			"reading",
+			PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID,
+			settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID]
+		)
+	)
+	settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH] = str(
+		config.get_value(
+			"reading",
+			PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH,
+			settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH]
+		)
+	)
+	settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR] = str(
+		config.get_value(
+			"reading",
+			PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR,
+			settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR]
+		)
+	)
 	return settings
 
 
@@ -94,6 +122,21 @@ func save_settings(settings: Dictionary) -> void:
 	config.set_value("reading", "map_style", str(merged["map_style"]))
 	config.set_value("reading", "holiday_mode", str(merged["holiday_mode"]))
 	config.set_value("reading", "holiday_name", str(merged["holiday_name"]))
+	config.set_value(
+		"reading",
+		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID,
+		str(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID])
+	)
+	config.set_value(
+		"reading",
+		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH,
+		str(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH])
+	)
+	config.set_value(
+		"reading",
+		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR,
+		str(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR])
+	)
 	config.save(SAVE_PATH)
 
 

@@ -51,8 +51,10 @@ I've configured GDUnit4 for the Reading Racer project and created comprehensive 
 ### Option 2: Run from Command Line
 ```powershell
 cd c:\Projects\reading-racer
-godot -s ./addons/gdUnit4/bin/gd_unit_cmd.gd --headless --verbose
+godot -s ./addons/gdUnit4/bin/gd_unit_cmd.gd --verbose
 ```
+
+> Note: Use `--headless` only for headless CI environments. Local dev runs should omit it for full scene/GUI behavior.
 
 ### Option 3: View Diagnostic Output
 1. Run the game with F5

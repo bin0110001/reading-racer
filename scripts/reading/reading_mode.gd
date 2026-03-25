@@ -71,6 +71,7 @@ var available_groups: Array[String] = []
 var current_entries: Array[Dictionary] = []
 var current_entry: Dictionary = {}
 var current_entry_index := -1
+var requested_group: String = ""
 
 # Game state
 var state := "loading"
@@ -327,7 +328,7 @@ func _ready() -> void:
 		print("[ReadingMode] ERROR: No word groups found!")
 		return
 
-	var requested_group: String = str(settings.get("word_group", available_groups[0]))
+	requested_group = str(settings.get("word_group", available_groups[0]))
 	if not available_groups.has(requested_group):
 		requested_group = available_groups[0]
 		settings["word_group"] = requested_group
@@ -602,9 +603,7 @@ func _update_debug_collision_visuals() -> void:
 		if player_collision and player_collision.shape is BoxShape3D:
 			var box_shape = player_collision.shape as BoxShape3D
 			var player_cube = _create_debug_box(
-				box_shape.size,
-				player.global_transform,
-				Color(0.2, 0.6, 1.0, 0.25)
+				box_shape.size, player.global_transform, Color(0.2, 0.6, 1.0, 0.25)
 			)
 			debug_collision_root.add_child(player_cube)
 
@@ -790,6 +789,7 @@ func _spawn_course_for_entry(
 		)
 
 	if clear_existing:
+		var active_holiday = settings_store.resolve_effective_holiday(settings)
 		course_plan_summary = (
 			gameplay_controller
 			. spawn_loop_course_pickups_and_obstacles(
@@ -798,6 +798,8 @@ func _spawn_course_for_entry(
 				get_path_frame_callable,
 				path_wrap_callable,
 				current_entry_index,
+				requested_group,
+				active_holiday,
 				true,
 			)
 		)
@@ -1039,13 +1041,18 @@ func _on_phoneme_changed(label: String) -> void:
 
 
 func _on_gameplay_pickup_collected(letter: String, phoneme_label: String) -> void:
-	var phoneme_stream = content_loader.get_phoneme_stream_for_label(
-		phoneme_label,
-		letter,
+	var phoneme_stream = (
+		content_loader
+		. get_phoneme_stream_for_label(
+			phoneme_label,
+			letter,
+		)
 	)
 	if phoneme_stream == null:
 		push_warning(
-			"[ReadingMode] missing phoneme stream for label '%s' letter '%s'".format(phoneme_label, letter),
+			"[ReadingMode] missing phoneme stream for label '%s' letter '%s'".format(
+				phoneme_label, letter
+			),
 		)
 
 	phoneme_player.stop_phoneme()

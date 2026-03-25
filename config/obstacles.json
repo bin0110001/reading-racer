@@ -1,0 +1,40 @@
+{
+	"base_obstacles": [
+		{
+			"model_path": "res://models/track-bump.glb",
+			"sound_paths": ["res://audio/skid.ogg"]
+		}
+	],
+	"level_obstacles": {
+		"sightwords": [
+			{
+				"model_path": "res://models/track-bump.glb",
+				"sound_paths": ["res://audio/skid.ogg"]
+			}
+		],
+		"can_cat": [
+			{
+				"model_path": "res://models/track-bump.glb",
+				"sound_paths": ["res://audio/skid.ogg"]
+			}
+		]
+	},
+	"seasonal_obstacles": {
+		"christmas": [
+			{
+				"model_path": "res://models/decoration-tents.glb",
+				"sound_paths": ["res://audio/skid.ogg"]
+			}
+		],
+		"halloween": [
+			{
+				"model_path": "res://models/decoration-forest.glb",
+				"sound_paths": ["res://audio/skid.ogg"]
+			}
+		]
+	},
+	"holiday_ranges": {
+		"christmas": {"start": {"month": 12, "day": 1}, "end": {"month": 12, "day": 31}},
+		"halloween": {"start": {"month": 10, "day": 25}, "end": {"month": 10, "day": 31}}
+	}
+}

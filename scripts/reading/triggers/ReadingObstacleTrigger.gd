@@ -11,6 +11,7 @@ signal obstacle_hit(obstacle_index: int)
 @export var trigger_depth: float = 1.0  # Z-axis depth (±0.5)
 @export var penalty_seconds: float = 0.75
 @export var hit_sound_path: String = "res://audio/skid.ogg"
+@export var hit_sound_paths: Array = ["res://audio/skid.ogg"]
 
 var has_triggered := false
 var _hit_sound_player: AudioStreamPlayer3D = null
@@ -30,11 +31,24 @@ func _ready() -> void:
 	# Prepare hit sound player
 	_hit_sound_player = AudioStreamPlayer3D.new()
 	_hit_sound_player.name = "HitSoundPlayer"
-	if ResourceLoader.exists(hit_sound_path):
-		_hit_sound_player.stream = load(hit_sound_path) as AudioStream
+	var first_path = _select_hit_sound_path()
+	if ResourceLoader.exists(first_path):
+		_hit_sound_player.stream = load(first_path) as AudioStream
 	add_child(_hit_sound_player)
 
 	area_entered.connect(_on_area_entered)
+
+
+func _select_hit_sound_path() -> String:
+	var candidates: Array = []
+	for sound in hit_sound_paths:
+		if sound is String and sound.strip_edges() != "":
+			candidates.append(sound)
+	if candidates.is_empty() and hit_sound_path.strip_edges() != "":
+		candidates.append(hit_sound_path)
+	if candidates.is_empty():
+		return "res://audio/skid.ogg"
+	return candidates[int(randi() % candidates.size())]
 
 
 func trigger_obstacle() -> void:
@@ -51,7 +65,12 @@ func _on_area_entered(area: Area3D) -> void:
 
 
 func _play_hit_sound() -> void:
-	if _hit_sound_player != null and _hit_sound_player.stream != null:
+	if _hit_sound_player == null:
+		return
+	var new_path = _select_hit_sound_path()
+	if ResourceLoader.exists(new_path):
+		_hit_sound_player.stream = load(new_path) as AudioStream
+	if _hit_sound_player.stream != null:
 		_hit_sound_player.stop()
 		_hit_sound_player.play()
 

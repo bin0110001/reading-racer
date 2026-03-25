@@ -6,27 +6,28 @@ I've built you a **complete 8-player multiplayer racing game** in Godot 4.5 with
 
 ### ✅ Core Features Implemented
 
-1. **8 Concurrent Racers** 
+1. **8 Concurrent Racers**
+
    - All spawned at game start
    - Predefined starting positions (configurable grid layout)
    - Each responds to independent input
-
 2. **Countdown at Race Start**
+
    - 3-second countdown with visual display
    - Shows "3" → "2" → "1" → "GO!"
    - Countdown automatically triggers race start
-
 3. **Individual Lap/Race Timers**
+
    - Each player gets their own timer
    - Records lap completion times
    - Displays elapsed race time in real-time on HUD
-
 4. **Results Screen**
+
    - Shows final standings after all players complete N laps (default: 3)
    - Displays finish times in MM:SS.ms format
    - Includes completion order/podium positions
-
 5. **Network-Ready Framework**
+
    - NetworkManager script with server/client architecture
    - Optional - can enable when ready
    - Foundation for online multiplayer included
@@ -35,15 +36,15 @@ I've built you a **complete 8-player multiplayer racing game** in Godot 4.5 with
 
 ## Scripts Created (7 Total)
 
-| Script | Lines | Purpose |
-|--------|-------|---------|
-| GameManager.gd | ~250 | Race state machine, lap tracking |
-| RaceTrack.gd | ~150 | Track layout, checkpoints |
-| vehicle.gd | ~280 | Physics, input, vehicle control |
-| RaceHUD.gd | ~230 | UI countdown, timers, results |
-| VehicleSpawner.gd | ~200 | Creates 8 vehicles |
-| RaceController.gd | ~50 | Game flow control |
-| NetworkManager.gd | ~200 | Network sync framework |
+| Script            | Lines | Purpose                          |
+| ----------------- | ----- | -------------------------------- |
+| GameManager.gd    | ~250  | Race state machine, lap tracking |
+| RaceTrack.gd      | ~150  | Track layout, checkpoints        |
+| vehicle.gd        | ~280  | Physics, input, vehicle control  |
+| RaceHUD.gd        | ~230  | UI countdown, timers, results    |
+| VehicleSpawner.gd | ~200  | Creates 8 vehicles               |
+| RaceController.gd | ~50   | Game flow control                |
+| NetworkManager.gd | ~200  | Network sync framework           |
 
 **Total:** ~1,200+ lines of game logic
 
@@ -61,6 +62,7 @@ I've built you a **complete 8-player multiplayer racing game** in Godot 4.5 with
 ## How to Use It
 
 ### Running the Game
+
 ```
 1. Open scenes/main.tscn in Godot 4.5
 2. Press F5 to play
@@ -70,6 +72,7 @@ I've built you a **complete 8-player multiplayer racing game** in Godot 4.5 with
 ```
 
 ### Controlling Vehicles
+
 - **W** - Accelerate (or Right Trigger on controller)
 - **A/D** - Steer (or Left Stick)
 - **S** - Brake (or Left Trigger)
@@ -96,6 +99,7 @@ I've built you a **complete 8-player multiplayer racing game** in Godot 4.5 with
 The lap detection system uses **Area3D checkpoints** around your track. The system includes default checkpoint positions, but **you should adjust them to match your actual track layout**.
 
 ### Before Racing:
+
 1. Look at your GridMap track in the scene
 2. Open [scripts/RaceTrack.gd](scripts/RaceTrack.gd)
 3. Find the `_create_default_checkpoints()` function
@@ -119,19 +123,25 @@ def _create_default_checkpoints() -> void:
 ## Customization Made Easy
 
 ### Change Laps
+
 [GameManager.gd](scripts/GameManager.gd) line ~8:
+
 ```gdscript
 const RACE_LAPS = 3  # Change to 1, 2, 5, etc.
 ```
 
 ### Change Countdown
+
 [GameManager.gd](scripts/GameManager.gd) line ~9:
+
 ```gdscript
 const COUNTDOWN_SECONDS = 3  # Change to 5 for longer countdown
 ```
 
 ### Adjust Vehicle Speeds
+
 [vehicle.gd](scripts/vehicle.gd) lines ~30-33:
+
 ```gdscript
 var max_speed: float = 40.0           # Faster/slower
 var acceleration_rate: float = 15.0   # Snappier/sluggish
@@ -139,7 +149,9 @@ var deceleration_rate: float = 8.0    # Harder/softer braking
 ```
 
 ### Customize Starting Positions
+
 [RaceTrack.gd](scripts/RaceTrack.gd) lines ~8-16:
+
 ```gdscript
 var starting_positions: Array[Transform3D] = [
     Transform3D(Basis.identity, Vector3(3.5, 0, 5)),   # Adjust X, Z
@@ -235,10 +247,11 @@ powershell -ExecutionPolicy Bypass -File .\tools\gdscript-check.ps1 -GdUnitTarge
 ```
 
 This runs:
+
 - **gdparse** to check syntax
 - **gdlint** to check code style
 - **gdformat** to check formatting
-- **Godot validation** (`--headless --check-only`) to catch strict parser errors like type inference violations
+- **Godot validation** (` --check-only`) to catch strict parser errors like type inference violations
 - **GDUnit CLI** on discovered test roots, with results read from the current run's XML report
 - **Orphan-node detection** that fails the run and tells you to add `collect_orphan_node_details()` to the leaking test
 
@@ -277,18 +290,21 @@ See **MULTIPLAYER_RACING_GUIDE.md** for detailed networking setup.
 ## Next Steps
 
 ### Immediate (Get it working)
+
 1. Open main.tscn and play
 2. Adjust checkpoint positions for your track [CRITICAL]
 3. Test with multiple controllers
 4. Verify lap detection works
 
 ### Short Term (Polish)
+
 1. Enhance HUD with better display
 2. Add sound effects for events
 3. Create main menu
 4. Test performance on target hardware
 
 ### Long Term (Expand)
+
 1. Enable network multiplayer
 2. Add AI opponents
 3. Create track editor
@@ -300,11 +316,13 @@ See **MULTIPLAYER_RACING_GUIDE.md** for detailed networking setup.
 ## Support Resources
 
 **Documentation:**
+
 - 📖 [QUICKSTART.md](QUICKSTART.md) - Get running fast
 - 📚 [MULTIPLAYER_RACING_GUIDE.md](MULTIPLAYER_RACING_GUIDE.md) - Deep dive
 - 🛠️ [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Fix issues
 
 **Code References:**
+
 - See comments in each script for implementation details
 - All systems are well-documented with function descriptions
 - Configurable constants at top of each script
@@ -338,6 +356,7 @@ docs/
 ## The Bottom Line
 
 You now have a **complete, functional 8-player racing game** with:
+
 - ✅ Countdown system
 - ✅ Individual lap timers
 - ✅ Results tracking
@@ -352,6 +371,7 @@ You now have a **complete, functional 8-player racing game** with:
 ## Questions?
 
 Refer to the documentation files:
+
 1. **"How do I...?"** → Check QUICKSTART.md
 2. **"How does X work?"** → Check MULTIPLAYER_RACING_GUIDE.md
 3. **"What's wrong?"** → Check TROUBLESHOOTING.md

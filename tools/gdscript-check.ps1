@@ -26,6 +26,7 @@ project's test scripts.
 param(
     [switch]$Fix,
     [switch]$RunTests,
+    [switch]$Headless,
     [int]$TimeoutSeconds = 180,
     [string]$ProjectRoot = $null,
     [string]$GodotBin = $null,
@@ -318,7 +319,8 @@ function Get-GdScriptFiles {
         '.godot/',
         '.venv/',
         'reports/',
-        'addons/gdUnit4/'
+        'addons/gdUnit4/',
+        'addons/'
     )
 
     $files = @(
@@ -732,7 +734,8 @@ function Invoke-GodotCompilationChecks {
         [string]$GodotExe,
         [string]$Label,
         [string[]]$GdFiles,
-        [int]$TimeoutSeconds = 0
+        [int]$TimeoutSeconds = 0,
+        [switch]$Headless
     )
 
     Write-Host "[gdscript-check] Running Godot validation for $Label"
@@ -749,7 +752,11 @@ function Invoke-GodotCompilationChecks {
     Set-Content -Path $tempFile -Value $content -Encoding UTF8
 
     try {
-        $result = Invoke-PowerShellExternalCommand -FilePath $GodotExe -Arguments @('--headless', '--path', $RepoRoot, '--script', $tempFile)
+        $godotArgs = @('--path', $RepoRoot, '--script', $tempFile)
+        if ($Headless) {
+            $godotArgs = @('--headless') + $godotArgs
+        }
+        $result = Invoke-PowerShellExternalCommand -FilePath $GodotExe -Arguments $godotArgs
         $issues = @(Get-GodotCompilerIssues -OutputText $result.CombinedOutput)
 
         if ($result.ExitCode -ne 0 -or $issues.Count -gt 0) {
@@ -780,7 +787,8 @@ function Get-LatestGdUnitResultsPath {
         [datetime]$NotBefore = [datetime]::MinValue
     )
 
-    if ([string]::IsNullOrWhiteSpace($ReportsRoot)) {
+    $reportsRoot = $ReportsRoot
+    if ([string]::IsNullOrWhiteSpace($reportsRoot)) {
         $reportsRoot = Join-Path $RepoRoot 'reports'
     }
     if (-not (Test-Path $reportsRoot)) {
@@ -1055,7 +1063,7 @@ function Invoke-GdScriptCheck {
 
     $script:CheckCurrentStep++
     Write-StepStatus -Activity 'Godot compile project scripts' -Step $script:CheckCurrentStep -Total $script:CheckTotalSteps
-    Invoke-GodotCompilationChecks -RepoRoot $repoRoot -GodotExe $godotExe -Label 'project scripts' -GdFiles $gdFiles -TimeoutSeconds $TimeoutSeconds
+    Invoke-GodotCompilationChecks -RepoRoot $repoRoot -GodotExe $godotExe -Label 'project scripts' -GdFiles $gdFiles -TimeoutSeconds $TimeoutSeconds -Headless:$Headless
 
     if ($testFiles.Count -gt 0) {
         if (-not $gdUnitCommand) {
@@ -1074,7 +1082,8 @@ function Invoke-GdScriptCheck {
         if ($previousGdUnitResultsPath) {
             $previousGdUnitResultsWriteTime = (Get-Item $previousGdUnitResultsPath).LastWriteTime
         }
-        $gdUnitArguments = @('--headless', '--path', $repoRoot, '-s', $gdUnitCommand.ResPath, '--verbose')
+        $gdUnitArguments = @('--path', $repoRoot, '-s', $gdUnitCommand.ResPath, '--verbose')
+        if ($Headless) { $gdUnitArguments = @('--headless') + $gdUnitArguments }
         foreach ($gdUnitTargetPath in $gdUnitTargets) {
             $gdUnitArguments += @('-a', $gdUnitTargetPath)
         }

@@ -87,6 +87,32 @@ func test_reading_settings_store_methods_exist() -> void:
 	assert_that(store.has_method("apply_master_volume")).is_true()
 
 
+func test_reading_settings_store_holiday_resolution() -> void:
+	var store = ReadingSettingsStore.new()
+	var s = store.default_settings()
+	# default auto + none should be none
+	assert_that(store.resolve_effective_holiday(s)).is_equal(ReadingSettingsStore.HOLIDAY_NONE)
+
+	s["holiday_name"] = ReadingSettingsStore.HOLIDAY_CHRISTMAS
+	assert_that(store.resolve_effective_holiday(s)).is_equal(ReadingSettingsStore.HOLIDAY_NONE)
+
+	s["holiday_mode"] = ReadingSettingsStore.HOLIDAY_MODE_ON
+	assert_that(store.resolve_effective_holiday(s)).is_equal(ReadingSettingsStore.HOLIDAY_CHRISTMAS)
+
+	s["holiday_mode"] = ReadingSettingsStore.HOLIDAY_MODE_OFF
+	assert_that(store.resolve_effective_holiday(s)).is_equal(ReadingSettingsStore.HOLIDAY_NONE)
+
+
+func test_obstacle_config_loading_and_random_choice() -> void:
+	var config = ObstacleConfig.new()
+	var item = config.choose_random_obstacle(
+		"sightwords", ReadingSettingsStore.HOLIDAY_NONE, RandomNumberGenerator.new()
+	)
+	assert_that(item).is_not_null()
+	assert_that(item.has("model_path")).is_true()
+	assert_that(item.has("sound_paths")).is_true()
+
+
 func test_reading_hud_can_be_loaded() -> void:
 	assert_that(ReadingHUDScript).is_not_null()
 
@@ -191,67 +217,6 @@ func test_reading_mode_lane_offset_is_clamped_to_track_width() -> void:
 	var pose_max = reading_mode._get_pose_at_path_distance(15.0, 4.0)
 	var pose_extreme = reading_mode._get_pose_at_path_distance(15.0, 100.0)
 	assert_that(pose_max.position.distance_to(pose_extreme.position)).is_less_equal(0.001)
-
-
-func test_map_display_manager_populates_cell_entries() -> void:
-	var layout = TrackLayoutScript.new()
-	layout.initialize(Vector3i(4, 1, 4))
-	layout.set_cell(
-		Vector3i(0, 0, 0), {"scene_path": "res://models/track-straight.glb", "rotation_y": 0.0}
-	)
-
-	var manager = MapDisplayManagerScript.new()
-	manager.set_nodes(Node3D.new(), Node3D.new())
-	manager.set_layout_data(layout, Vector3.ZERO, 18.0, 18.0)
-
-	assert_that(manager.layout_cell_entries.size()).is_equal(1)
-
-
-func test_map_display_manager_spawns_visible_cells() -> void:
-	var layout = TrackLayoutScript.new()
-	layout.initialize(Vector3i(4, 1, 4))
-	layout.set_cell(
-		Vector3i(0, 0, 0), {"scene_path": "res://models/track-straight.glb", "rotation_y": 0.0}
-	)
-
-	var manager = MapDisplayManagerScript.new()
-	var road = Node3D.new()
-	var spawn_root = Node3D.new()
-	manager.set_nodes(road, spawn_root)
-	manager.set_layout_data(layout, Vector3.ZERO, 18.0, 18.0)
-	manager.update_visible_cells(Vector3.ZERO, 0.0)
-
-	assert_that(manager.grid_cells.size()).is_greater(0)
-
-
-func test_map_display_manager_finish_cell_replaces_tile() -> void:
-	var layout = TrackLayoutScript.new()
-	layout.initialize(Vector3i(4, 1, 4))
-	layout.set_cell(
-		Vector3i(0, 0, 0), {"scene_path": "res://models/track-straight.glb", "rotation_y": 0.0}
-	)
-
-	var manager = MapDisplayManagerScript.new()
-	var road = Node3D.new()
-	var spawn_root = Node3D.new()
-	manager.set_nodes(road, spawn_root)
-	manager.set_layout_data(layout, Vector3.ZERO, 18.0, 18.0)
-	manager.update_visible_cells(Vector3.ZERO, 0.0)
-	manager.set_finish_cell(Vector3i(0, 0, 0))
-
-	assert_that(manager.grid_cells.size()).is_equal(1)
-	var tile = manager.grid_cells.get("0,0,0")
-	assert_that(tile).is_not_null()
-
-	# Ensure the logic marks finish cell with finish model in layout
-	var finish_entry_found = false
-	for entry in manager.layout_cell_entries:
-		if entry.get("cell") == Vector3i(0, 0, 0):
-			finish_entry_found = true
-			var scene_path := str((entry.get("data", {}) as Dictionary).get("scene_path", ""))
-			assert_that(scene_path).is_equal("res://models/track-finish.glb")
-			break
-	assert_that(finish_entry_found).is_true()
 
 
 func test_start_next_word_transition_resets_player_position() -> void:

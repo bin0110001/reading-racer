@@ -37,7 +37,7 @@ This will:
 - Run gdlint to check code style
 - Run gdformat to check formatting
 - **Check for duplicate global class_name declarations** (catches naming conflicts before runtime)
-- Run Godot project validation (`--headless --check-only`) to catch strict parser errors and global scope issues
+- Run Godot project validation (`--check-only`) in non-headless mode by default; use `--headless` only in CI where UI is unavailable
 - Run GDUnit CLI when the project has both `test` or `tests` scripts and `addons/gdUnit4/bin/GdUnitCmdTool.gd`
   - **✅ All project scripts must load successfully**
   - **✅ Test scripts must compile before the suite can execute**

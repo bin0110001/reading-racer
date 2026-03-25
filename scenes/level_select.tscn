@@ -1,6 +1,6 @@
-[gd_scene load_steps=3 format=3 uid="uid://b8q8q8q8q8q8q8q8q"]
+[gd_scene format=3 uid="uid://fm3yw7k5t227"]
 
-[ext_resource type="Script" path="res://scripts/reading/level_select.gd" id="1"]
+[ext_resource type="Script" uid="uid://b6jylp12155uu" path="res://scripts/reading/level_select.gd" id="1"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
 bg_color = Color(0.1, 0.1, 0.1, 0.8)
@@ -14,7 +14,7 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
-[node name="LevelSelect" type="Control"]
+[node name="LevelSelect" type="Control" unique_id=1057374432]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -23,7 +23,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
-[node name="Panel" type="Panel" parent="."]
+[node name="Panel" type="Panel" parent="." unique_id=473297357]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -32,7 +32,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_1")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel" unique_id=989639315]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -41,38 +41,94 @@ grow_horizontal = 2
 grow_vertical = 2
 alignment = 1
 
-[node name="Title" type="Label" parent="Panel/VBoxContainer"]
+[node name="Title" type="Label" parent="Panel/VBoxContainer" unique_id=862391268]
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 48
 text = "Reading Racer"
 
-[node name="GridContainer" type="GridContainer" parent="Panel/VBoxContainer"]
+[node name="GridContainer" type="GridContainer" parent="Panel/VBoxContainer" unique_id=1345000909]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 3
 columns = 3
 
-[node name="OptionsContainer" type="VBoxContainer" parent="Panel/VBoxContainer"]
+[node name="StartButton" type="Button" parent="Panel/VBoxContainer" unique_id=2008959194]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Start Race"
+
+[node name="ConfigButton" type="Button" parent="Panel/VBoxContainer" unique_id=66878694]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Settings"
+
+[node name="LevelSelect#ConfigPage" type="Panel" parent="." unique_id=6382898]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_1")
+
+[node name="ConfigPage#VBoxContainer" type="VBoxContainer" parent="." unique_id=1537858176]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 8.0
+offset_right = -3.0
+offset_bottom = -9.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ConfigPage_VBoxContainer#ConfigTitle" type="Label" parent="ConfigPage#VBoxContainer" unique_id=1180104827]
+layout_mode = 2
+text = "Configuration"
+
+[node name="ConfigPage_VBoxContainer#OptionsContainer" type="VBoxContainer" parent="ConfigPage#VBoxContainer" unique_id=830461152]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 0
 
-[node name="SteeringLabel" type="Label" parent="Panel/VBoxContainer/OptionsContainer"]
+[node name="ConfigPage_VBoxContainer_OptionsContainer#SteeringLabel" type="Label" parent="ConfigPage#VBoxContainer" unique_id=618338395]
 layout_mode = 2
 text = "Steering Type:"
 
-[node name="SteeringOption" type="OptionButton" parent="Panel/VBoxContainer/OptionsContainer"]
+[node name="ConfigPage_VBoxContainer_OptionsContainer#SteeringOption" type="OptionButton" parent="ConfigPage#VBoxContainer" unique_id=696739642]
 layout_mode = 2
 
-[node name="MapLabel" type="Label" parent="Panel/VBoxContainer/OptionsContainer"]
+[node name="ConfigPage_VBoxContainer_OptionsContainer#MapLabel" type="Label" parent="ConfigPage#VBoxContainer" unique_id=1517202646]
 layout_mode = 2
 text = "Map Style:"
 
-[node name="MapOption" type="OptionButton" parent="Panel/VBoxContainer/OptionsContainer"]
+[node name="ConfigPage_VBoxContainer_OptionsContainer#MapOption" type="OptionButton" parent="ConfigPage#VBoxContainer" unique_id=1192203700]
 layout_mode = 2
 
-[node name="StartButton" type="Button" parent="Panel/VBoxContainer"]
+[node name="ConfigPage_VBoxContainer_OptionsContainer#HolidayModeLabel" type="Label" parent="ConfigPage#VBoxContainer" unique_id=1054844449]
 layout_mode = 2
-size_flags_horizontal = 4
-text = "Start Race"
+text = "Holiday action mode"
+
+[node name="ConfigPage_VBoxContainer_OptionsContainer#HolidayModeOption" type="OptionButton" parent="ConfigPage#VBoxContainer" unique_id=577454773]
+layout_mode = 2
+
+[node name="ConfigPage_VBoxContainer_OptionsContainer#HolidayNameLabel" type="Label" parent="ConfigPage#VBoxContainer" unique_id=132255749]
+layout_mode = 2
+text = "Holiday"
+
+[node name="ConfigPage_VBoxContainer_OptionsContainer#HolidayNameOption" type="OptionButton" parent="ConfigPage#VBoxContainer" unique_id=217709727]
+layout_mode = 2
+
+[node name="ConfigPage_VBoxContainer#SaveButton" type="Button" parent="ConfigPage#VBoxContainer" unique_id=1955087590]
+layout_mode = 2
+size_flags_horizontal = 2
+text = "Save"
+
+[node name="ConfigPage_VBoxContainer#CancelButton" type="Button" parent="ConfigPage#VBoxContainer" unique_id=2012053053]
+layout_mode = 2
+size_flags_horizontal = 2
+text = "Cancel"

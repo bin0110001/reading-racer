@@ -27,10 +27,12 @@ const PICKUP_OBSTACLE_DISTANCE_THRESHOLD := (PICKUP_RADIUS_X * 4.0) / 2.0 + OBST
 const LETTER_MODEL_PREFAB_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.prefab"
 const LETTER_MODEL_FBX_BASE := "res://Assets/PolygonIcons/Models/SM_Icon_Text_%s.fbx"
 const LETTER_MODEL_SCENE_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.tscn"
+const ObstacleConfigClass = preload("res://scripts/reading/obstacle_config.gd")
 
 ## References to content
 var content_loader: ReadingContentLoader = null
 var player: Area3D = null
+var obstacle_config: ObstacleConfig = null
 
 ## Game state
 var current_entry: Dictionary = {}
@@ -58,11 +60,13 @@ var _last_pickup_time_ms: int = -1000
 func _init(p_content_loader: ReadingContentLoader) -> void:
 	content_loader = p_content_loader
 	_rng.randomize()
+	obstacle_config = ObstacleConfigClass.new()
 
 
 ## Set the spawn root node for triggers
 func set_spawn_root(p_spawn_root: Node3D) -> void:
 	spawn_root = p_spawn_root
+
 
 func set_player(p_player: Area3D) -> void:
 	player = p_player
@@ -94,6 +98,8 @@ func spawn_loop_course_pickups_and_obstacles(
 	p_get_path_frame: Callable,
 	p_path_wrap: Callable,
 	active_word_index: int,
+	level_group: String = "",
+	active_holiday: String = "",
 	clear_existing: bool = true
 ) -> Dictionary:
 	if clear_existing and spawn_root != null:
@@ -107,7 +113,12 @@ func spawn_loop_course_pickups_and_obstacles(
 
 	var finish_indices: Array[int] = []
 	for word_plan in word_course_plans:
-		var spawned: Dictionary = _spawn_word_course_plan(word_plan, p_get_path_frame)
+		var spawned: Dictionary = _spawn_word_course_plan(
+			word_plan,
+			p_get_path_frame,
+			level_group,
+			active_holiday,
+		)
 		var word_index := int(word_plan.get("word_index", -1))
 		word_pickup_registry[word_index] = spawned.get("pickups", [])
 		word_obstacle_registry[word_index] = spawned.get("obstacles", [])
@@ -162,7 +173,9 @@ func spawn_course_pickups_and_obstacles(
 	word_anchor: Dictionary,
 	p_get_path_frame: Callable,
 	p_path_wrap: Callable,
-	clear_existing: bool = true
+	clear_existing: bool = true,
+	level_group: String = "",
+	active_holiday: String = ""
 ) -> int:
 	if word_anchor.is_empty():
 		return -1
@@ -263,10 +276,18 @@ func spawn_course_pickups_and_obstacles(
 			obstacle_trigger.rotation.y = segment_heading
 			obstacle_trigger.word_index = current_entry_index
 			obstacle_trigger.obstacle_index = letter_index_in_word * 2 + lane_index
+
+			var obstacle_data = obstacle_config.choose_random_obstacle(
+				level_group, active_holiday, _rng
+			)
+			var obstacle_model_path = str(obstacle_data.get("model_path", OBSTACLE_MODEL_PATH))
+			var hit_sounds = obstacle_data.get("sound_paths", ["res://audio/skid.ogg"]) as Array
+			obstacle_trigger.hit_sound_paths = hit_sounds
+
 			spawn_root.add_child(obstacle_trigger)
 
 			# Add visual model
-			var obstacle_visual := _instantiate_scene(OBSTACLE_MODEL_PATH)
+			var obstacle_visual := _instantiate_scene(obstacle_model_path)
 			if obstacle_visual != null:
 				obstacle_visual.scale = Vector3.ONE * 0.6
 				obstacle_trigger.add_child(obstacle_visual)
@@ -467,7 +488,12 @@ func _find_marker_cursor(
 	return -1
 
 
-func _spawn_word_course_plan(word_plan: Dictionary, p_get_path_frame: Callable) -> Dictionary:
+func _spawn_word_course_plan(
+	word_plan: Dictionary,
+	p_get_path_frame: Callable,
+	level_group: String = "",
+	active_holiday: String = "",
+) -> Dictionary:
 	var spawned_pickups: Array[ReadingPickupTrigger] = []
 	var spawned_obstacles: Array[ReadingObstacleTrigger] = []
 	var word_index := int(word_plan.get("word_index", -1))
@@ -541,23 +567,34 @@ func _spawn_word_course_plan(word_plan: Dictionary, p_get_path_frame: Callable) 
 		obstacle_trigger.obstacle_index = int(
 			(obstacle_plan as Dictionary).get("obstacle_index", 0)
 		)
+
+		var obstacle_data = (
+			obstacle_config
+			. choose_random_obstacle(
+				level_group,
+				active_holiday,
+				_rng,
+			)
+		)
+		var obstacle_model_path = str(obstacle_data.get("model_path", OBSTACLE_MODEL_PATH))
+		var hit_sounds = obstacle_data.get("sound_paths", ["res://audio/skid.ogg"]) as Array
+		obstacle_trigger.hit_sound_paths = hit_sounds
+
 		spawn_root.add_child(obstacle_trigger)
 
-		var obstacle_visual := _instantiate_scene(OBSTACLE_MODEL_PATH)
+		var obstacle_visual := _instantiate_scene(obstacle_model_path)
 		if obstacle_visual != null:
 			obstacle_visual.scale = Vector3.ONE * 0.6
 			obstacle_trigger.add_child(obstacle_visual)
 
 		obstacle_trigger.obstacle_hit.connect(_on_obstacle_hit.bindv([obstacle_trigger]))
 		spawned_obstacles.append(obstacle_trigger)
+
 		set_placement_object(
 			obstacle_path_index,
 			obstacle_lane_index,
 			"obstacle",
-			{
-				"obstacle_index": obstacle_trigger.obstacle_index,
-				"lane": obstacle_lane_index,
-			},
+			{"obstacle_index": obstacle_trigger.obstacle_index, "lane": obstacle_lane_index},
 		)
 
 	var finish_index := int(word_plan.get("finish_index", -1))
@@ -565,6 +602,19 @@ func _spawn_word_course_plan(word_plan: Dictionary, p_get_path_frame: Callable) 
 	var finish_gate := ReadingFinishGateTrigger.new() as ReadingFinishGateTrigger
 	finish_gate.position = finish_frame.get("center", Vector3.ZERO) as Vector3
 	finish_gate.rotation.y = float(finish_frame.get("heading", 0.0))
+	finish_gate.word_index = word_index
+	finish_gate.trigger_width = SEGMENT_SPACING
+	finish_gate.trigger_depth = 8.0
+	spawn_root.add_child(finish_gate)
+	finish_gate.finish_gate_reached.connect(_on_finish_reached.bindv([finish_gate]))
+	set_placement_object(finish_index, 1, "finish", {})
+
+	return {
+		"pickups": spawned_pickups,
+		"obstacles": spawned_obstacles,
+		"finish_gate": finish_gate,
+	}
+
 	finish_gate.word_index = word_index
 	finish_gate.trigger_width = SEGMENT_SPACING
 	finish_gate.trigger_depth = 8.0
@@ -782,14 +832,16 @@ func _on_obstacle_hit(_obstacle_index: int, trigger: ReadingObstacleTrigger) -> 
 	if player != null and player.is_inside_tree():
 		var player_pos := player.global_transform.origin
 		var obstacle_pos := trigger.global_transform.origin
-		var x_dist : float = abs(player_pos.x - obstacle_pos.x)
-		var z_dist : float= abs(player_pos.z - obstacle_pos.z)
+		var x_dist: float = abs(player_pos.x - obstacle_pos.x)
+		var z_dist: float = abs(player_pos.z - obstacle_pos.z)
 		var min_x := (trigger.trigger_width * 0.5) + 2.0
 		var min_z := (trigger.trigger_depth * 0.5) + 3.0
 		if x_dist > min_x or z_dist > min_z:
 			var warn_msg = "[GameplayController] Obstacle hit suppressed due player too far "
 			var detail_format = "(x=%.2f z=%.2f) trigger=(%.2f %.2f)"
-			var detail = detail_format % [x_dist, z_dist, trigger.trigger_width, trigger.trigger_depth]
+			var detail = (
+				detail_format % [x_dist, z_dist, trigger.trigger_width, trigger.trigger_depth]
+			)
 			warn_msg += detail
 			push_warning(warn_msg)
 			return

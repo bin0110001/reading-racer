@@ -14,38 +14,11 @@ const LaneChangeControllerScript = preload(
 const ReadingHUDScript = preload("res://scripts/reading/reading_hud.gd")
 const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
 
-
-class TestReadingHUD:
-	extends ReadingHUD
-
-	func flash_feedback(_text_value: String, _color: Color = Color(1.0, 1.0, 1.0)) -> void:
-		pass
-
-
-class TestPhonemePlayer:
-	extends PhonemePlayer
-
-	func stop_phoneme() -> void:
-		pass
-
-	func play_word(_stream: AudioStream) -> void:
-		pass
-
-
-class TestContentLoader:
-	extends ReadingContentLoader
-
-	func get_word_stream(_entry: Dictionary) -> AudioStream:  # gdlint: disable=unused-argument
-		return null
-
-	func get_phoneme_label(entry: Dictionary, index: int) -> String:
-		var phonemes: Array = entry.get("phonemes", []) as Array
-		if index < 0 or index >= phonemes.size():
-			return ""
-		return str(phonemes[index])
-
-
 var obstacle_hit_signaled: bool = false
+
+
+func _on_test_obstacle_hit(_duration: float) -> void:
+	obstacle_hit_signaled = true
 
 
 func _on_test_obstacle_hit(_duration: float) -> void:
@@ -77,15 +50,15 @@ func _find_lane_for_type(
 
 
 func _create_reading_mode() -> Variant:
-	return ReadingModeScript.new()
+	return ReadingMode.new()
 
 
 func _configure_reading_mode() -> Variant:
 	var reading_mode: Variant = _create_reading_mode()
-	var content_loader = TestContentLoader.new()
+	var content_loader = ReadingContentLoader.new()
 	reading_mode.movement_system = MovementSystem.new(LaneChangeController.new())
-	reading_mode.hud = TestReadingHUD.new()
-	reading_mode.phoneme_player = TestPhonemePlayer.new()
+	reading_mode.hud = ReadingHUD.new()
+	reading_mode.phoneme_player = PhonemePlayer.new()
 	reading_mode.player = Node3D.new()
 	reading_mode.vehicle_anchor = Node3D.new()
 	reading_mode.spawn_root = Node3D.new()

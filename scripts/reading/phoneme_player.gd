@@ -40,6 +40,14 @@ func stop_phoneme() -> void:
 	emit_signal("phoneme_changed", "")
 
 
+func has_active_phoneme() -> bool:
+	return _looping_phoneme and _current_label != ""
+
+
+func get_current_phoneme_label() -> String:
+	return _current_label
+
+
 func play_word(stream: AudioStream) -> void:
 	if stream == null:
 		return

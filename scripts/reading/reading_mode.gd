@@ -42,6 +42,8 @@ const ROAD_SCALE := 2.0
 const OBSTACLE_MODEL_PATH := "res://models/track-bump.glb"
 const FINISH_MODEL_PATH := "res://models/track-finish.glb"
 const DECORATION_MODEL_PATH := "res://models/decoration-forest.glb"
+const PHONEME_SMOKE_SPAWN_INTERVAL := 0.14
+const PHONEME_SMOKE_LIFETIME := 1.85
 
 # Decoration selection (weighted): empty is more common.
 const DECORATION_MODELS := [
@@ -113,6 +115,9 @@ var course_plan_summary: Dictionary = {}
 @onready var control_profile: ControlProfile = null
 @onready var debug_collision_root: Node3D = null
 var debug_draw_colliders: bool = false
+var _phoneme_smoke_root: Node3D = null
+var _phoneme_smoke_spawn_timer := 0.0
+var _phoneme_smoke_label := ""
 
 
 # Helper function to get the center Z position of the road (used consistently everywhere)
@@ -453,6 +458,10 @@ func _ready() -> void:
 	debug_collision_root.name = "DebugCollision"
 	add_child(debug_collision_root)
 
+	_phoneme_smoke_root = Node3D.new()
+	_phoneme_smoke_root.name = "PhonemeSmoke"
+	add_child(_phoneme_smoke_root)
+
 	# Start the first word in playing mode to avoid perceived 'no movement' startup wait
 	_start_next_word(false, false, true)
 	print("[ReadingMode] Initialization complete!")
@@ -585,6 +594,8 @@ func _physics_process(delta: float) -> void:
 
 	if debug_draw_colliders:
 		_update_debug_collision_visuals()
+
+	_update_phoneme_smoke(delta)
 
 	_ensure_road_ahead()
 	_update_status()
@@ -1113,6 +1124,7 @@ func _on_phoneme_changed(label: String) -> void:
 
 
 func _on_gameplay_pickup_collected(letter: String, phoneme_label: String) -> void:
+	_phoneme_smoke_label = letter.to_lower().strip_edges()
 	var resolved_label := phoneme_label
 	if resolved_label == "":
 		resolved_label = letter.to_lower()
@@ -1146,6 +1158,9 @@ func _on_gameplay_pickup_collected(letter: String, phoneme_label: String) -> voi
 
 	# Update HUD phoneme text immediately (important for tests and direct event calls)
 	_on_phoneme_changed(resolved_label)
+	_phoneme_smoke_spawn_timer = 0.0
+	if not _phoneme_smoke_label.is_empty():
+		_spawn_phoneme_smoke_letter(_phoneme_smoke_label)
 	hud.flash_feedback(letter, Color(1.0, 0.94, 0.45))
 
 
@@ -1171,3 +1186,64 @@ func _update_help_text() -> void:
 		hud.set_help("Arrow keys/WASD to steer and throttle   Esc/Tab: options")
 	else:
 		hud.set_help("Left/Right or A/D to switch lanes   Esc/Tab: options")
+
+
+func _update_phoneme_smoke(delta: float) -> void:
+	if phoneme_player == null or movement_system == null:
+		return
+
+	if not phoneme_player.has_active_phoneme():
+		_phoneme_smoke_spawn_timer = 0.0
+		return
+
+	if _phoneme_smoke_label.is_empty():
+		return
+
+	_phoneme_smoke_spawn_timer += delta
+	while _phoneme_smoke_spawn_timer >= PHONEME_SMOKE_SPAWN_INTERVAL:
+		_phoneme_smoke_spawn_timer -= PHONEME_SMOKE_SPAWN_INTERVAL
+		_spawn_phoneme_smoke_letter(_phoneme_smoke_label)
+
+
+func _spawn_phoneme_smoke_letter(label: String) -> void:
+	if label.is_empty():
+		return
+	if _phoneme_smoke_root == null:
+		_phoneme_smoke_root = Node3D.new()
+		_phoneme_smoke_root.name = "PhonemeSmoke"
+		add_child(_phoneme_smoke_root)
+
+	var smoke_label := Label3D.new()
+	smoke_label.text = label
+	smoke_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	smoke_label.font_size = 72
+	smoke_label.outline_size = 8
+	smoke_label.modulate = Color(0.95, 0.95, 0.95, 0.82)
+	smoke_label.position = Vector3.ZERO
+	smoke_label.scale = Vector3.ONE * rng.randf_range(0.85, 1.1)
+	_phoneme_smoke_root.add_child(smoke_label)
+
+	var player_basis := movement_system.get_player_basis() if movement_system else Basis.IDENTITY
+	var forward := player_basis.z.normalized()
+	if forward.length_squared() == 0.0:
+		forward = Vector3.RIGHT
+	var right := player_basis.x.normalized()
+	if right.length_squared() == 0.0:
+		right = Vector3.FORWARD
+
+	var spawn_position := player.global_position if player != null else Vector3.ZERO
+	spawn_position += (-forward * 1.8) + Vector3.UP * 0.85 + right * rng.randf_range(-0.35, 0.35)
+	smoke_label.global_position = spawn_position
+
+	var drift_target := spawn_position
+	drift_target += -forward * rng.randf_range(1.8, 3.1)
+	drift_target += Vector3.UP * rng.randf_range(2.4, 3.8)
+	drift_target += right * rng.randf_range(-0.9, 0.9)
+
+	if is_inside_tree():
+		var tween := create_tween()
+		tween.set_parallel(true)
+		tween.tween_property(smoke_label, "global_position", drift_target, PHONEME_SMOKE_LIFETIME)
+		tween.tween_property(smoke_label, "modulate:a", 0.0, PHONEME_SMOKE_LIFETIME)
+		tween.tween_property(smoke_label, "scale", smoke_label.scale * 1.18, PHONEME_SMOKE_LIFETIME)
+		tween.finished.connect(smoke_label.queue_free)

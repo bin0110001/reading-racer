@@ -205,6 +205,28 @@ func test_reading_mode_plays_phoneme_for_pickup() -> void:
 	assert_that(reading_mode.hud._phoneme_label.text).is_equal_to("Phoneme: b")
 
 
+func test_reading_mode_spawns_phoneme_smoke_letters() -> void:
+	var reading_mode: Variant = _configure_reading_mode()
+	reading_mode.player = Node3D.new()
+	reading_mode.phoneme_player = PhonemePlayer.new()
+	reading_mode.content_loader = ReadingContentLoader.new()
+
+	reading_mode._on_gameplay_pickup_collected("ch", "")
+
+	assert_that(reading_mode._phoneme_smoke_root).is_not_null()
+	assert_that(reading_mode._phoneme_smoke_root.get_child_count()).is_equal(1)
+	var smoke_label := reading_mode._phoneme_smoke_root.get_child(0) as Label3D
+	assert_that(smoke_label).is_not_null()
+	assert_that(smoke_label.text).is_equal_to("ch")
+
+	reading_mode.phoneme_player._looping_phoneme = true
+	reading_mode.phoneme_player._current_label = "ch"
+	reading_mode._phoneme_smoke_label = "ch"
+	reading_mode._phoneme_smoke_spawn_timer = reading_mode.PHONEME_SMOKE_SPAWN_INTERVAL
+	reading_mode._update_phoneme_smoke(0.0)
+	assert_that(reading_mode._phoneme_smoke_root.get_child_count()).is_greater_equal(2)
+
+
 func test_reading_mode_does_not_teleport_at_end_of_word() -> void:
 	var reading_mode: Variant = _configure_reading_mode()
 	var layout = TrackLayoutScript.new()

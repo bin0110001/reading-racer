@@ -21,10 +21,6 @@ func _on_test_obstacle_hit(_duration: float) -> void:
 	obstacle_hit_signaled = true
 
 
-func _on_test_obstacle_hit(_duration: float) -> void:
-	obstacle_hit_signaled = true
-
-
 func _get_test_path_frame(path_index: int) -> Dictionary:
 	return {
 		"center": Vector3(float(path_index) * 10.0, 0.0, 0.0),

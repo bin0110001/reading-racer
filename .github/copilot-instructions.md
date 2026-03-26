@@ -2,7 +2,7 @@ Path to Godot:
 
     D:\Gadot\Godot_v4.6-stable_mono_win64\Godot_v4.6-stable_mono_win64\Godot_v4.6-stable_mono_win64.exe
 
-
+****Important: If GDUnit results.xml missing fix it. Never dismiss it as an unrelated issue.**
 
 After updating a GDScript file, run the repository helper script to parse, lint, check formatting, validate with Godot, and test scenes all at once.
 

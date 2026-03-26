@@ -36,7 +36,7 @@ func play_looping_phoneme(label: String, stream: AudioStream) -> void:
 	_word_player.stop()
 	_phoneme_player.stop()
 	_phoneme_player.stream = looping_stream
-	_phoneme_player.volume_db = linear_to_db(1.35)
+	_phoneme_player.volume_db = 0.0
 	_phoneme_player.play()
 
 

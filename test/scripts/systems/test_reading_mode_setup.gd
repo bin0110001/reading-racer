@@ -51,7 +51,7 @@ func _get_cornered_test_path_frame(path_index: int) -> Dictionary:
 	]
 	var current_index := clampi(path_index, 0, centers.size() - 1)
 	var next_index := clampi(path_index + 1, 0, centers.size() - 1)
-	var forward := (centers[next_index] - centers[current_index]).normalized()
+	var forward: Vector3 = (centers[next_index] - centers[current_index]).normalized()
 	if forward.length_squared() == 0.0:
 		forward = Vector3.RIGHT
 	return {

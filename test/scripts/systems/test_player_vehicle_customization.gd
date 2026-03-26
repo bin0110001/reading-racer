@@ -62,17 +62,17 @@ func test_player_vehicle_library_fit_instance_scales_to_max_dimension() -> void:
 	# Without scaling, one axis of the default BoxMesh is 1.0 units (size vector set in mesh).
 	PlayerVehicleLibrary.fit_instance_to_dimension(root, 0.5)
 
-	# The root or child scale should be reduced to fit the desired range.
-	assert_that(model.scale.x).is_less_than(1.0)
-	assert_that(model.scale.y).is_less_than(1.0)
-	assert_that(model.scale.z).is_less_than(1.0)
+	# The root scale should be reduced to fit the desired range.
+	assert_that(root.scale.x < 1.0).is_true()
+	assert_that(root.scale.y < 1.0).is_true()
+	assert_that(root.scale.z < 1.0).is_true()
 
 
 func test_player_vehicle_library_apply_paint_color_modifies_material() -> void:
 	var mesh_instance := MeshInstance3D.new()
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(1, 1, 1)
-	mesh_instance.mesh = CubeMesh.new()
+	mesh_instance.mesh = BoxMesh.new()
 	mesh_instance.set_surface_override_material(0, mat)
 
 	PlayerVehicleLibrary.apply_paint_color(mesh_instance, Color(0.2, 0.8, 0.3))

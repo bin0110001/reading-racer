@@ -117,19 +117,31 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 
 	var config_button: Button = level_scene.get_node("Panel/VBoxContainer/ConfigButton")
 	var start_button: Button = level_scene.get_node("Panel/VBoxContainer/StartButton")
-	var config_page: Control = level_scene.get_node("ConfigPage")
+	var config_page: Control = level_scene.get_node_or_null("ConfigPage")
+	if config_page == null:
+		# Godot 4 removed Node.find_node(); use full traversal fallback.
+		func _find_node_recursive(node: Node, target_name: String) -> Node:
+			if node.name == target_name:
+				return node
+			for child in node.get_children():
+				var found = _find_node_recursive(child, target_name)
+				if found != null:
+					return found
+			return null
+
+		config_page = _find_node_recursive(level_scene, "ConfigPage") as Control
 
 	assert_that(config_button).is_not_null()
 	assert_that(start_button).is_not_null()
 	assert_that(config_page).is_not_null()
 
 	# Open and close configuration panel
-	config_button.press()
+	config_button.emit_signal("pressed")
 	await level_runner.simulate_frames(1)
 	assert_that(config_page.visible).is_true()
 
 	var cancel_button: Button = level_scene.get_node("ConfigPage/VBoxContainer/CancelButton")
-	cancel_button.press()
+	cancel_button.emit_signal("pressed")
 	await level_runner.simulate_frames(1)
 	assert_that(config_page.visible).is_false()
 
@@ -137,7 +149,7 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 	assert_that(level_scene.has_method("_on_start_pressed")).is_true()
 
 	# Simulate user pressing Start Race and validate scene transition to ReadingMode
-	start_button.press()
+	start_button.emit_signal("pressed")
 	await level_runner.simulate_frames(5, 100)
 
 	var tree_current_scene = level_scene.get_tree().current_scene
@@ -154,3 +166,74 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 	await reading_runner.simulate_frames(10, 100)
 	assert_that(reading_runner.scene()).is_not_null()
 	assert_that(reading_runner.scene().is_inside_tree()).is_true()
+
+
+func test_level_select_holiday_settings_flow() -> void:
+	"""Test opening config, setting holiday to Christmas, and restoring settings."""
+	var settings_store = ReadingSettingsStore.new()
+	var original_settings = settings_store.load_settings()
+
+	var runner = _create_scene_runner(LEVEL_SELECT_SCENE)
+	await runner.simulate_frames(2)
+	var level_scene = runner.scene()
+	assert_that(level_scene).is_not_null()
+
+	var config_button: Button = level_scene.get_node("Panel/VBoxContainer/ConfigButton")
+	var config_page: Control = level_scene.get_node_or_null("ConfigPage")
+	if config_page == null:
+		config_page = level_scene.find_child("ConfigPage", true, false) as Control
+	var holiday_mode_option: OptionButton = level_scene.get_node(
+		"ConfigPage/VBoxContainer/OptionsContainer/HolidayModeOption"
+	)
+	var holiday_name_option: OptionButton = level_scene.get_node(
+		"ConfigPage/VBoxContainer/OptionsContainer/HolidayNameOption"
+	)
+	var save_button: Button = level_scene.get_node("ConfigPage/VBoxContainer/SaveButton")
+
+	assert_that(config_page.visible).is_false()
+	config_button.emit_signal("pressed")
+	await runner.simulate_frames(1)
+	assert_that(config_page.visible).is_true()
+
+	var holiday_on_idx = ReadingSettingsStore.HOLIDAY_MODES.find(
+		ReadingSettingsStore.HOLIDAY_MODE_ON
+	)
+	var christmas_idx = ReadingSettingsStore.HOLIDAY_OPTIONS.find(
+		ReadingSettingsStore.HOLIDAY_CHRISTMAS
+	)
+	assert_that(holiday_on_idx).is_greater_than_or_equal(0)
+	assert_that(christmas_idx).is_greater_than_or_equal(0)
+
+	holiday_mode_option.select(holiday_on_idx)
+	holiday_name_option.select(christmas_idx)
+	save_button.emit_signal("pressed")
+	await runner.simulate_frames(1)
+	assert_that(config_page.visible).is_false()
+
+	var settings = settings_store.load_settings()
+	assert_that(settings.get("holiday_mode")).is_equal(ReadingSettingsStore.HOLIDAY_MODE_ON)
+	assert_that(settings.get("holiday_name")).is_equal(ReadingSettingsStore.HOLIDAY_CHRISTMAS)
+	assert_that(ReadingSettingsStore.new().resolve_effective_holiday(settings)).is_equal(
+		ReadingSettingsStore.HOLIDAY_CHRISTMAS
+	)
+	print("[TEST] Christmas holiday mode active: no spawnables yet, verify by log")
+
+	# restore previous settings
+	config_button.emit_signal("pressed")
+	await runner.simulate_frames(1)
+	assert_that(config_page.visible).is_true()
+	var none_idx = ReadingSettingsStore.HOLIDAY_OPTIONS.find(ReadingSettingsStore.HOLIDAY_NONE)
+	var auto_idx = ReadingSettingsStore.HOLIDAY_MODES.find(ReadingSettingsStore.HOLIDAY_MODE_AUTO)
+	assert_that(none_idx).is_greater_than_or_equal(0)
+	assert_that(auto_idx).is_greater_than_or_equal(0)
+
+	holiday_mode_option.select(auto_idx)
+	holiday_name_option.select(none_idx)
+	save_button.emit_signal("pressed")
+	await runner.simulate_frames(1)
+	assert_that(settings_store.load_settings().get("holiday_mode")).is_equal(
+		ReadingSettingsStore.HOLIDAY_MODE_AUTO
+	)
+
+	# persist original settings to avoid side effects for other tests or dev env
+	settings_store.save_settings(original_settings)

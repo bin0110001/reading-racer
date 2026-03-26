@@ -12,18 +12,14 @@ const SCENE_PATHS = [
 func test_all_scenes_load_without_errors() -> void:
 	"""Smoke test: verify all project scenes can be instantiated."""
 	for scene_path in SCENE_PATHS:
-		assert_that(ResourceLoader.exists(scene_path)).is_true(
-			"Scene %s does not exist" % scene_path
-		)
+		assert_that(ResourceLoader.exists(scene_path)).is_true()
 
 		var scene = load(scene_path)
-		assert_that(scene).is_not_null("Failed to load scene: %s" % scene_path)
-		assert_that(scene is PackedScene).is_true(
-			"Resource at %s is not a PackedScene" % scene_path
-		)
+		assert_that(scene).is_not_null()
+		assert_that(scene is PackedScene).is_true()
 
 		var instance = scene.instantiate()
-		assert_that(instance).is_not_null("Failed to instantiate scene: %s" % scene_path)
+		assert_that(instance).is_not_null()
 		instance.queue_free()
 
 

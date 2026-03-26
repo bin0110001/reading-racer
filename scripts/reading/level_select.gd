@@ -46,6 +46,9 @@ func _ready() -> void:
 	_populate_level_grid()
 	_populate_options()
 	_load_settings()
+	if config_page == null:
+		# tolerate scene node naming variations (LevelSelect#ConfigPage etc.)
+		config_page = find_child("ConfigPage", true, false) as Control
 	if start_button:
 		start_button.pressed.connect(_on_start_pressed)
 	if config_button:
@@ -122,8 +125,10 @@ func _build_vehicle_customizer() -> void:
 	var preview_camera := Camera3D.new()
 	preview_camera.current = true
 	preview_camera.position = Vector3(0.0, 2.1, 7.2)
-	preview_camera.look_at(Vector3(0.0, 1.1, 0.0), Vector3.UP)
 	vehicle_preview_root.add_child(preview_camera)
+	preview_camera.look_at_from_position(
+		preview_camera.position, Vector3(0.0, 1.1, 0.0), Vector3.UP
+	)
 
 	var controls_panel := VBoxContainer.new()
 	controls_panel.custom_minimum_size = Vector2(280, 0)

@@ -49,6 +49,7 @@ func _build_hud() -> void:
 	_word_label.offset_right = 180
 	_word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_word_label.add_theme_font_size_override("font_size", 34)
+	_word_label.add_theme_color_override("font_color", Color.BLACK)
 	add_child(_word_label)
 
 	_phoneme_label.anchor_left = 0.5
@@ -58,6 +59,7 @@ func _build_hud() -> void:
 	_phoneme_label.offset_right = 160
 	_phoneme_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_phoneme_label.add_theme_font_size_override("font_size", 28)
+	_phoneme_label.add_theme_color_override("font_color", Color.BLACK)
 	add_child(_phoneme_label)
 
 	_help_label.anchor_left = 0.02

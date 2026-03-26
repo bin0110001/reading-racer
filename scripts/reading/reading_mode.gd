@@ -287,23 +287,63 @@ func _get_word_anchor(word_index: int) -> Dictionary:
 func _setup_simple_skybox() -> void:
 	var env_node: WorldEnvironment = $Environment
 	if env_node == null or env_node.environment == null:
-		push_warning("[ReadingMode] No WorldEnvironment found; cannot set SimpleSky.")
+		push_warning("[ReadingMode] No WorldEnvironment found; cannot set skybox.")
 		return
 
-	var sky_material = load("res://Assets/SimpleSky/Materials/SimpleSky.material")
-	if sky_material == null:
-		push_warning("[ReadingMode] SimpleSky material not found at path; using existing sky.")
+	# Use default_sky.tres first (preferred), then Procedural fallback.
+	var target_env = env_node.environment
+	if target_env == null:
+		push_warning("[ReadingMode] No active WorldEnvironment; cannot apply sky.")
 		return
 
-	var sky = Sky.new()
-	if sky == null:
-		push_warning("[ReadingMode] Unable to create Sky resource.")
+	var default_sky = load("res://models/default_sky.tres")
+	if default_sky is Sky:
+		target_env.sky = default_sky
+		target_env.background_mode = Environment.BG_SKY
+		target_env.tonemap_exposure = 1.1
+		target_env.ambient_light_color = Color(0.72, 0.78, 0.88, 1)
+		target_env.ambient_light_energy = 1.25
+		target_env.fog_enabled = false
+		target_env.background_color = Color(0.15, 0.65, 0.95, 1)
+		print("[ReadingMode] default_sky.tres applied.")
 		return
 
-	sky.sky_material = sky_material
-	env_node.environment.background_mode = Environment.BG_SKY
-	env_node.environment.sky = sky
-	print("[ReadingMode] SimpleSky skybox applied.")
+	# default_sky not available: use procedural fallback.
+	var proc_sky_mat2 = ProceduralSkyMaterial.new()
+	proc_sky_mat2.sky_top_color = Color(0.05, 0.52, 0.98, 1)
+	proc_sky_mat2.sky_horizon_color = Color(0.24, 0.85, 0.6, 1)
+	proc_sky_mat2.sky_curve = 0.008  # reduces gray transition zone
+	proc_sky_mat2.ground_bottom_color = Color(0.2, 0.98, 0.45, 1)
+	proc_sky_mat2.ground_curve = 0.04
+	var procedural_sky2 = Sky.new()
+	procedural_sky2.sky_material = proc_sky_mat2
+	target_env.sky = procedural_sky2
+	target_env.background_mode = Environment.BG_SKY
+	target_env.tonemap_exposure = 1.1
+	target_env.ambient_light_color = Color(0.72, 0.78, 0.88, 1)
+	target_env.ambient_light_energy = 1.25
+	target_env.fog_enabled = false
+	target_env.background_color = Color(0.15, 0.65, 0.95, 1)
+	print("[ReadingMode] Procedural spherical-like sky applied (default_sky fallback).")
+	return
+
+	# Fallback: strong procedural sky with green lower band.
+	var proc_sky_mat = ProceduralSkyMaterial.new()
+	proc_sky_mat.sky_top_color = Color(0.06, 0.45, 0.95, 1)
+	proc_sky_mat.sky_horizon_color = Color(0.35, 0.83, 0.6, 1)
+	proc_sky_mat.sky_curve = 0.02
+	proc_sky_mat.ground_bottom_color = Color(0.3, 0.95, 0.57, 1)
+	proc_sky_mat.ground_curve = 0.1
+
+	var procedural_sky = Sky.new()
+	procedural_sky.sky_material = proc_sky_mat
+
+	target_env.sky = procedural_sky
+	target_env.background_mode = Environment.BG_SKY
+	target_env.tonemap_exposure = 1.1
+	target_env.ambient_light_color = Color(0.72, 0.78, 0.88, 1)
+	target_env.ambient_light_energy = 1.25
+	print("[ReadingMode] Procedural sky applied as fallback.")
 
 
 func _ready() -> void:
@@ -346,7 +386,7 @@ func _ready() -> void:
 	phoneme_player.phoneme_changed.connect(_on_phoneme_changed)
 	print("[ReadingMode] HUD configured with group: %s" % requested_group)
 
-	# Set up skybox from SimpleSky material
+	# Set up skybox from project-native environment configuration
 	_setup_simple_skybox()
 
 	# Initialize track generator
@@ -619,13 +659,11 @@ func _create_debug_box(size: Vector3, transform: Transform3D, color: Color) -> M
 
 	var material = StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = color
+	material.albedo_color = Color(color.r, color.g, color.b, 0.25)
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.transparency_enabled = true
-	material.albedo_color = color
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 	material.emission = color
 	material.emission_enabled = true
-	material.opacity = 0.25
 	mesh_instance.material_override = material
 
 	return mesh_instance

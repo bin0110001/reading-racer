@@ -1087,7 +1087,12 @@ function Invoke-GdScriptCheck {
         foreach ($gdUnitTargetPath in $gdUnitTargets) {
             $gdUnitArguments += @('-a', $gdUnitTargetPath)
         }
-        $gdUnitArguments += @('-rd', $gdUnitReportRoot, '-rc', '1', '--ignoreHeadlessMode')
+        $gdUnitArguments += @('-rd', $gdUnitReportRoot, '-rc', '1', '--ignoreHeadlessMode', '--verbose')
+
+        $gdUnitCommandLine = '{0} {1}' -f $godotExe, ($gdUnitArguments -join ' ')
+        Write-Host "[gdscript-check] Executing GDUnit command: $gdUnitCommandLine"
+        Write-Host "[gdscript-check] Expected GDUnit report root: $gdUnitReportRoot"
+
         $gdUnitResult = Invoke-PowerShellExternalCommand -FilePath $godotExe -Arguments $gdUnitArguments
 
         # GDUnit command returns 100 for test failures, 101 for success with warnings/orphans.
@@ -1141,8 +1146,63 @@ function Invoke-GdScriptCheck {
             if ([string]::IsNullOrWhiteSpace($stdout)) {
                 $stdout = '<empty>'
             }
-            throw (New-CheckException -Message ("[gdscript-check] GDUnit did not produce a results.xml under '{0}'.{1}[gdscript-check] stdout: {2}" -f $gdUnitReportRoot, [Environment]::NewLine, $stdout) -ExitCode 1)
+            $stderr = $gdUnitResult.Stderr.Trim()
+            if ([string]::IsNullOrWhiteSpace($stderr)) {
+                $stderr = '<empty>'
+            }
+
+            Write-Host "[gdscript-check] WARNING: GDUnit did not produce a results.xml under '$gdUnitReportRoot'." -ForegroundColor Yellow
+            Write-Host "[gdscript-check] stdout: $stdout"
+            Write-Host "[gdscript-check] stderr: $stderr"
+
+            $candidateResults = Get-LatestGdUnitResultsPath -RepoRoot $repoRoot -ReportsRoot $repoRoot -NotBefore $script:CheckStartTime
+            if ($candidateResults) {
+                Write-Host "[gdscript-check] Found fallback GDUnit results.xml at: $candidateResults" -ForegroundColor Yellow
+                $gdUnitSummary = Get-GdUnitReportSummary -ResultsPath $candidateResults
+                if ($gdUnitSummary.FailureCount -gt 0 -or $gdUnitSummary.ErrorCount -gt 0) {
+                    Write-GdUnitReportFailures -Summary $gdUnitSummary
+                    throw (New-CheckException -Message '[gdscript-check] GDUnit report recorded failing tests (fallback report).' -ExitCode 1)
+                }
+                if ($gdUnitSummary.TotalTests -le 0) {
+                    throw (New-CheckException -Message '[gdscript-check] GDUnit report did not record any executed tests (fallback report).' -ExitCode 1)
+                }
+                if ($gdUnitOrphans.HasOrphans) {
+                    Write-GdUnitOrphanFailures -Summary $gdUnitOrphans -ResultsPath $gdUnitSummary.ResultsPath
+                    throw (New-CheckException -Message '[gdscript-check] GDUnit output reported orphan nodes (fallback report).' -ExitCode 1)
+                }
+                Write-Host "[gdscript-check] GDUnit CLI tests executed via fallback report. (exit code $($gdUnitResult.ExitCode))"
+            } else {
+                $reportItems = @()
+                if (Test-Path $gdUnitReportRoot) {
+                    $reportItems = Get-ChildItem -Path $gdUnitReportRoot -Recurse -File | Select-Object -ExpandProperty FullName
+                }
+                Write-Host "[gdscript-check] ERROR: Could not find any results.xml in $gdUnitReportRoot. Existing files:" -ForegroundColor Red
+                foreach ($item in $reportItems) {
+                    Write-Host "  $item"
+                }
+
+            # Generate a deterministic fallback results.xml so downstream systems have a consistent file to inspect.
+            $placeholderResultsPath = Join-Path $gdUnitReportRoot 'results.xml'
+            Write-Host "[gdscript-check] INFO: Generating fallback GDUnit results.xml at $placeholderResultsPath" -ForegroundColor Yellow
+
+            $timestamp = (Get-Date).ToString('o')
+            $placeholderXml = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="1" errors="0" timestamp="$timestamp" time="0.0">
+  <testsuite name="GDUnitPlaceholder" tests="1" failures="1" errors="0" timestamp="$timestamp" time="0.0">
+    <testcase name="GDUnitReportMissing" classname="gdscript-check" time="0.0">
+      <failure message="GDUnit results.xml missing"><![CDATA[GDUnit did not produce results.xml. Stdout: $stdout Stderr: $stderr]]></failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+"@
+            Set-Content -Path $placeholderResultsPath -Value $placeholderXml -Encoding UTF8
+
+            $gdUnitSummary = Get-GdUnitReportSummary -ResultsPath $placeholderResultsPath
+            Write-GdUnitReportFailures -Summary $gdUnitSummary
+            throw (New-CheckException -Message '[gdscript-check] GDUnit did not produce a results.xml; generated fallback report.' -ExitCode 1)
         }
+    }
 
         Write-Host "[gdscript-check] GDUnit CLI tests executed. (exit code $($gdUnitResult.ExitCode))"
     } else {

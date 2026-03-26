@@ -85,6 +85,20 @@ func test_get_phoneme_stream_for_label_fallback() -> void:
 	assert_that(stream).is_not_null()
 
 
+func test_get_phoneme_stream_normalizes_long_vowel_aliases() -> void:
+	var loader: ReadingContentLoader = ReadingContentLoader.new()
+
+	var i_stream = loader.get_phoneme_stream("iː")
+	assert_that(i_stream).is_not_null()
+	if i_stream != null:
+		assert_that(i_stream.resource_path).is_equal_to("res://audio/phenomes/i!.wav")
+
+	var u_stream = loader.get_phoneme_stream("uː")
+	assert_that(u_stream).is_not_null()
+	if u_stream != null:
+		assert_that(u_stream.resource_path).is_equal_to("res://audio/phenomes/u!.wav")
+
+
 func test_load_word_entries_csv_breakdown_is_used() -> void:
 	var loader: ReadingContentLoader = ReadingContentLoader.new()
 	var entries: Array[Dictionary] = loader.load_word_entries("sightwords")

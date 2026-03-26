@@ -48,8 +48,11 @@ func test_phoneme_player_leaves_source_stream_unmodified_when_looping() -> void:
 	phoneme_player.play_looping_phoneme("b", source_stream)
 
 	assert_that(source_stream.loop_mode).is_equal(AudioStreamWAV.LOOP_DISABLED)
-	assert_that((phoneme_player._phoneme_player.stream as AudioStreamWAV).loop_mode).is_equal(
-		AudioStreamWAV.LOOP_FORWARD
+	assert_that(phoneme_player._phoneme_player.stream).is_same(source_stream)
+	var finished_connection := Callable(phoneme_player, "_on_phoneme_player_finished")
+	(
+		assert_that(phoneme_player._phoneme_player.is_connected("finished", finished_connection))
+		. is_true()
 	)
 
 

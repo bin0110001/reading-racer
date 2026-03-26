@@ -23,21 +23,18 @@ var vehicle_preview_instance: Node3D = null
 @onready var grid_container: GridContainer = $Panel/VBoxContainer/GridContainer
 @onready var start_button: Button = $Panel/VBoxContainer/StartButton
 @onready var config_button: Button = $Panel/VBoxContainer/ConfigButton
-@onready var config_page: Control = get_node_or_null("ConfigPage")
-@onready var steering_option: OptionButton = get_node_or_null(
-	"ConfigPage/VBoxContainer/OptionsContainer/SteeringOption"
+@onready var config_page: Control = _find_node_by_name_token(self, "ConfigPage") as Control
+@onready
+var steering_option: OptionButton = _find_node_by_name_token(self, "SteeringOption") as OptionButton
+@onready var map_option: OptionButton = _find_node_by_name_token(self, "MapOption") as OptionButton
+@onready var holiday_mode_option: OptionButton = (
+	_find_node_by_name_token(self, "HolidayModeOption") as OptionButton
 )
-@onready var map_option: OptionButton = get_node_or_null(
-	"ConfigPage/VBoxContainer/OptionsContainer/MapOption"
+@onready var holiday_name_option: OptionButton = (
+	_find_node_by_name_token(self, "HolidayNameOption") as OptionButton
 )
-@onready var holiday_mode_option: OptionButton = get_node_or_null(
-	"ConfigPage/VBoxContainer/OptionsContainer/HolidayModeOption"
-)
-@onready var holiday_name_option: OptionButton = get_node_or_null(
-	"ConfigPage/VBoxContainer/OptionsContainer/HolidayNameOption"
-)
-@onready var save_button: Button = get_node_or_null("ConfigPage/VBoxContainer/SaveButton")
-@onready var cancel_button: Button = get_node_or_null("ConfigPage/VBoxContainer/CancelButton")
+@onready var save_button: Button = _find_node_by_name_token(self, "SaveButton") as Button
+@onready var cancel_button: Button = _find_node_by_name_token(self, "CancelButton") as Button
 
 
 func _ready() -> void:
@@ -46,9 +43,6 @@ func _ready() -> void:
 	_populate_level_grid()
 	_populate_options()
 	_load_settings()
-	if config_page == null:
-		# tolerate scene node naming variations (LevelSelect#ConfigPage etc.)
-		config_page = find_child("ConfigPage", true, false) as Control
 	if start_button:
 		start_button.pressed.connect(_on_start_pressed)
 	if config_button:
@@ -344,3 +338,14 @@ func _on_cancel_pressed() -> void:
 	if config_page:
 		config_page.visible = false
 		$Panel.visible = true
+
+
+func _find_node_by_name_token(node: Node, token: String) -> Node:
+	if node.name.find(token) >= 0:
+		return node
+	for child in node.get_children():
+		if child is Node:
+			var found = _find_node_by_name_token(child, token)
+			if found != null:
+				return found
+	return null

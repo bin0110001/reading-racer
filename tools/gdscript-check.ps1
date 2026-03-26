@@ -538,47 +538,35 @@ function Get-GdUnitTargetResPaths {
         return $targets.ToArray()
     }
 
-    $testResPaths = @($TestFiles | ForEach-Object { Convert-ToResPath -RepoRoot $RepoRoot -FilePath $_ })
-    if ($testResPaths.Count -eq 0) {
-        return [string[]]@()
-    }
-
-    foreach ($preferredRoot in @('res://test/scripts', 'res://tests/scripts', 'res://test', 'res://tests')) {
-        $prefix = $preferredRoot + '/'
-        $matchingPaths = @($testResPaths | Where-Object { $_ -eq $preferredRoot -or $_.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) })
-        if ($matchingPaths.Count -gt 0) {
-            $alreadyCovered = $true
-            foreach ($matchingPath in $matchingPaths) {
-                $coveredByExistingTarget = $false
-                foreach ($target in $targets) {
-                    if ($matchingPath -eq $target -or $matchingPath.StartsWith($target + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
-                        $coveredByExistingTarget = $true
-                        break
-                    }
-                }
-                if (-not $coveredByExistingTarget) {
-                    $alreadyCovered = $false
-                    break
-                }
-            }
-
-            if (-not $alreadyCovered -and $seen.Add($preferredRoot)) {
-                $targets.Add($preferredRoot)
-            }
+    $testDirectories = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($testFile in @($TestFiles)) {
+        $testDirectory = Split-Path -Parent $testFile
+        if ([string]::IsNullOrWhiteSpace($testDirectory)) {
+            continue
+        }
+        $testDirectoryResPath = Convert-ToResPath -RepoRoot $RepoRoot -FilePath $testDirectory
+        if ($testDirectoryResPath.StartsWith('res://test/', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $testDirectoryResPath.StartsWith('res://tests/', [System.StringComparison]::OrdinalIgnoreCase)) {
+            [void]$testDirectories.Add($testDirectoryResPath)
         }
     }
 
-    foreach ($testResPath in ($testResPaths | Sort-Object)) {
-        $isCovered = $false
+    if ($testDirectories.Count -eq 0) {
+        return [string[]]@()
+    }
+
+    $orderedDirectories = @($testDirectories | Sort-Object { $_.Length } -Descending)
+    foreach ($testDirectoryResPath in $orderedDirectories) {
+        $isCoveredByExistingTarget = $false
         foreach ($target in $targets) {
-            if ($testResPath -eq $target -or $testResPath.StartsWith($target + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
-                $isCovered = $true
+            if ($target.StartsWith($testDirectoryResPath + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
+                $isCoveredByExistingTarget = $true
                 break
             }
         }
 
-        if (-not $isCovered -and $seen.Add($testResPath)) {
-            $targets.Add($testResPath)
+        if (-not $isCoveredByExistingTarget -and $seen.Add($testDirectoryResPath)) {
+            $targets.Add($testDirectoryResPath)
         }
     }
 
@@ -930,7 +918,7 @@ function Wait-ForFreshGdUnitResultsPath {
         [string]$ReportsRoot = $null,
         [string]$PreviousResultsPath = $null,
         [datetime]$PreviousWriteTime = [datetime]::MinValue,
-        [int]$TimeoutMilliseconds = 15000
+        [int]$TimeoutMilliseconds = 60000
     )
 
     $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)

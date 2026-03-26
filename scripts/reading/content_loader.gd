@@ -203,8 +203,15 @@ func _sort_entries(a: Dictionary, b: Dictionary) -> bool:
 	return str(a["text"]) < str(b["text"])
 
 
-func get_phoneme_stream(phoneme_alias: String) -> AudioStream:
+func _normalize_phoneme_alias(phoneme_alias: String) -> String:
 	var normalized_alias: String = str(phoneme_alias).strip_edges().to_lower()
+	normalized_alias = normalized_alias.replace("/", "")
+	normalized_alias = normalized_alias.replace("ː", "!")
+	return normalized_alias
+
+
+func get_phoneme_stream(phoneme_alias: String) -> AudioStream:
+	var normalized_alias: String = _normalize_phoneme_alias(phoneme_alias)
 	var resolved_path: String = _phoneme_paths.get(normalized_alias, "") as String
 	if resolved_path.is_empty():
 		return null

@@ -2,21 +2,41 @@
 ## Phase 2-3: Comprehensive scene validation using Scene Runner
 extends GdUnitTestSuite
 
-const MAIN_SCENE = preload("res://scenes/main.tscn")
-const LEVEL_SELECT_SCENE = preload("res://scenes/level_select.tscn")
-const READING_MODE_SCENE = preload("res://scenes/reading_mode.tscn")
+const MAIN_SCENE_PATH = "res://scenes/main.tscn"
+const LEVEL_SELECT_SCENE_PATH = "res://scenes/level_select.tscn"
+const READING_MODE_SCENE_PATH = "res://scenes/reading_mode.tscn"
 
 
-func _create_scene_runner(packed_scene: PackedScene) -> GdUnitSceneRunner:
-	assert_that(packed_scene).is_not_null()
-	var instance := packed_scene.instantiate()
-	assert_that(instance).is_not_null()
-	return scene_runner(instance)
+func _create_scene_runner(scene_path: String) -> GdUnitSceneRunner:
+	assert_that(scene_path).is_not_empty()
+	return scene_runner(scene_path)
+
+
+func _find_node_recursive(node: Node, target_name: String) -> Node:
+	if node.name == target_name:
+		return node
+	for child in node.get_children():
+		if child is Node:
+			var found = _find_node_recursive(child, target_name)
+			if found != null:
+				return found
+	return null
+
+
+func _find_node_by_name_token(node: Node, token: String) -> Node:
+	if node.name.find(token) >= 0:
+		return node
+	for child in node.get_children():
+		if child is Node:
+			var found = _find_node_by_name_token(child, token)
+			if found != null:
+				return found
+	return null
 
 
 func test_main_scene_with_scene_runner() -> void:
 	"""Test main.tscn initialization and basic scene validity."""
-	var runner = _create_scene_runner(MAIN_SCENE)
+	var runner = _create_scene_runner(MAIN_SCENE_PATH)
 
 	# Verify scene loaded correctly
 	assert_that(runner).is_not_null()
@@ -32,7 +52,7 @@ func test_main_scene_with_scene_runner() -> void:
 
 func test_level_select_scene_with_scene_runner() -> void:
 	"""Test level_select.tscn initialization and basic scene validity."""
-	var runner = _create_scene_runner(LEVEL_SELECT_SCENE)
+	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
 
 	# Verify scene loaded correctly
 	assert_that(runner).is_not_null()
@@ -52,7 +72,7 @@ func test_reading_mode_scene_with_scene_runner() -> void:
 	This is the critical gameplay scene that needs comprehensive testing.
 	Validates that the scene can initialize without errors and run for several frames.
 	"""
-	var runner = _create_scene_runner(READING_MODE_SCENE)
+	var runner = _create_scene_runner(READING_MODE_SCENE_PATH)
 
 	# Verify scene loaded correctly
 	assert_that(runner).is_not_null()
@@ -71,7 +91,7 @@ func test_reading_mode_initialization() -> void:
 
 	Phase 3: Gameplay flow validation - verifies core game initialization.
 	"""
-	var runner = _create_scene_runner(READING_MODE_SCENE)
+	var runner = _create_scene_runner(READING_MODE_SCENE_PATH)
 
 	# Let the scene fully initialize
 	await runner.simulate_frames(5, 100)
@@ -89,7 +109,7 @@ func test_reading_mode_no_orphan_nodes() -> void:
 
 	GDUnit4 orphan detection is enabled; this test documents that we're checking for it.
 	"""
-	var runner = _create_scene_runner(READING_MODE_SCENE)
+	var runner = _create_scene_runner(READING_MODE_SCENE_PATH)
 
 	# Run through several frames to exercise initialization
 	await runner.simulate_frames(15, 100)
@@ -104,31 +124,21 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 	"""Smoke test: instantiate all main UI scenes and exercise navigation actions."""
 
 	# Main scene basic startup check
-	var main_runner = _create_scene_runner(MAIN_SCENE)
+	var main_runner = _create_scene_runner(MAIN_SCENE_PATH)
 	await main_runner.simulate_frames(2)
 	assert_that(main_runner.scene()).is_not_null()
 	assert_that(main_runner.scene().is_inside_tree()).is_true()
 
 	# Level select scene UI navigation check
-	var level_runner = _create_scene_runner(LEVEL_SELECT_SCENE)
+	var level_runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
 	await level_runner.simulate_frames(2)
 	var level_scene = level_runner.scene()
 	assert_that(level_scene).is_not_null()
 
 	var config_button: Button = level_scene.get_node("Panel/VBoxContainer/ConfigButton")
 	var start_button: Button = level_scene.get_node("Panel/VBoxContainer/StartButton")
-	var config_page: Control = level_scene.get_node_or_null("ConfigPage")
+	var config_page: Control = _find_node_by_name_token(level_scene, "ConfigPage") as Control
 	if config_page == null:
-		# Godot 4 removed Node.find_node(); use full traversal fallback.
-		func _find_node_recursive(node: Node, target_name: String) -> Node:
-			if node.name == target_name:
-				return node
-			for child in node.get_children():
-				var found = _find_node_recursive(child, target_name)
-				if found != null:
-					return found
-			return null
-
 		config_page = _find_node_recursive(level_scene, "ConfigPage") as Control
 
 	assert_that(config_button).is_not_null()
@@ -140,7 +150,7 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 	await level_runner.simulate_frames(1)
 	assert_that(config_page.visible).is_true()
 
-	var cancel_button: Button = level_scene.get_node("ConfigPage/VBoxContainer/CancelButton")
+	var cancel_button: Button = _find_node_by_name_token(level_scene, "CancelButton") as Button
 	cancel_button.emit_signal("pressed")
 	await level_runner.simulate_frames(1)
 	assert_that(config_page.visible).is_false()
@@ -162,7 +172,7 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 	assert_that(reading_hud).is_not_null()
 
 	# Keep a dedicated runner check for reading mode as final smoke endpoint
-	var reading_runner = _create_scene_runner(READING_MODE_SCENE)
+	var reading_runner = _create_scene_runner(READING_MODE_SCENE_PATH)
 	await reading_runner.simulate_frames(10, 100)
 	assert_that(reading_runner.scene()).is_not_null()
 	assert_that(reading_runner.scene().is_inside_tree()).is_true()
@@ -173,22 +183,22 @@ func test_level_select_holiday_settings_flow() -> void:
 	var settings_store = ReadingSettingsStore.new()
 	var original_settings = settings_store.load_settings()
 
-	var runner = _create_scene_runner(LEVEL_SELECT_SCENE)
+	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
 	await runner.simulate_frames(2)
 	var level_scene = runner.scene()
 	assert_that(level_scene).is_not_null()
 
 	var config_button: Button = level_scene.get_node("Panel/VBoxContainer/ConfigButton")
-	var config_page: Control = level_scene.get_node_or_null("ConfigPage")
+	var config_page: Control = _find_node_by_name_token(level_scene, "ConfigPage") as Control
 	if config_page == null:
-		config_page = level_scene.find_child("ConfigPage", true, false) as Control
-	var holiday_mode_option: OptionButton = level_scene.get_node(
-		"ConfigPage/VBoxContainer/OptionsContainer/HolidayModeOption"
+		config_page = _find_node_recursive(level_scene, "ConfigPage") as Control
+	var holiday_mode_option: OptionButton = (
+		_find_node_by_name_token(level_scene, "HolidayModeOption") as OptionButton
 	)
-	var holiday_name_option: OptionButton = level_scene.get_node(
-		"ConfigPage/VBoxContainer/OptionsContainer/HolidayNameOption"
+	var holiday_name_option: OptionButton = (
+		_find_node_by_name_token(level_scene, "HolidayNameOption") as OptionButton
 	)
-	var save_button: Button = level_scene.get_node("ConfigPage/VBoxContainer/SaveButton")
+	var save_button: Button = _find_node_by_name_token(level_scene, "SaveButton") as Button
 
 	assert_that(config_page.visible).is_false()
 	config_button.emit_signal("pressed")
@@ -201,8 +211,8 @@ func test_level_select_holiday_settings_flow() -> void:
 	var christmas_idx = ReadingSettingsStore.HOLIDAY_OPTIONS.find(
 		ReadingSettingsStore.HOLIDAY_CHRISTMAS
 	)
-	assert_that(holiday_on_idx).is_greater_than_or_equal(0)
-	assert_that(christmas_idx).is_greater_than_or_equal(0)
+	assert_that(holiday_on_idx).is_greater_equal(0)
+	assert_that(christmas_idx).is_greater_equal(0)
 
 	holiday_mode_option.select(holiday_on_idx)
 	holiday_name_option.select(christmas_idx)
@@ -224,8 +234,8 @@ func test_level_select_holiday_settings_flow() -> void:
 	assert_that(config_page.visible).is_true()
 	var none_idx = ReadingSettingsStore.HOLIDAY_OPTIONS.find(ReadingSettingsStore.HOLIDAY_NONE)
 	var auto_idx = ReadingSettingsStore.HOLIDAY_MODES.find(ReadingSettingsStore.HOLIDAY_MODE_AUTO)
-	assert_that(none_idx).is_greater_than_or_equal(0)
-	assert_that(auto_idx).is_greater_than_or_equal(0)
+	assert_that(none_idx).is_greater_equal(0)
+	assert_that(auto_idx).is_greater_equal(0)
 
 	holiday_mode_option.select(auto_idx)
 	holiday_name_option.select(none_idx)

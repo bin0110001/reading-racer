@@ -1,6 +1,8 @@
 class_name LevelSelect
 extends Control
 
+const ReadingSettingsStore = preload("res://scripts/reading/settings_store.gd")
+const ReadingContentLoader = preload("res://scripts/reading/content_loader.gd")
 const PlayerVehicleLibrary = preload("res://scripts/reading/player_vehicle_library.gd")
 
 var settings_store := ReadingSettingsStore.new()
@@ -8,8 +10,8 @@ var content_loader := ReadingContentLoader.new()
 var selected_group: String = ""
 var level_buttons: Array[Button] = []
 var vehicle_catalog: Array[Dictionary] = []
-var selected_vehicle_id := PlayerVehicleLibrary.DEFAULT_VEHICLE_ID
-var selected_vehicle_color := PlayerVehicleLibrary.get_default_paint_color()
+var selected_vehicle_id: String = PlayerVehicleLibrary.DEFAULT_VEHICLE_ID
+var selected_vehicle_color: Color = PlayerVehicleLibrary.get_default_paint_color()
 
 var vehicle_option := OptionButton.new()
 var vehicle_color_picker := ColorPickerButton.new()
@@ -20,6 +22,7 @@ var vehicle_preview_root := Node3D.new()
 var vehicle_preview_pivot := Node3D.new()
 var vehicle_preview_instance: Node3D = null
 
+@onready var main_vbox: VBoxContainer = $Panel/VBoxContainer
 @onready var grid_container: GridContainer = $Panel/VBoxContainer/GridContainer
 @onready var start_button: Button = $Panel/VBoxContainer/StartButton
 @onready var config_button: Button = $Panel/VBoxContainer/ConfigButton
@@ -38,8 +41,6 @@ var steering_option: OptionButton = _find_node_by_name_token(self, "SteeringOpti
 
 
 func _ready() -> void:
-	_build_vehicle_customizer()
-	_populate_vehicle_options()
 	_populate_level_grid()
 	_populate_options()
 	_load_settings()
@@ -47,6 +48,14 @@ func _ready() -> void:
 		start_button.pressed.connect(_on_start_pressed)
 	if config_button:
 		config_button.pressed.connect(_on_config_button_pressed)
+	# Add a dedicated vehicle selection screen entry point from level select
+	var vehicle_button := Button.new()
+	vehicle_button.name = "VehicleSelectButton"
+	vehicle_button.text = "Choose Vehicle"
+	vehicle_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vehicle_button.pressed.connect(_on_vehicle_button_pressed)
+	main_vbox.add_child(vehicle_button)
+	main_vbox.move_child(vehicle_button, 3)
 	if save_button:
 		save_button.pressed.connect(_on_save_pressed)
 	if cancel_button:
@@ -185,7 +194,7 @@ func _refresh_vehicle_preview() -> void:
 		vehicle_preview_instance.queue_free()
 		vehicle_preview_instance = null
 
-	var vehicle_settings := PlayerVehicleLibrary.build_vehicle_settings(
+	var vehicle_settings: Dictionary = PlayerVehicleLibrary.build_vehicle_settings(
 		selected_vehicle_id, selected_vehicle_color
 	)
 	vehicle_preview_instance = PlayerVehicleLibrary.instantiate_vehicle_from_settings(
@@ -196,12 +205,12 @@ func _refresh_vehicle_preview() -> void:
 		return
 
 	vehicle_preview_pivot.add_child(vehicle_preview_instance)
-	var selected_vehicle := PlayerVehicleLibrary.get_vehicle_by_id(selected_vehicle_id)
+	var selected_vehicle: Dictionary = PlayerVehicleLibrary.get_vehicle_by_id(selected_vehicle_id)
 	vehicle_name_label.text = str(selected_vehicle.get("name", "Vehicle"))
 
 
 func _apply_vehicle_settings(settings: Dictionary) -> void:
-	var vehicle_settings := PlayerVehicleLibrary.build_vehicle_settings(
+	var vehicle_settings: Dictionary = PlayerVehicleLibrary.build_vehicle_settings(
 		selected_vehicle_id, selected_vehicle_color
 	)
 	for key in vehicle_settings.keys():
@@ -276,9 +285,6 @@ func _load_settings() -> void:
 		holiday_name_option.select(holiday_name_index)
 
 	selected_vehicle_color = PlayerVehicleLibrary.resolve_paint_color(settings)
-	vehicle_color_picker.color = selected_vehicle_color
-	_select_vehicle(str(settings.get(PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID, "")))
-	_refresh_vehicle_preview()
 
 
 func _on_vehicle_selected(index: int) -> void:
@@ -319,6 +325,10 @@ func _on_config_button_pressed() -> void:
 	if config_page:
 		$Panel.visible = false
 		config_page.visible = true
+
+
+func _on_vehicle_button_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/vehicle_select.tscn")
 
 
 func _on_save_pressed() -> void:

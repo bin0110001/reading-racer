@@ -387,6 +387,7 @@ func _ready() -> void:
 	hud.volume_changed.connect(_on_volume_changed)
 	hud.debug_path_toggled.connect(_on_debug_path_toggled)
 	hud.resume_requested.connect(_close_options)
+	hud.home_requested.connect(_on_home_requested)
 	hud.play_debug_audio.connect(_on_debug_play_audio)
 	phoneme_player.phoneme_changed.connect(_on_phoneme_changed)
 	print("[ReadingMode] HUD configured with group: %s" % requested_group)
@@ -1091,6 +1092,11 @@ func _on_debug_path_toggled(enabled: bool) -> void:
 	_update_debug_collision_visuals()
 	var status_text := "ON" if enabled else "OFF"
 	hud.flash_feedback("Path + collision debug %s" % status_text, Color(0.4, 0.9, 0.4))
+
+
+func _on_home_requested() -> void:
+	_close_options()
+	get_tree().change_scene_to_file("res://scenes/level_select.tscn")
 
 
 func _update_debug_audio_options() -> void:

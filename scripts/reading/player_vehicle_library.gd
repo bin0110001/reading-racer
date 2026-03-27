@@ -4,6 +4,7 @@ extends RefCounted
 const SETTING_KEY_VEHICLE_ID := "player_vehicle_id"
 const SETTING_KEY_VEHICLE_SCENE_PATH := "player_vehicle_scene_path"
 const SETTING_KEY_VEHICLE_COLOR := "player_vehicle_color"
+const SETTING_KEY_VEHICLE_DECALS := "player_vehicle_decals"
 
 const DEFAULT_VEHICLE_ID := "sedan"
 const DEFAULT_PAINT_COLOR_HEX := "2a97f5ff"
@@ -153,6 +154,10 @@ static func resolve_vehicle_scene_path(settings: Dictionary) -> String:
 	return resolve_scene_path(settings)
 
 
+func resolve_vehicle_scene_path_instance(settings: Dictionary) -> String:
+	return PlayerVehicleLibrary.resolve_vehicle_scene_path(settings)
+
+
 static func resolve_paint_color(settings: Dictionary) -> Color:
 	var default_color := get_default_paint_color()
 	var encoded_color := str(settings.get(SETTING_KEY_VEHICLE_COLOR, DEFAULT_PAINT_COLOR_HEX))
@@ -175,12 +180,17 @@ static func instantiate_vehicle_from_settings(settings: Dictionary, max_dimensio
 		return null
 
 	fit_instance_to_dimension(instance, max_dimension)
-	apply_paint_color(instance, resolve_paint_color(settings))
+	ensure_overlay_lightmap_size_hints(instance)
+
+	var decal_data: Array = settings.get(SETTING_KEY_VEHICLE_DECALS, []) as Array
+	if decal_data is Array and decal_data.size() > 0:
+		apply_vehicle_decals(instance, decal_data)
+
 	return instance
 
 
 static func fit_instance_to_dimension(instance: Node3D, max_dimension: float) -> void:
-	var bounds := _calculate_bounds(instance)
+	var bounds: AABB = _calculate_bounds(instance)
 	if bounds == AABB():
 		return
 
@@ -214,17 +224,55 @@ static func apply_paint_color(instance: Node3D, paint_color: Color) -> void:
 		var base_material := override_material
 		if base_material == null:
 			base_material = first_mesh.mesh.surface_get_material(surface_index)
-		first_mesh.set_surface_override_material(
-			surface_index, _create_tinted_material(base_material, paint_color)
-		)
+		var tinted = _create_tinted_material(base_material, paint_color)
+		first_mesh.set_surface_override_material(surface_index, tinted)
 
 
-static func build_vehicle_settings(vehicle_id: String, paint_color: Color) -> Dictionary:
-	return {
-		SETTING_KEY_VEHICLE_ID: resolve_vehicle_id({SETTING_KEY_VEHICLE_ID: vehicle_id}),
+func apply_paint_color_instance(instance: Node3D, paint_color: Color) -> void:
+	apply_paint_color(instance, paint_color)
+
+
+func apply_vehicle_decals_instance(instance: Node3D, decals: Array) -> void:
+	apply_vehicle_decals(instance, decals)
+
+
+func fit_instance_to_dimension_instance(instance: Node3D, max_dimension: float) -> void:
+	fit_instance_to_dimension(instance, max_dimension)
+
+
+static func ensure_overlay_lightmap_size_hints(
+	instance: Node3D, fallback_size: Vector2i = Vector2i(64, 64)
+) -> void:
+	for mesh_instance in _collect_mesh_instances(instance):
+		if mesh_instance.mesh == null:
+			continue
+		if mesh_instance.mesh.lightmap_size_hint != Vector2i.ZERO:
+			continue
+
+		var mesh_copy := mesh_instance.mesh.duplicate(true) as Mesh
+		if mesh_copy == null:
+			continue
+		mesh_copy.lightmap_size_hint = fallback_size
+		mesh_instance.mesh = mesh_copy
+
+
+static func build_vehicle_settings(
+	vehicle_id: String, paint_color: Color, paint_decals: Array = []
+) -> Dictionary:
+	var paint_color_hex = paint_color.to_html(true)
+	var settings = {
+		SETTING_KEY_VEHICLE_ID:
+		resolve_vehicle_id(
+			{
+				SETTING_KEY_VEHICLE_ID: vehicle_id,
+			}
+		),
 		SETTING_KEY_VEHICLE_SCENE_PATH: get_vehicle_scene_path(vehicle_id),
-		SETTING_KEY_VEHICLE_COLOR: paint_color.to_html(true),
+		SETTING_KEY_VEHICLE_COLOR: paint_color_hex,
 	}
+	if paint_decals is Array and paint_decals.size() > 0:
+		settings[SETTING_KEY_VEHICLE_DECALS] = paint_decals
+	return settings
 
 
 static func _apply_paint_recursive(node: Node, paint_color: Color) -> int:
@@ -293,6 +341,61 @@ static func _create_tinted_material(material: Material, paint_color: Color) -> M
 	return fallback
 
 
+static func apply_vehicle_decals(instance: Node3D, decals: Array) -> void:
+	for decal_info in decals:
+		if typeof(decal_info) != TYPE_DICTIONARY:
+			continue
+
+		var local_position = _decode_vector3(decal_info.get("position", {}))
+		var local_normal = _decode_vector3(decal_info.get("normal", {}))
+		if local_normal.length() < 0.001:
+			continue
+
+		var color = Color.from_string(str(decal_info.get("color", "")), get_default_paint_color())
+		var size = float(decal_info.get("size", 0.35))
+
+		var global_position = instance.to_global(local_position)
+		var global_normal = (instance.global_transform.basis * local_normal).normalized()
+
+		var decal_node = Decal.new()
+		decal_node.texture_albedo = _create_decal_texture(color)
+		decal_node.albedo_mix = 1.0
+		decal_node.modulate = Color(1, 1, 1, 1)
+		decal_node.size = Vector3.ONE * size
+		var decal_pose := Transform3D()
+		decal_pose.origin = global_position + global_normal * 0.01
+		# Use safe look-at utility that works before node is in tree
+		decal_pose = decal_pose.looking_at(global_position + global_normal, Vector3.UP)
+		decal_node.transform = decal_pose
+		instance.add_child(decal_node)
+
+	return
+
+
+static func _create_decal_texture(color: Color) -> Texture2D:
+	var image := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	for y in range(32):
+		for x in range(32):
+			var offset := Vector2(float(x) - 15.5, float(y) - 15.5).length()
+			if offset <= 14.0:
+				image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
+			else:
+				image.set_pixel(x, y, Color(0, 0, 0, 0))
+	return ImageTexture.create_from_image(image)
+
+
+static func _encode_vector3(value: Vector3) -> Dictionary:
+	return {"x": value.x, "y": value.y, "z": value.z}
+
+
+static func _decode_vector3(value) -> Vector3:
+	if value is Dictionary:
+		return Vector3(
+			float(value.get("x", 0.0)), float(value.get("y", 0.0)), float(value.get("z", 0.0))
+		)
+	return Vector3.ZERO
+
+
 static func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 	if node is MeshInstance3D:
 		return node as MeshInstance3D
@@ -301,6 +404,18 @@ static func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 		if found != null:
 			return found
 	return null
+
+
+static func _collect_mesh_instances(
+	node: Node, children_acc: Array[MeshInstance3D] = []
+) -> Array[MeshInstance3D]:
+	if node is MeshInstance3D:
+		children_acc.push_back(node)
+
+	for child in node.get_children():
+		children_acc = _collect_mesh_instances(child, children_acc)
+
+	return children_acc
 
 
 static func _calculate_bounds(root: Node3D) -> AABB:

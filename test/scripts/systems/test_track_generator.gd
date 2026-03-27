@@ -7,6 +7,38 @@ func before_all() -> void:
 	pass
 
 
+func _wrap_layout_path_index(path_index: int, path_count: int) -> int:
+	if path_count <= 0:
+		return 0
+	var wrapped := path_index % path_count
+	if wrapped < 0:
+		wrapped += path_count
+	return wrapped
+
+
+func _get_layout_path_frame(path_cells: Array, path_index: int) -> Dictionary:
+	if path_cells.is_empty():
+		return {}
+
+	var path_count: int = path_cells.size()
+	var current_index: int = _wrap_layout_path_index(path_index, path_count)
+	var next_index: int = _wrap_layout_path_index(path_index + 1, path_count)
+	var current_cell: Vector3i = path_cells[current_index]
+	var next_cell: Vector3i = path_cells[next_index]
+	var forward: Vector3 = Vector3(
+		float(next_cell.x - current_cell.x), 0.0, float(next_cell.z - current_cell.z)
+	)
+	if forward.length_squared() == 0.0:
+		forward = Vector3.RIGHT
+	else:
+		forward = forward.normalized()
+	return {
+		"center": Vector3(float(current_cell.x), 0.0, float(current_cell.z)),
+		"heading": atan2(forward.z, forward.x),
+		"right": Vector3(-forward.z, 0.0, forward.x),
+	}
+
+
 func test_track_generator_initialization() -> void:
 	var generator = TrackGenerator.new()
 	assert_that(generator).is_not_null()
@@ -103,7 +135,7 @@ func test_track_generator_loop_layout_does_not_repeat_cells() -> void:
 		seen[key] = true
 
 
-func test_track_generator_loop_layout_is_straight_heavy_and_filled() -> void:
+func test_track_generator_loop_layout_is_windy_and_filled() -> void:
 	var generator = TrackGenerator.new()
 	var entries: Array[Dictionary] = [
 		{"text": "alphabet", "letters": ["a", "l", "p", "h", "a", "b", "e", "t"]},
@@ -119,9 +151,12 @@ func test_track_generator_loop_layout_is_straight_heavy_and_filled() -> void:
 	)
 	var straight_count := int(layout.metadata.get("straight_count", 0))
 	var corner_count := int(layout.metadata.get("corner_count", 0))
+	var longest_run: Dictionary = layout.metadata.get("longest_straight_run", {}) as Dictionary
 	var expected_decoration_count: int = layout.size.x * layout.size.z - layout.path_cells.size()
 
-	assert_that(straight_count).is_greater(corner_count)
+	assert_that(straight_count).is_greater(0)
+	assert_that(corner_count).is_greater(0)
+	assert_that(int(longest_run.get("length", 0))).is_less_equal(6)
 	assert_that(int(layout.metadata.get("decoration_count", -1))).is_equal(
 		expected_decoration_count
 	)
@@ -129,6 +164,144 @@ func test_track_generator_loop_layout_is_straight_heavy_and_filled() -> void:
 	assert_that(layout.word_anchors.size()).is_equal(entries.size())
 	assert_that(layout.start_positions.size()).is_equal(8)
 	assert_that(layout.checkpoints.size()).is_equal(4)
+
+
+func test_track_generator_serpentine_corner_rotations_follow_path() -> void:
+	var generator = TrackGenerator.new()
+	var entries: Array[Dictionary] = [
+		{"text": "cat", "letters": ["c", "a", "t"]},
+		{"text": "dog", "letters": ["d", "o", "g"]},
+		{"text": "plane", "letters": ["p", "l", "a", "n", "e"]},
+		{"text": "loop", "letters": ["l", "o", "o", "p"]},
+	]
+
+	var layout: TrackLayout = (
+		(
+			generator
+			. generate_loop_layout(
+				entries,
+				{
+					"decoration_margin": 4,
+					"padding_cells": 8,
+					"word_gap_cells": 2,
+					"path_style": "serpentine",
+				}
+			)
+		)
+		as TrackLayout
+	)
+
+	assert_that(layout).is_not_null()
+	var path_count: int = layout.path_cells.size()
+	assert_that(path_count).is_greater(0)
+
+	for index in range(path_count):
+		var current_cell: Vector3i = layout.path_cells[index]
+		var previous_cell: Vector3i = layout.path_cells[(index - 1 + path_count) % path_count]
+		var next_cell: Vector3i = layout.path_cells[(index + 1) % path_count]
+		var incoming_dir: Vector3i = current_cell - previous_cell
+		var outgoing_dir: Vector3i = next_cell - current_cell
+		var expected_kind := (
+			TrackGenerator.TRACK_TILE_CORNER
+			if incoming_dir != outgoing_dir
+			else TrackGenerator.TRACK_TILE_STRAIGHT
+		)
+		var cell_data: Dictionary = layout.get_cell(current_cell)
+		assert_that(str(cell_data.get("kind", ""))).is_equal(expected_kind)
+		var expected_rotation := generator._get_tile_rotation_degrees(
+			incoming_dir, outgoing_dir, expected_kind
+		)
+		assert_that(float(cell_data.get("rotation_y", -1.0))).is_equal(expected_rotation)
+
+
+func test_track_generator_serpentine_allocates_words_and_finish_gates() -> void:
+	var generator = TrackGenerator.new()
+	var entries: Array[Dictionary] = [
+		{
+			"text": "cat",
+			"letters": ["c", "a", "t"],
+			"phonemes": ["k", "a", "t"],
+		},
+		{
+			"text": "dog",
+			"letters": ["d", "o", "g"],
+			"phonemes": ["d", "o", "g"],
+		},
+		{
+			"text": "plane",
+			"letters": ["p", "l", "a", "n", "e"],
+			"phonemes": ["p", "l", "a", "n", "e"],
+		},
+		{
+			"text": "loop",
+			"letters": ["l", "o", "o", "p"],
+			"phonemes": ["l", "o", "o", "p"],
+		},
+	]
+
+	var layout: TrackLayout = (
+		(
+			generator
+			. generate_loop_layout(
+				entries,
+				{
+					"decoration_margin": 4,
+					"padding_cells": 8,
+					"word_gap_cells": 2,
+					"path_style": "serpentine",
+				}
+			)
+		)
+		as TrackLayout
+	)
+	assert_that(layout).is_not_null()
+	assert_that(layout.word_anchors.size()).is_equal(entries.size())
+
+	var gameplay_controller = GameplayController.new(ReadingContentLoader.new())
+	gameplay_controller.set_spawn_root(Node3D.new())
+	gameplay_controller.initialize_placement_grid(layout.path_cells.size(), 3)
+	gameplay_controller.current_entry_index = 0
+	gameplay_controller.load_entry(entries[0], 0)
+
+	var get_path_frame = Callable(self, "_get_layout_path_frame").bind(layout.path_cells)
+	var wrap_fn = Callable(self, "_wrap_layout_path_index").bind(layout.path_cells.size())
+	var summary: Dictionary = (
+		gameplay_controller
+		. spawn_loop_course_pickups_and_obstacles(
+			entries,
+			layout.word_anchors,
+			get_path_frame,
+			wrap_fn,
+			0,
+			"",
+			"",
+			true,
+		)
+	)
+
+	assert_that(summary.get("finish_indices", [])).is_instance_of(Array)
+	assert_that((summary.get("finish_indices", []) as Array).size()).is_equal(entries.size())
+	assert_that(gameplay_controller.word_course_plans.size()).is_equal(entries.size())
+
+	for word_index in range(entries.size()):
+		var entry: Dictionary = entries[word_index]
+		var pickup_triggers: Array = (
+			gameplay_controller.word_pickup_registry.get(word_index, []) as Array
+		)
+		var finish_gate := gameplay_controller.word_finish_registry.get(word_index, null)
+		var word_start_index := gameplay_controller.get_word_start_index(word_index)
+		var finish_index := gameplay_controller.get_word_finish_index(word_index)
+
+		assert_that(word_start_index).is_greater_equal(0)
+		assert_that(finish_index).is_greater_equal(0)
+		assert_that(word_start_index).is_less(layout.path_cells.size())
+		assert_that(finish_index).is_less(layout.path_cells.size())
+		assert_that(pickup_triggers.size()).is_equal((entry.get("letters", []) as Array).size())
+		assert_that(finish_gate).is_not_null()
+		(
+			assert_that(gameplay_controller.get_placement_object(finish_index, 1).get("type", ""))
+			. is_equal("finish")
+		)
 
 
 func test_track_generator_segment_continuity() -> void:

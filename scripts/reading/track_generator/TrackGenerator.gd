@@ -127,24 +127,24 @@ func clear_segments_before(world_x: float) -> void:
 
 func generate_loop_layout(word_entries: Array, config: Dictionary = {}) -> Variant:
 	var budget: Dictionary = _build_word_budget(word_entries, config)
+	var path_style: String = config.get("path_style", DEFAULT_PATH_STYLE) as String
 	var track_size: Vector2i = _choose_track_dimensions(
-		int(budget.get("required_cells", 0)), config
+		int(budget.get("required_cells", 0)), config, path_style
 	)
 	var margin: int = max(1, int(config.get("decoration_margin", DEFAULT_DECORATION_MARGIN)))
 	var grid_size: Vector3i = Vector3i(track_size.x + margin * 2, 1, track_size.y + margin * 2)
 	var layout: TrackLayout = TrackLayoutScript.new()
 	layout.initialize(grid_size)
 
-	var path_style: String = config.get("path_style", DEFAULT_PATH_STYLE) as String
+	var seed_value: int = int(config.get("seed", _compute_seed(word_entries)))
+	rng.seed = seed_value
+
 	var local_path: Array[Vector3i] = _build_path(track_size.x, track_size.y, path_style)
 	var path_offset: Vector3i = Vector3i(margin, 0, margin)
 	var global_path: Array[Vector3i] = []
 	for local_cell in local_path:
 		global_path.append(local_cell + path_offset)
 	layout.path_cells = global_path
-
-	var seed_value: int = int(config.get("seed", _compute_seed(word_entries)))
-	rng.seed = seed_value
 
 	var turn_count: int = _populate_track_tiles(layout)
 	var longest_run: Dictionary = _find_longest_straight_run(layout.path_cells)
@@ -249,10 +249,32 @@ func _path_capacity(width: int, height: int) -> int:
 	return 2 * (width + height) - 4
 
 
-func _choose_track_dimensions(required_cells: int, config: Dictionary) -> Vector2i:
+func _choose_track_dimensions(
+	required_cells: int, config: Dictionary, path_style: String = DEFAULT_PATH_STYLE
+) -> Vector2i:
 	var min_width: int = max(4, int(config.get("min_track_width", DEFAULT_MIN_TRACK_WIDTH)))
+	if path_style == "serpentine":
+		min_width = max(4, int(config.get("serpentine_min_track_width", 5)))
 	var min_height: int = max(4, int(config.get("min_track_height", DEFAULT_MIN_TRACK_HEIGHT)))
-	var width: int = max(min_width, int(ceil(sqrt(float(required_cells) * 1.75))))
+	if path_style == "serpentine":
+		var width: int = max(min_width, int(ceil(sqrt(float(required_cells)))))
+		var height: int = max(min_height, int(ceil(float(required_cells) / float(width))))
+
+		if height % 2 != 0:
+			height += 1
+
+		while width * height < required_cells:
+			if width <= height:
+				width += 1
+			else:
+				height += 1
+			if height % 2 != 0:
+				height += 1
+
+		return Vector2i(width, height)
+
+	var width_factor: float = 1.75
+	var width: int = max(min_width, int(ceil(sqrt(float(required_cells) * width_factor))))
 	var height: int = max(min_height, int(ceil(float(required_cells) / float(width))))
 
 	if height % 2 != 0:
@@ -270,12 +292,171 @@ func _choose_track_dimensions(required_cells: int, config: Dictionary) -> Vector
 
 
 func _build_serpentine_cycle(width: int, height: int) -> Array[Vector3i]:
-	var path: Array[Vector3i] = _build_base_cycle(width, height)
-	if path.is_empty():
+	if width < 5 or height < 5:
+		return _build_circular_cycle(width, height)
+
+	var path: Array[Vector3i] = []
+	var bottom_bump_x: int = maxi(2, width / 3)
+	var right_bump_z: int = maxi(2, height / 3)
+	var top_bump_x: int = mini(width - 3, int(ceil(float(width) * 0.66)))
+	var left_bump_z: int = mini(height - 3, int(ceil(float(height) * 0.66)))
+
+	var x := 0
+	while x < width:
+		path.append(Vector3i(x, 0, 0))
+		if x == bottom_bump_x and x + 1 < width:
+			path.append(Vector3i(x, 0, 1))
+			path.append(Vector3i(x + 1, 0, 1))
+			path.append(Vector3i(x + 1, 0, 0))
+			x += 1
+		x += 1
+
+	var z := 1
+	while z < height:
+		path.append(Vector3i(width - 1, 0, z))
+		if z == right_bump_z and z + 1 < height:
+			path.append(Vector3i(width - 2, 0, z))
+			path.append(Vector3i(width - 2, 0, z + 1))
+			path.append(Vector3i(width - 1, 0, z + 1))
+			z += 1
+		z += 1
+
+	x = width - 2
+	while x >= 0:
+		path.append(Vector3i(x, 0, height - 1))
+		if x == top_bump_x and x - 1 >= 0:
+			path.append(Vector3i(x, 0, height - 2))
+			path.append(Vector3i(x - 1, 0, height - 2))
+			path.append(Vector3i(x - 1, 0, height - 1))
+			x -= 1
+		x -= 1
+
+	z = height - 2
+	while z > 0:
+		path.append(Vector3i(0, 0, z))
+		if z == left_bump_z and z - 1 >= 0:
+			path.append(Vector3i(1, 0, z))
+			path.append(Vector3i(1, 0, z - 1))
+			path.append(Vector3i(0, 0, z - 1))
+			z -= 1
+		z -= 1
+
+	if path.size() >= 4:
+		path = _optimize_cycle_geometry(path, max(1, path.size() * 2))
+	return path
+
+
+func _build_hamiltonian_cycle(width: int, height: int) -> Array[Vector3i]:
+	var total_cells := width * height
+	if width < 2 or height < 2 or total_cells < 4:
+		return []
+
+	var start := Vector3i(0, 0, 0)
+	var visited: Dictionary = {_cell_key(start): true}
+	var path: Array[Vector3i] = [start]
+	if _extend_hamiltonian_cycle(start, width, height, total_cells, visited, path):
 		return path
 
-	path = _optimize_cycle_geometry(path, 0)
-	return path
+	return []
+
+
+func _extend_hamiltonian_cycle(
+	current: Vector3i,
+	width: int,
+	height: int,
+	total_cells: int,
+	visited: Dictionary,
+	path: Array[Vector3i],
+) -> bool:
+	if path.size() == total_cells:
+		return _are_adjacent(current, path[0])
+
+	var previous_direction := Vector3i.ZERO
+	if path.size() >= 2:
+		previous_direction = current - path[path.size() - 2]
+
+	var candidates := _ordered_hamiltonian_neighbors(
+		current, previous_direction, width, height, visited, path[0]
+	)
+
+	for next_cell in candidates:
+		var next_key := _cell_key(next_cell)
+		visited[next_key] = true
+		path.append(next_cell)
+		if _extend_hamiltonian_cycle(next_cell, width, height, total_cells, visited, path):
+			return true
+		path.remove_at(path.size() - 1)
+		visited.erase(next_key)
+
+	return false
+
+
+func _ordered_hamiltonian_neighbors(
+	current: Vector3i,
+	previous_direction: Vector3i,
+	width: int,
+	height: int,
+	visited: Dictionary,
+	start_cell: Vector3i,
+) -> Array[Vector3i]:
+	var candidates: Array[Dictionary] = []
+	for direction in CARDINAL_DIRECTIONS:
+		var next_cell: Vector3i = current + direction
+		if not _is_cell_in_hamiltonian_bounds(next_cell, width, height):
+			continue
+		if visited.has(_cell_key(next_cell)):
+			continue
+
+		var onward_count := 0
+		for onward_direction in CARDINAL_DIRECTIONS:
+			var onward_cell: Vector3i = next_cell + onward_direction
+			if not _is_cell_in_hamiltonian_bounds(onward_cell, width, height):
+				continue
+			if visited.has(_cell_key(onward_cell)):
+				continue
+			onward_count += 1
+
+		var turn_penalty := 0
+		if previous_direction != Vector3i.ZERO and direction == previous_direction:
+			turn_penalty = 1
+
+		var close_bonus := 0
+		if _are_adjacent(next_cell, start_cell):
+			close_bonus = -1
+
+		(
+			candidates
+			. append(
+				{
+					"cell": next_cell,
+					"score": onward_count * 2 + turn_penalty + close_bonus,
+				}
+			)
+		)
+
+	var ordered: Array[Vector3i] = []
+	while not candidates.is_empty():
+		var best_index := 0
+		for candidate_index in range(1, candidates.size()):
+			var candidate_score := int((candidates[candidate_index] as Dictionary).get("score", 0))
+			var best_score := int((candidates[best_index] as Dictionary).get("score", 0))
+			if candidate_score < best_score:
+				best_index = candidate_index
+			elif candidate_score == best_score and rng.randf() < 0.5:
+				best_index = candidate_index
+
+		ordered.append((candidates[best_index] as Dictionary).get("cell", Vector3i.ZERO))
+		candidates.remove_at(best_index)
+
+	return ordered
+
+
+func _is_cell_in_hamiltonian_bounds(cell: Vector3i, width: int, height: int) -> bool:
+	return cell.x >= 0 and cell.z >= 0 and cell.x < width and cell.z < height
+
+
+func _cell_key(cell: Vector3i) -> String:
+	return "%d,%d" % [cell.x, cell.z]
 
 
 func _build_base_cycle(width: int, height: int) -> Array[Vector3i]:
@@ -341,6 +522,13 @@ func _optimize_cycle_geometry(path: Array[Vector3i], iterations: int) -> Array[V
 	if n < 4:
 		return path
 
+	var current_score := _cycle_curviness_score(path)
+	if current_score == -9999:
+		var repaired_path := _find_best_valid_cycle_candidate(path)
+		if not repaired_path.is_empty():
+			path = repaired_path
+			current_score = _cycle_curviness_score(path)
+
 	for iteration in range(iterations):
 		var i := rng.randi_range(0, n - 2)
 		var j := rng.randi_range(i + 2, n - 1)
@@ -357,13 +545,43 @@ func _optimize_cycle_geometry(path: Array[Vector3i], iterations: int) -> Array[V
 
 		var candidate := _two_opt_swap(path, i, j)
 		var candidate_score := _cycle_curviness_score(candidate)
-		var current_score := _cycle_curviness_score(path)
 
 		# Only accept valid candidates (score != -9999)
 		if candidate_score != -9999 and (candidate_score > current_score or rng.randf() < 0.2):
 			path = candidate
+			current_score = candidate_score
 
 	return path
+
+
+func _find_best_valid_cycle_candidate(path: Array[Vector3i]) -> Array[Vector3i]:
+	var n := path.size()
+	var best_candidate: Array[Vector3i] = []
+	var best_score := -9999.0
+
+	for i in range(n - 1):
+		for j in range(i + 2, n):
+			if i == 0 and j == n - 1:
+				continue
+
+			var a := path[i]
+			var b := path[(i + 1) % n]
+			var c := path[j]
+			var d := path[(j + 1) % n]
+
+			if not (_are_adjacent(a, c) and _are_adjacent(b, d)):
+				continue
+
+			var candidate := _two_opt_swap(path, i, j)
+			var candidate_score := _cycle_curviness_score(candidate)
+			if candidate_score == -9999:
+				continue
+
+			if best_candidate.is_empty() or candidate_score > best_score:
+				best_candidate = candidate
+				best_score = candidate_score
+
+	return best_candidate
 
 
 func _two_opt_swap(path: Array[Vector3i], i: int, j: int) -> Array[Vector3i]:
@@ -673,9 +891,7 @@ func _compute_seed(word_entries: Array) -> int:
 func _build_path(width: int, height: int, style: String) -> Array[Vector3i]:
 	match style:
 		"serpentine":
-			# Serpentine patterns don't reliably form closed loops for all dimensions
-			# Prefer circular for better reliability
-			return _build_circular_cycle(width, height)
+			return _build_serpentine_cycle(width, height)
 		"straight":
 			return _build_straight_cycle(width, height)
 		"circular":

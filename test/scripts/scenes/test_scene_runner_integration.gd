@@ -4,7 +4,10 @@ extends GdUnitTestSuite
 
 const MAIN_SCENE_PATH = "res://scenes/main.tscn"
 const LEVEL_SELECT_SCENE_PATH = "res://scenes/level_select.tscn"
+const VEHICLE_SELECT_SCENE_PATH = "res://scenes/vehicle_select.tscn"
 const READING_MODE_SCENE_PATH = "res://scenes/reading_mode.tscn"
+
+var _home_requested_emitted := false
 
 
 func _create_scene_runner(scene_path: String) -> GdUnitSceneRunner:
@@ -32,6 +35,10 @@ func _find_node_by_name_token(node: Node, token: String) -> Node:
 			if found != null:
 				return found
 	return null
+
+
+func _mark_home_requested() -> void:
+	_home_requested_emitted = true
 
 
 func test_main_scene_with_scene_runner() -> void:
@@ -66,6 +73,72 @@ func test_level_select_scene_with_scene_runner() -> void:
 	assert_that(runner.scene().is_inside_tree()).is_true()
 
 
+func test_vehicle_select_scene_with_scene_runner() -> void:
+	"""Smoke test: vehicle select initializes, exposes paint controls, and can paint."""
+	var runner = _create_scene_runner(VEHICLE_SELECT_SCENE_PATH)
+	await runner.simulate_frames(3)
+
+	var vehicle_scene = runner.scene()
+	assert_that(vehicle_scene).is_not_null()
+	assert_that(vehicle_scene.is_inside_tree()).is_true()
+
+	var paint_palette := _find_node_recursive(vehicle_scene, "PaintColorPalette") as GridContainer
+	var brush_size_option := _find_node_recursive(vehicle_scene, "BrushSizeOption") as OptionButton
+	var paint_mode_toggle := _find_node_recursive(vehicle_scene, "PaintModeToggle") as CheckBox
+	var paint_color_swatch := (
+		_find_node_recursive(vehicle_scene, "PaintColorSwatch_00") as BaseButton
+	)
+	var camera_brush := _find_node_recursive(vehicle_scene, "CameraBrush")
+	var overlay_manager := _find_node_recursive(vehicle_scene, "OverlayAtlasManager")
+	assert_that(paint_palette).is_not_null()
+	assert_that(brush_size_option).is_not_null()
+	assert_that(paint_mode_toggle).is_not_null()
+	assert_that(paint_color_swatch).is_not_null()
+	assert_that(camera_brush).is_not_null()
+	assert_that(overlay_manager).is_not_null()
+	assert_that(paint_palette.get_child_count()).is_equal(24)
+
+	await runner.simulate_frames(2)
+	assert_that((camera_brush as CameraBrush).viewport).is_not_null()
+	var brush_before := (camera_brush as Node3D).global_position
+
+	paint_color_swatch.emit_signal("pressed")
+	brush_size_option.select(2)
+	brush_size_option.emit_signal("item_selected", 2)
+	paint_mode_toggle.button_pressed = true
+	vehicle_scene.call("_on_paint_mode_toggled", true)
+	vehicle_scene.call("_on_paint_color_selected", 0)
+	vehicle_scene.call("_on_brush_preset_selected", 2)
+
+	var preview_container := (
+		_find_node_recursive(vehicle_scene, "VehiclePreviewContainer") as SubViewportContainer
+	)
+	assert_that(preview_container).is_not_null()
+	assert_that(preview_container.size.x > 0.0).is_true()
+	assert_that(preview_container.size.y > 0.0).is_true()
+
+	var press_event := InputEventMouseButton.new()
+	press_event.button_index = MOUSE_BUTTON_LEFT
+	press_event.pressed = true
+	press_event.position = preview_container.size * 0.5
+	vehicle_scene.call("_on_vehicle_preview_gui_input", press_event)
+	await runner.simulate_frames(1)
+	assert_that((camera_brush as CameraBrush).drawing).is_true()
+	assert_that((camera_brush as Node3D).global_position).is_not_equal(brush_before)
+
+	var release_event := InputEventMouseButton.new()
+	release_event.button_index = MOUSE_BUTTON_LEFT
+	release_event.pressed = false
+	release_event.position = preview_container.size * 0.5
+	vehicle_scene.call("_on_vehicle_preview_gui_input", release_event)
+	await runner.simulate_frames(1)
+	assert_that((camera_brush as CameraBrush).drawing).is_false()
+
+	vehicle_scene.call("_on_clear_paint_pressed")
+	assert_that((camera_brush as CameraBrush).drawing).is_false()
+	assert_that((paint_mode_toggle as CheckBox).button_pressed).is_false()
+
+
 func test_reading_mode_scene_with_scene_runner() -> void:
 	"""Test reading_mode.tscn initialization and basic scene validity.
 
@@ -84,6 +157,23 @@ func test_reading_mode_scene_with_scene_runner() -> void:
 	# Scene should remain valid throughout simulation
 	assert_that(runner.scene()).is_not_null()
 	assert_that(runner.scene().is_inside_tree()).is_true()
+
+
+func test_reading_mode_home_button_returns_to_level_select() -> void:
+	"""Smoke test: in-level home button should return to level select."""
+	var runner = _create_scene_runner(READING_MODE_SCENE_PATH)
+	await runner.simulate_frames(15, 100)
+	var reading_scene = runner.scene()
+	assert_that(reading_scene).is_not_null()
+	var hud = reading_scene.get_node_or_null("ReadingHUD") as ReadingHUD
+	assert_that(hud).is_not_null()
+	var home_button := hud.get_home_button()
+	assert_that(home_button).is_not_null()
+	_home_requested_emitted = false
+	hud.home_requested.connect(_mark_home_requested)
+	home_button.emit_signal("pressed")
+	await runner.simulate_frames(1, 100)
+	assert_that(_home_requested_emitted).is_true()
 
 
 func test_reading_mode_initialization() -> void:
@@ -226,7 +316,6 @@ func test_level_select_holiday_settings_flow() -> void:
 	assert_that(ReadingSettingsStore.new().resolve_effective_holiday(settings)).is_equal(
 		ReadingSettingsStore.HOLIDAY_CHRISTMAS
 	)
-	print("[TEST] Christmas holiday mode active: no spawnables yet, verify by log")
 
 	# restore previous settings
 	config_button.emit_signal("pressed")

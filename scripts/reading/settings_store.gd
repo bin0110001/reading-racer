@@ -55,6 +55,7 @@ static func default_settings() -> Dictionary:
 		PlayerVehicleLibrary.get_vehicle_scene_path(PlayerVehicleLibrary.DEFAULT_VEHICLE_ID),
 		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR:
 		PlayerVehicleLibrary.DEFAULT_PAINT_COLOR_HEX,
+		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS: [],
 	}
 
 
@@ -105,6 +106,16 @@ func load_settings() -> Dictionary:
 			settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR]
 		)
 	)
+
+	var raw_decals := str(
+		config.get_value("reading", PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS, "[]")
+	)
+	var parsed = JSON.parse_string(raw_decals)
+	if parsed is Array:
+		settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS] = parsed
+	else:
+		settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS] = []
+
 	return settings
 
 
@@ -136,6 +147,11 @@ func save_settings(settings: Dictionary) -> void:
 		"reading",
 		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR,
 		str(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR])
+	)
+	config.set_value(
+		"reading",
+		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS,
+		JSON.stringify(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS])
 	)
 	config.save(SAVE_PATH)
 

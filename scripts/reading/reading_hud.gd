@@ -5,6 +5,7 @@ signal control_mode_changed(mode_name: String)
 signal word_group_changed(group_name: String)
 signal volume_changed(volume: float)
 signal resume_requested
+signal home_requested
 signal debug_path_toggled(enabled: bool)
 signal steering_type_changed(steering_type: String)
 signal map_style_changed(map_style: String)
@@ -24,6 +25,7 @@ var _map_style_option := OptionButton.new()
 var _volume_slider := HSlider.new()
 var _debug_path_checkbox := CheckBox.new()
 
+var _home_button := Button.new()
 var _debug_word_option := OptionButton.new()
 var _debug_phoneme_option := OptionButton.new()
 var _debug_play_button := Button.new()
@@ -131,6 +133,11 @@ func _build_hud() -> void:
 	path_checkbox.set_pressed(true)
 	path_checkbox.toggled.connect(_on_debug_path_toggled)
 	options_layout.add_child(_make_row("Path Debug", path_checkbox))
+
+	_home_button.name = "HomeButton"
+	_home_button.text = "Home"
+	_home_button.pressed.connect(func() -> void: emit_signal("home_requested"))
+	options_layout.add_child(_home_button)
 
 	var resume_button := Button.new()
 	resume_button.text = "Resume"
@@ -243,6 +250,10 @@ func hide_options() -> void:
 
 func is_options_open() -> bool:
 	return _options_panel.visible
+
+
+func get_home_button() -> Button:
+	return _home_button
 
 
 func set_control_mode(mode_name: String) -> void:

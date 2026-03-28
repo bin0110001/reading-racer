@@ -108,6 +108,9 @@ func test_vehicle_select_smoke_controls() -> void:
 
 func test_vehicle_select_paint_controls_and_clear_flow() -> void:
 	"""Verify the vehicle selection screen exposes and responds to paint controls."""
+	var settings_store = ReadingSettingsStore.new()
+	settings_store.save_settings(ReadingSettingsStore.default_settings())
+
 	var scene = ResourceLoader.load(VEHICLE_SELECT_SCENE_PATH) as PackedScene
 	assert_that(scene).is_not_null()
 

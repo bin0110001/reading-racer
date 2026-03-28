@@ -137,13 +137,6 @@ func _build_vehicle_ui() -> void:
 	header_bar.add_theme_constant_override("separation", 12)
 	main_vbox.add_child(header_bar)
 
-	var back_button_top := Button.new()
-	back_button_top.name = "BackButton"
-	back_button_top.text = "Back"
-	back_button_top.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	back_button_top.pressed.connect(_on_back_pressed)
-	header_bar.add_child(back_button_top)
-
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_bar.add_child(spacer)
@@ -239,11 +232,6 @@ func _build_vehicle_ui() -> void:
 	controls_panel.add_theme_constant_override("separation", 12)
 	customizer_row.add_child(controls_panel)
 
-	vehicle_name_label.name = "VehicleNameLabel"
-	vehicle_name_label.add_theme_font_size_override("font_size", 18)
-	vehicle_name_label.text = "Preview"
-	controls_panel.add_child(vehicle_name_label)
-
 	var vehicle_label := Label.new()
 	vehicle_label.text = "Car"
 	controls_panel.add_child(vehicle_label)
@@ -258,7 +246,7 @@ func _build_vehicle_ui() -> void:
 	vehicle_select_prev_button.pressed.connect(_on_prev_vehicle)
 	vehicle_select_container.add_child(vehicle_select_prev_button)
 
-	vehicle_option_label.name = "VehicleOptionLabel"
+	vehicle_option_label.name = "VehicleNameLabel"
 	vehicle_option_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vehicle_option_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vehicle_select_container.add_child(vehicle_option_label)
@@ -323,6 +311,7 @@ func _build_vehicle_ui() -> void:
 	action_bar.add_child(save_button)
 
 	var back_button := Button.new()
+	back_button.name = "BackButton"
 	back_button.text = "Back"
 	back_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back_button.pressed.connect(_on_back_pressed)

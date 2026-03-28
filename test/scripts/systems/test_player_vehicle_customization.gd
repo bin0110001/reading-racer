@@ -116,6 +116,12 @@ func test_player_vehicle_library_apply_vehicle_decals_adds_decal_nodes() -> void
 	assert_that(decal_count).is_equal(1)
 
 
+func test_build_vehicle_settings_persists_empty_decals() -> void:
+	var settings := PlayerVehicleLibrary.build_vehicle_settings("mail_truck", Color(1, 0, 0), [])
+	assert_that(settings.has(PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS)).is_true()
+	assert_that(settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS].size()).is_equal(0)
+
+
 func test_player_vehicle_library_sets_overlay_lightmap_hints() -> void:
 	var player_library = PlayerVehicleLibrary.new()
 	var settings_store = ReadingSettingsStore.new()

@@ -269,9 +269,8 @@ static func build_vehicle_settings(
 		),
 		SETTING_KEY_VEHICLE_SCENE_PATH: get_vehicle_scene_path(vehicle_id),
 		SETTING_KEY_VEHICLE_COLOR: paint_color_hex,
+		SETTING_KEY_VEHICLE_DECALS: paint_decals,
 	}
-	if paint_decals is Array and paint_decals.size() > 0:
-		settings[SETTING_KEY_VEHICLE_DECALS] = paint_decals
 	return settings
 
 
@@ -354,7 +353,8 @@ static func apply_vehicle_decals(instance: Node3D, decals: Array) -> void:
 		var color = Color.from_string(str(decal_info.get("color", "")), get_default_paint_color())
 		var size = float(decal_info.get("size", 0.35))
 
-		# Place decals in instance-local coordinates so this works before instance is added to the scene tree
+		# Place decals in instance-local coordinates
+		# so this works before instance is added to the scene tree
 		var local_decal_position = local_position + local_normal * 0.01
 		var local_decal_normal = local_normal.normalized()
 
@@ -365,7 +365,10 @@ static func apply_vehicle_decals(instance: Node3D, decals: Array) -> void:
 		decal_node.size = Vector3.ONE * size
 		var decal_pose := Transform3D()
 		decal_pose.origin = local_decal_position
-		decal_pose = decal_pose.looking_at(local_decal_position + local_decal_normal, Vector3.UP)
+		var up_dir: Vector3 = Vector3.UP
+		if absf(local_decal_normal.dot(up_dir)) > 0.995:
+			up_dir = Vector3.RIGHT
+		decal_pose = decal_pose.looking_at(local_decal_position + local_decal_normal, up_dir)
 		decal_node.transform = decal_pose
 		instance.add_child(decal_node)
 

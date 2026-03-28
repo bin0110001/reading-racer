@@ -140,6 +140,7 @@ Example: When you modify `reading_mode.tscn`, the suite will immediately test th
   - Check scene state with `runner.get_property()` and assertions
   - GDUnit orphan detection is automatic; tests will fail if nodes are leaked
 - If we run into other issues creating GD Scripts or scene tests, keep this up to date.
+- UI text for kid-focused pages should be minimal and icon-first (e.g., arrows for selection, emoji for actions, short labels).
 
 Inline quick-run command (really good):
 

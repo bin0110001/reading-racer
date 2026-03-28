@@ -83,7 +83,9 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	assert_that(vehicle_scene.is_inside_tree()).is_true()
 
 	var paint_palette := _find_node_recursive(vehicle_scene, "PaintColorPalette") as GridContainer
-	var brush_size_button := _find_node_recursive(vehicle_scene, "BrushSizeButton_02") as TextureButton
+	var brush_size_button := (
+		_find_node_recursive(vehicle_scene, "BrushSizeButton_02") as TextureButton
+	)
 	var paint_color_swatch := (
 		_find_node_recursive(vehicle_scene, "PaintColorSwatch_00") as BaseButton
 	)

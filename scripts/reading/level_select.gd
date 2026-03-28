@@ -12,6 +12,7 @@ var level_buttons: Array[Button] = []
 var vehicle_catalog: Array[Dictionary] = []
 var selected_vehicle_id: String = PlayerVehicleLibrary.DEFAULT_VEHICLE_ID
 var selected_vehicle_color: Color = PlayerVehicleLibrary.get_default_paint_color()
+var selected_vehicle_decals: Array = []
 
 var vehicle_option := OptionButton.new()
 var vehicle_color_picker := ColorPickerButton.new()
@@ -211,7 +212,7 @@ func _refresh_vehicle_preview() -> void:
 
 func _apply_vehicle_settings(settings: Dictionary) -> void:
 	var vehicle_settings: Dictionary = PlayerVehicleLibrary.build_vehicle_settings(
-		selected_vehicle_id, selected_vehicle_color
+		selected_vehicle_id, selected_vehicle_color, selected_vehicle_decals
 	)
 	for key in vehicle_settings.keys():
 		settings[key] = vehicle_settings[key]
@@ -284,7 +285,12 @@ func _load_settings() -> void:
 	if holiday_name_index >= 0 and holiday_name_option:
 		holiday_name_option.select(holiday_name_index)
 
+	selected_vehicle_id = PlayerVehicleLibrary.resolve_vehicle_id(settings)
 	selected_vehicle_color = PlayerVehicleLibrary.resolve_paint_color(settings)
+	selected_vehicle_decals = settings.get(PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS, [])
+
+	_select_vehicle(selected_vehicle_id)
+	_refresh_vehicle_preview()
 
 
 func _on_vehicle_selected(index: int) -> void:

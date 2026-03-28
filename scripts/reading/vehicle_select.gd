@@ -18,6 +18,7 @@ const GPU_BRUSH_SHAPE := preload(
 const GPU_OVERLAY_SHADER := preload(
 	GPU_TEXTURE_PAINTER_BASE + "overlay_shaders/" + "default_overlay.gdshader"
 )
+const VehicleSelectUtils = preload("res://scripts/reading/vehicle_select_utils.gd")
 
 const PAINT_COLOR_OPTIONS := [
 	Color(0.98, 0.24, 0.20),
@@ -59,17 +60,22 @@ var vehicle_catalog: Array[Dictionary] = []
 var selected_vehicle_id := PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID
 var selected_vehicle_color := PlayerVehicleLibraryScript.get_default_paint_color()
 
-var vehicle_option := OptionButton.new()
+var vehicle_select_container := HBoxContainer.new()
+var vehicle_select_prev_button := Button.new()
+var vehicle_select_next_button := Button.new()
+var vehicle_option_label := Label.new()
 var paint_color_palette := GridContainer.new()
 var brush_size_buttons: Array = []
 var vehicle_name_label := Label.new()
 var vehicle_preview_container := SubViewportContainer.new()
+var selected_vehicle_index := 0
 var vehicle_preview_viewport := SubViewport.new()
 var vehicle_preview_root := Node3D.new()
 var vehicle_preview_pivot := Node3D.new()
 var overlay_atlas_manager: OverlayAtlasManager = null
 var camera_brush: CameraBrush = null
 var vehicle_preview_instance: Node3D = null
+var save_feedback_label := Label.new()
 var vehicle_preview_camera: Camera3D = null
 var painting_pointer_down := false
 var paint_brush_size := 0.35
@@ -124,6 +130,23 @@ func _build_vehicle_ui() -> void:
 	title.text = "Vehicle Selection"
 	title.add_theme_font_size_override("font_size", 42)
 	main_vbox.add_child(title)
+
+	var header_bar := HBoxContainer.new()
+	header_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	header_bar.add_theme_constant_override("separation", 12)
+	main_vbox.add_child(header_bar)
+
+	var back_button_top := Button.new()
+	back_button_top.name = "BackButton"
+	back_button_top.text = "Back"
+	back_button_top.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	back_button_top.pressed.connect(_on_back_pressed)
+	header_bar.add_child(back_button_top)
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_bar.add_child(spacer)
 
 	var customizer_row := HBoxContainer.new()
 	customizer_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -202,7 +225,7 @@ func _build_vehicle_ui() -> void:
 	camera_brush.max_distance = 25.0
 	camera_brush.min_bleed = 1
 	camera_brush.max_bleed = 1
-	camera_brush.brush_shape = _create_circular_brush_shape(256)
+	camera_brush.brush_shape = VehicleSelectUtils.create_circular_brush_shape(256)
 	camera_brush.resolution = Vector2i(512, 512)
 	camera_brush.size = 0.5
 	camera_brush.color = selected_vehicle_color
@@ -222,13 +245,31 @@ func _build_vehicle_ui() -> void:
 	controls_panel.add_child(vehicle_name_label)
 
 	var vehicle_label := Label.new()
-	vehicle_label.text = "Vehicle"
+	vehicle_label.text = "Car"
 	controls_panel.add_child(vehicle_label)
 
-	vehicle_option.name = "VehicleOption"
-	vehicle_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vehicle_option.item_selected.connect(_on_vehicle_selected)
-	controls_panel.add_child(vehicle_option)
+	vehicle_select_container.name = "VehicleOption"
+	vehicle_select_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vehicle_select_container.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	vehicle_select_prev_button.name = "VehiclePrevButton"
+	vehicle_select_prev_button.text = "◀"
+	vehicle_select_prev_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vehicle_select_prev_button.pressed.connect(_on_prev_vehicle)
+	vehicle_select_container.add_child(vehicle_select_prev_button)
+
+	vehicle_option_label.name = "VehicleOptionLabel"
+	vehicle_option_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vehicle_option_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vehicle_select_container.add_child(vehicle_option_label)
+
+	vehicle_select_next_button.name = "VehicleNextButton"
+	vehicle_select_next_button.text = "▶"
+	vehicle_select_next_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vehicle_select_next_button.pressed.connect(_on_next_vehicle)
+	vehicle_select_container.add_child(vehicle_select_next_button)
+
+	controls_panel.add_child(vehicle_select_container)
 
 	var brush_label := Label.new()
 	brush_label.text = "Brush"
@@ -238,7 +279,7 @@ func _build_vehicle_ui() -> void:
 
 	var paint_mode_hint := Label.new()
 	paint_mode_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	paint_mode_hint.text = "Brush painting is always enabled. Drag on the preview to paint."
+	paint_mode_hint.text = "🎨 Drag on preview to paint"
 	controls_panel.add_child(paint_mode_hint)
 
 	var paint_label := Label.new()
@@ -256,23 +297,24 @@ func _build_vehicle_ui() -> void:
 
 	var clear_paint_button := Button.new()
 	clear_paint_button.name = "ClearPaintButton"
-	clear_paint_button.text = "Clear Paint"
+	clear_paint_button.text = "🧼"
+	clear_paint_button.tooltip_text = "Clear paint"
 	clear_paint_button.pressed.connect(_on_clear_paint_pressed)
 	controls_panel.add_child(clear_paint_button)
 
 	var help_text := Label.new()
 	help_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	help_text.text = (
-		"Your selected car, brush, and paint are saved and reused "
-		+ "when you start a reading level. "
-		+ "Click the preview while brush mode is on to paint on the model."
-	)
+	help_text.text = "▶ Drag on model to paint, ↔ select car, 💾 save"
 	controls_panel.add_child(help_text)
-
 	var action_bar := HBoxContainer.new()
 	action_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_bar.add_theme_constant_override("separation", 12)
 	main_vbox.add_child(action_bar)
+
+	save_feedback_label.text = ""
+	save_feedback_label.add_theme_font_size_override("font_size", 16)
+	save_feedback_label.self_modulate = Color(0.7, 0.95, 0.7)
+	main_vbox.add_child(save_feedback_label)
 
 	var save_button := Button.new()
 	save_button.text = "Save"
@@ -289,9 +331,29 @@ func _build_vehicle_ui() -> void:
 
 func _populate_vehicle_options() -> void:
 	vehicle_catalog = PlayerVehicleLibraryScript.list_vehicles()
-	vehicle_option.clear()
-	for vehicle in vehicle_catalog:
-		vehicle_option.add_item(str(vehicle.get("name", "Vehicle")))
+	selected_vehicle_index = 0
+	for index in range(vehicle_catalog.size()):
+		if str(vehicle_catalog[index].get("id", "")) == selected_vehicle_id:
+			selected_vehicle_index = index
+			break
+	_update_vehicle_selection_display()
+
+
+func _update_vehicle_selection_display() -> void:
+	if vehicle_catalog.size() == 0:
+		vehicle_option_label.text = "No car"
+		selected_vehicle_id = PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID
+		return
+
+	selected_vehicle_index = selected_vehicle_index % vehicle_catalog.size()
+	if selected_vehicle_index < 0:
+		selected_vehicle_index = vehicle_catalog.size() - 1
+
+	var selected_vehicle = vehicle_catalog[selected_vehicle_index]
+	selected_vehicle_id = str(
+		selected_vehicle.get("id", PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID)
+	)
+	vehicle_option_label.text = str(selected_vehicle.get("name", "Car"))
 
 
 func _load_settings() -> void:
@@ -312,8 +374,9 @@ func _select_vehicle(vehicle_id: String) -> void:
 	for index in range(vehicle_catalog.size()):
 		var vehicle := vehicle_catalog[index]
 		if str(vehicle.get("id", "")) == selected_vehicle_id:
-			vehicle_option.select(index)
+			selected_vehicle_index = index
 			break
+	_update_vehicle_selection_display()
 
 
 func _refresh_vehicle_preview() -> void:
@@ -352,7 +415,9 @@ func _clear_preview_decals() -> void:
 func _apply_preview_decals() -> void:
 	if vehicle_preview_instance == null:
 		return
-	PlayerVehicleLibraryScript.apply_vehicle_decals(vehicle_preview_instance, selected_vehicle_decals)
+	PlayerVehicleLibraryScript.apply_vehicle_decals(
+		vehicle_preview_instance, selected_vehicle_decals
+	)
 
 
 func _setup_paint_collision(_node: Node) -> void:
@@ -366,12 +431,14 @@ func _add_paint_decal_from_data(
 		return
 
 	var decal_info := {
-		"position": {
+		"position":
+		{
 			"x": float(_local_position.x),
 			"y": float(_local_position.y),
 			"z": float(_local_position.z),
 		},
-		"normal": {
+		"normal":
+		{
 			"x": float(_local_normal.x),
 			"y": float(_local_normal.y),
 			"z": float(_local_normal.z),
@@ -410,15 +477,35 @@ func _apply_vehicle_settings(settings: Dictionary) -> void:
 	)
 	for key in vehicle_settings.keys():
 		settings[key] = vehicle_settings[key]
+	# Keep brush size setting in sync with the preview state.
 	settings["paint_brush_size"] = paint_brush_size
+	# Ensure empty decal lists override prior saved decals.
+	settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS] = selected_vehicle_decals
 
 
 func _on_vehicle_selected(index: int) -> void:
 	if index < 0 or index >= vehicle_catalog.size():
 		return
-	selected_vehicle_id = str(
-		vehicle_catalog[index].get("id", PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID)
+	selected_vehicle_index = index
+	_update_vehicle_selection_display()
+	_refresh_vehicle_preview()
+
+
+func _on_prev_vehicle() -> void:
+	if vehicle_catalog.size() == 0:
+		return
+	selected_vehicle_index = (
+		(selected_vehicle_index - 1 + vehicle_catalog.size()) % vehicle_catalog.size()
 	)
+	_update_vehicle_selection_display()
+	_refresh_vehicle_preview()
+
+
+func _on_next_vehicle() -> void:
+	if vehicle_catalog.size() == 0:
+		return
+	selected_vehicle_index = (selected_vehicle_index + 1) % vehicle_catalog.size()
+	_update_vehicle_selection_display()
 	_refresh_vehicle_preview()
 
 
@@ -437,8 +524,8 @@ func _build_paint_color_palette() -> void:
 		swatch.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		swatch.custom_minimum_size = Vector2(28, 28)
 		swatch.tooltip_text = color.to_html(true)
-		swatch.texture_normal = _create_color_swatch_texture(color, false)
-		swatch.texture_pressed = _create_color_swatch_texture(color, true)
+		swatch.texture_normal = VehicleSelectUtils.create_color_swatch_texture(color, false)
+		swatch.texture_pressed = VehicleSelectUtils.create_color_swatch_texture(color, true)
 		swatch.texture_hover = swatch.texture_normal
 		swatch.texture_focused = swatch.texture_normal
 		swatch.pressed.connect(_on_paint_color_selected.bind(index))
@@ -466,8 +553,8 @@ func _build_brush_size_selector(parent: Control) -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		button.custom_minimum_size = Vector2(48, 48)
-		button.texture_normal = _create_brush_size_texture(preset_size, false)
-		button.texture_pressed = _create_brush_size_texture(preset_size, true)
+		button.texture_normal = VehicleSelectUtils.create_brush_size_texture(preset_size, false)
+		button.texture_pressed = VehicleSelectUtils.create_brush_size_texture(preset_size, true)
 		button.texture_hover = button.texture_normal
 		button.texture_focused = button.texture_normal
 		button.pressed.connect(_on_brush_size_selected.bind(index))
@@ -481,44 +568,16 @@ func _update_brush_size_button_states(selected_index: int) -> void:
 	for index in range(brush_size_buttons.size()):
 		var button: TextureButton = brush_size_buttons[index] as TextureButton
 		button.button_pressed = index == selected_index
-		button.texture_normal = _create_brush_size_texture(
-			float(BRUSH_PRESETS[index].get("size", paint_brush_size))
-			, index == selected_index
+		button.texture_normal = VehicleSelectUtils.create_brush_size_texture(
+			float(BRUSH_PRESETS[index].get("size", paint_brush_size)), index == selected_index
 		)
-		button.texture_pressed = _create_brush_size_texture(
-			float(BRUSH_PRESETS[index].get("size", paint_brush_size))
-			, index == selected_index
+		button.texture_pressed = VehicleSelectUtils.create_brush_size_texture(
+			float(BRUSH_PRESETS[index].get("size", paint_brush_size)), index == selected_index
 		)
 
 
 func _find_closest_brush_preset_index(brush_size: float) -> int:
-	var closest_index := 0
-	var closest_distance := INF
-	for index in range(BRUSH_PRESETS.size()):
-		var preset_size := float(BRUSH_PRESETS[index].get("size", paint_brush_size))
-		var distance := absf(preset_size - brush_size)
-		if distance < closest_distance:
-			closest_distance = distance
-			closest_index = index
-	return closest_index
-
-
-func _create_brush_size_texture(brush_size: float, selected := false) -> Texture2D:
-	var size := 48
-	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	image.fill(Color(0, 0, 0, 0))
-	var center := Vector2(size * 0.5, size * 0.5)
-	var radius: float = clamp(brush_size * 30.0, 6.0, 20.0)
-	for y in range(size):
-		for x in range(size):
-			var dist := Vector2(x + 0.5, y + 0.5).distance_to(center)
-			if dist <= radius:
-				image.set_pixel(x, y, Color(1, 1, 1, 1.0 if selected else 0.8))
-			elif dist <= radius + 2.0 and selected:
-				image.set_pixel(x, y, Color(0.9, 0.9, 0.2, 1))
-			else:
-				image.set_pixel(x, y, Color(0, 0, 0, 0))
-	return ImageTexture.create_from_image(image)
+	return VehicleSelectUtils.find_closest_brush_preset_index(brush_size, BRUSH_PRESETS)
 
 
 func _update_paint_color_swatches() -> void:
@@ -526,39 +585,6 @@ func _update_paint_color_swatches() -> void:
 		var swatch := paint_color_buttons[index]
 		_apply_paint_swatch_state(swatch, index == selected_paint_color_index)
 		swatch.button_pressed = index == selected_paint_color_index
-
-
-func _create_color_swatch_texture(color: Color, selected := false) -> Texture2D:
-	var image := Image.create(32, 32, false, Image.FORMAT_RGBA8)
-	var center := Vector2(16.0, 16.0)
-	var outer_radius := 14.0
-	var inner_radius := 11.0
-	for y in range(32):
-		for x in range(32):
-			var distance := Vector2(float(x) + 0.5, float(y) + 0.5).distance_to(center)
-			if selected and distance <= outer_radius and distance > inner_radius:
-				image.set_pixel(x, y, Color(1, 1, 1, 1.0))
-			elif distance <= inner_radius:
-				image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
-			else:
-				image.set_pixel(x, y, Color(0, 0, 0, 0))
-	return ImageTexture.create_from_image(image)
-
-
-func _create_circular_brush_shape(size: int = 256) -> Image:
-	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
-	var center := Vector2(size * 0.5, size * 0.5)
-	var radius := size * 0.5
-	for y in size:
-		for x in size:
-			var pos = Vector2(x + 0.5, y + 0.5)
-			var dist = pos.distance_to(center)
-			var alpha = clampf(1.0 - (dist / radius), 0.0, 1.0)
-			if dist <= radius:
-				image.set_pixel(x, y, Color(1, 1, 1, alpha))
-			else:
-				image.set_pixel(x, y, Color(1, 1, 1, 0))
-	return image
 
 
 func _set_selected_paint_color(color: Color, refresh_preview := true) -> void:
@@ -571,19 +597,7 @@ func _set_selected_paint_color(color: Color, refresh_preview := true) -> void:
 
 
 func _find_closest_paint_color_index(color: Color) -> int:
-	var closest_index := 0
-	var closest_distance := INF
-	for index in range(PAINT_COLOR_OPTIONS.size()):
-		var option_color: Color = PAINT_COLOR_OPTIONS[index]
-		var distance := (
-			absf(option_color.r - color.r)
-			+ absf(option_color.g - color.g)
-			+ absf(option_color.b - color.b)
-		)
-		if distance < closest_distance:
-			closest_distance = distance
-			closest_index = index
-	return closest_index
+	return VehicleSelectUtils.find_closest_paint_color_index(color, PAINT_COLOR_OPTIONS)
 
 
 func _set_brush_preset_by_size(brush_size: float, refresh_preview := true) -> void:
@@ -690,13 +704,13 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 		var hit_position: Vector3 = hit.get("position", Vector3.ZERO)
 		var hit_normal: Vector3 = hit.get("normal", Vector3.UP)
 		var brush_position = hit_position + hit_normal * 0.05
-		var up_dir = hit_normal
-		if absf(up_dir.dot(Vector3.UP)) > 0.995:
+		var look_direction = (hit_position - brush_position).normalized()
+		var up_dir = Vector3.UP
+		if absf(look_direction.dot(up_dir)) > 0.995:
 			up_dir = Vector3.RIGHT
 
 		camera_brush.global_transform = Transform3D(
-			Basis().looking_at((hit_position - brush_position).normalized(), up_dir),
-			brush_position
+			Basis().looking_at(look_direction, up_dir), brush_position
 		)
 		camera_brush.drawing = true
 
@@ -854,9 +868,7 @@ func _intersect_ray_aabb(ray_origin: Vector3, ray_direction: Vector3, bounds: AA
 
 
 func _ray_intersect_mesh_instance(
-	mesh_instance: MeshInstance3D,
-	ray_origin: Vector3,
-	ray_direction: Vector3
+	mesh_instance: MeshInstance3D, ray_origin: Vector3, ray_direction: Vector3
 ) -> Dictionary:
 	if mesh_instance.mesh == null:
 		return {}
@@ -923,11 +935,7 @@ func _ray_intersect_mesh_instance(
 
 
 func _intersect_ray_triangle(
-	ray_origin: Vector3,
-	ray_direction: Vector3,
-	v0: Vector3,
-	v1: Vector3,
-	v2: Vector3
+	ray_origin: Vector3, ray_direction: Vector3, v0: Vector3, v1: Vector3, v2: Vector3
 ) -> float:
 	var epsilon = 0.000001
 	var edge1 = v1 - v0
@@ -982,7 +990,18 @@ func _on_save_pressed() -> void:
 	var settings = settings_store.load_settings()
 	_apply_vehicle_settings(settings)
 	settings_store.save_settings(settings)
+	_show_feedback("Saved vehicle customization", 0.8)
+	await get_tree().create_timer(0.8).timeout
 	get_tree().change_scene_to_file("res://scenes/level_select.tscn")
+
+
+func _show_feedback(message: String, duration: float = 1.0) -> void:
+	if save_feedback_label == null:
+		return
+	save_feedback_label.text = message
+	await get_tree().create_timer(duration).timeout
+	if save_feedback_label != null:
+		save_feedback_label.text = ""
 
 
 func _on_back_pressed() -> void:

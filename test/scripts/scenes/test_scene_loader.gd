@@ -86,9 +86,11 @@ func test_vehicle_select_smoke_controls() -> void:
 	var name_label = _find_child_by_name(instance, "VehicleNameLabel")
 	var camera_brush = _find_child_by_name(instance, "CameraBrush")
 	var overlay_manager = _find_child_by_name(instance, "OverlayAtlasManager")
+	var back_button = _find_child_by_name(instance, "BackButton")
 
 	assert_that(vehicle_option).is_not_null()
 	assert_that(brush_size_selector).is_not_null()
+	assert_that(back_button).is_not_null()
 	assert_that(brush_size_selector.get_child_count()).is_equal(5)
 	assert_that(paint_palette).is_not_null()
 	assert_that(preview_container).is_not_null()

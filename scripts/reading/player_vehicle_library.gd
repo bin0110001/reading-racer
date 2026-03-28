@@ -354,18 +354,18 @@ static func apply_vehicle_decals(instance: Node3D, decals: Array) -> void:
 		var color = Color.from_string(str(decal_info.get("color", "")), get_default_paint_color())
 		var size = float(decal_info.get("size", 0.35))
 
-		var global_position = instance.to_global(local_position)
-		var global_normal = (instance.global_transform.basis * local_normal).normalized()
+		# Place decals in instance-local coordinates so this works before instance is added to the scene tree
+		var local_decal_position = local_position + local_normal * 0.01
+		var local_decal_normal = local_normal.normalized()
 
 		var decal_node = Decal.new()
 		decal_node.texture_albedo = _create_decal_texture(color)
-		decal_node.albedo_mix = 1.0
+		decal_node.albedo_mix = 0.75
 		decal_node.modulate = Color(1, 1, 1, 1)
 		decal_node.size = Vector3.ONE * size
 		var decal_pose := Transform3D()
-		decal_pose.origin = global_position + global_normal * 0.01
-		# Use safe look-at utility that works before node is in tree
-		decal_pose = decal_pose.looking_at(global_position + global_normal, Vector3.UP)
+		decal_pose.origin = local_decal_position
+		decal_pose = decal_pose.looking_at(local_decal_position + local_decal_normal, Vector3.UP)
 		decal_node.transform = decal_pose
 		instance.add_child(decal_node)
 

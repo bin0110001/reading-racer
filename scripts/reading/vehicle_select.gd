@@ -61,8 +61,7 @@ var selected_vehicle_color := PlayerVehicleLibraryScript.get_default_paint_color
 
 var vehicle_option := OptionButton.new()
 var paint_color_palette := GridContainer.new()
-var brush_size_option := OptionButton.new()
-var paint_mode_toggle := CheckBox.new()
+var brush_size_buttons: Array = []
 var vehicle_name_label := Label.new()
 var vehicle_preview_container := SubViewportContainer.new()
 var vehicle_preview_viewport := SubViewport.new()
@@ -72,7 +71,7 @@ var overlay_atlas_manager: OverlayAtlasManager = null
 var camera_brush: CameraBrush = null
 var vehicle_preview_instance: Node3D = null
 var vehicle_preview_camera: Camera3D = null
-var paint_mode_enabled := false
+var painting_pointer_down := false
 var paint_brush_size := 0.35
 var selected_vehicle_decals: Array = []
 var selected_paint_color_index := 0
@@ -203,7 +202,7 @@ func _build_vehicle_ui() -> void:
 	camera_brush.max_distance = 25.0
 	camera_brush.min_bleed = 1
 	camera_brush.max_bleed = 1
-	camera_brush.brush_shape = GPU_BRUSH_SHAPE
+	camera_brush.brush_shape = _create_circular_brush_shape(256)
 	camera_brush.resolution = Vector2i(512, 512)
 	camera_brush.size = 0.5
 	camera_brush.color = selected_vehicle_color
@@ -235,18 +234,12 @@ func _build_vehicle_ui() -> void:
 	brush_label.text = "Brush"
 	controls_panel.add_child(brush_label)
 
-	brush_size_option.name = "BrushSizeOption"
-	brush_size_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	brush_size_option.item_selected.connect(_on_brush_preset_selected)
-	for preset in BRUSH_PRESETS:
-		brush_size_option.add_item(str(preset.get("label", "Brush")))
-	controls_panel.add_child(brush_size_option)
+	_build_brush_size_selector(controls_panel)
 
-	paint_mode_toggle.text = "Enable Brush Painting"
-	paint_mode_toggle.name = "PaintModeToggle"
-	paint_mode_toggle.button_pressed = false
-	paint_mode_toggle.toggled.connect(_on_paint_mode_toggled)
-	controls_panel.add_child(paint_mode_toggle)
+	var paint_mode_hint := Label.new()
+	paint_mode_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	paint_mode_hint.text = "Brush painting is always enabled. Drag on the preview to paint."
+	controls_panel.add_child(paint_mode_hint)
 
 	var paint_label := Label.new()
 	paint_label.text = "Paint Color"
@@ -373,8 +366,16 @@ func _add_paint_decal_from_data(
 		return
 
 	var decal_info := {
-		"position": {"x": float(_local_position.x), "y": float(_local_position.y), "z": float(_local_position.z)},
-		"normal": {"x": float(_local_normal.x), "y": float(_local_normal.y), "z": float(_local_normal.z)},
+		"position": {
+			"x": float(_local_position.x),
+			"y": float(_local_position.y),
+			"z": float(_local_position.z),
+		},
+		"normal": {
+			"x": float(_local_normal.x),
+			"y": float(_local_normal.y),
+			"z": float(_local_normal.z),
+		},
 		"color": _color.to_html(true),
 		"size": _size,
 	}
@@ -383,6 +384,7 @@ func _add_paint_decal_from_data(
 		selected_vehicle_decals.append(decal_info)
 
 	PlayerVehicleLibraryScript.apply_vehicle_decals(vehicle_preview_instance, [decal_info])
+	_request_overlay_refresh()
 
 
 func _create_decal_material(_color: Color) -> Material:
@@ -446,6 +448,79 @@ func _build_paint_color_palette() -> void:
 	_update_paint_color_swatches()
 
 
+func _build_brush_size_selector(parent: Control) -> void:
+	brush_size_buttons.clear()
+	var size_row := HBoxContainer.new()
+	size_row.name = "BrushSizeSelector"
+	size_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	size_row.add_theme_constant_override("separation", 8)
+	parent.add_child(size_row)
+
+	for index in range(BRUSH_PRESETS.size()):
+		var preset: Dictionary = BRUSH_PRESETS[index]
+		var preset_size := float(preset.get("size", paint_brush_size))
+		var button: TextureButton = TextureButton.new()
+		button.name = "BrushSizeButton_%02d" % index
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		button.custom_minimum_size = Vector2(48, 48)
+		button.texture_normal = _create_brush_size_texture(preset_size, false)
+		button.texture_pressed = _create_brush_size_texture(preset_size, true)
+		button.texture_hover = button.texture_normal
+		button.texture_focused = button.texture_normal
+		button.pressed.connect(_on_brush_size_selected.bind(index))
+		size_row.add_child(button)
+		brush_size_buttons.append(button)
+
+	_update_brush_size_button_states(_find_closest_brush_preset_index(paint_brush_size))
+
+
+func _update_brush_size_button_states(selected_index: int) -> void:
+	for index in range(brush_size_buttons.size()):
+		var button: TextureButton = brush_size_buttons[index] as TextureButton
+		button.button_pressed = index == selected_index
+		button.texture_normal = _create_brush_size_texture(
+			float(BRUSH_PRESETS[index].get("size", paint_brush_size))
+			, index == selected_index
+		)
+		button.texture_pressed = _create_brush_size_texture(
+			float(BRUSH_PRESETS[index].get("size", paint_brush_size))
+			, index == selected_index
+		)
+
+
+func _find_closest_brush_preset_index(brush_size: float) -> int:
+	var closest_index := 0
+	var closest_distance := INF
+	for index in range(BRUSH_PRESETS.size()):
+		var preset_size := float(BRUSH_PRESETS[index].get("size", paint_brush_size))
+		var distance := absf(preset_size - brush_size)
+		if distance < closest_distance:
+			closest_distance = distance
+			closest_index = index
+	return closest_index
+
+
+func _create_brush_size_texture(brush_size: float, selected := false) -> Texture2D:
+	var size := 48
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var center := Vector2(size * 0.5, size * 0.5)
+	var radius: float = clamp(brush_size * 30.0, 6.0, 20.0)
+	for y in range(size):
+		for x in range(size):
+			var dist := Vector2(x + 0.5, y + 0.5).distance_to(center)
+			if dist <= radius:
+				image.set_pixel(x, y, Color(1, 1, 1, 1.0 if selected else 0.8))
+			elif dist <= radius + 2.0 and selected:
+				image.set_pixel(x, y, Color(0.9, 0.9, 0.2, 1))
+			else:
+				image.set_pixel(x, y, Color(0, 0, 0, 0))
+	return ImageTexture.create_from_image(image)
+
+
 func _update_paint_color_swatches() -> void:
 	for index in range(paint_color_buttons.size()):
 		var swatch := paint_color_buttons[index]
@@ -468,6 +543,22 @@ func _create_color_swatch_texture(color: Color, selected := false) -> Texture2D:
 			else:
 				image.set_pixel(x, y, Color(0, 0, 0, 0))
 	return ImageTexture.create_from_image(image)
+
+
+func _create_circular_brush_shape(size: int = 256) -> Image:
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center := Vector2(size * 0.5, size * 0.5)
+	var radius := size * 0.5
+	for y in size:
+		for x in size:
+			var pos = Vector2(x + 0.5, y + 0.5)
+			var dist = pos.distance_to(center)
+			var alpha = clampf(1.0 - (dist / radius), 0.0, 1.0)
+			if dist <= radius:
+				image.set_pixel(x, y, Color(1, 1, 1, alpha))
+			else:
+				image.set_pixel(x, y, Color(1, 1, 1, 0))
+	return image
 
 
 func _set_selected_paint_color(color: Color, refresh_preview := true) -> void:
@@ -505,10 +596,16 @@ func _set_brush_preset_by_size(brush_size: float, refresh_preview := true) -> vo
 		if distance < closest_distance:
 			closest_distance = distance
 			closest_index = index
-	brush_size_option.select(closest_index)
+	_update_brush_size_button_states(closest_index)
 	_sync_gpu_paint_state()
 	if refresh_preview:
 		_refresh_vehicle_preview()
+
+
+func _on_brush_size_selected(index: int) -> void:
+	if index < 0 or index >= BRUSH_PRESETS.size():
+		return
+	_set_brush_preset_by_size(float(BRUSH_PRESETS[index].get("size", paint_brush_size)))
 
 
 func _on_paint_color_selected(index: int) -> void:
@@ -523,26 +620,15 @@ func _on_brush_preset_selected(index: int) -> void:
 	_set_brush_preset_by_size(float(BRUSH_PRESETS[index].get("size", paint_brush_size)))
 
 
-func _on_paint_mode_toggled(enabled: bool) -> void:
-	paint_mode_enabled = enabled
-	if not paint_mode_enabled and camera_brush != null:
-		camera_brush.drawing = false
-	_sync_gpu_paint_state()
-
-
 func _on_clear_paint_pressed() -> void:
 	selected_vehicle_decals.clear()
 	_clear_preview_decals()
 	_request_overlay_refresh()
 	if camera_brush != null:
 		camera_brush.drawing = false
-	paint_mode_enabled = false
-	paint_mode_toggle.button_pressed = false
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not paint_mode_enabled:
-		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var local_point = vehicle_preview_container.get_local_mouse_position()
 		var inside_x = local_point.x >= 0 and local_point.x <= vehicle_preview_container.size.x
@@ -553,19 +639,46 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _on_vehicle_preview_gui_input(event: InputEvent) -> void:
-	if not paint_mode_enabled:
-		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		if camera_brush != null:
-			_paint_at_viewport_point((event as InputEventMouseButton).position)
-			camera_brush.drawing = true
-	elif (
-		event is InputEventMouseButton
-		and event.button_index == MOUSE_BUTTON_LEFT
-		and not event.pressed
-	):
-		if camera_brush != null:
-			camera_brush.drawing = false
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			painting_pointer_down = true
+			if camera_brush != null:
+				_paint_at_viewport_point((event as InputEventMouseButton).position)
+				camera_brush.drawing = true
+		else:
+			painting_pointer_down = false
+			if camera_brush != null:
+				camera_brush.drawing = false
+
+	if event is InputEventMouseMotion and painting_pointer_down and camera_brush != null:
+		_paint_at_viewport_point((event as InputEventMouseMotion).position)
+
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			painting_pointer_down = true
+			if camera_brush != null:
+				_paint_at_viewport_point(event.position)
+				camera_brush.drawing = true
+		else:
+			painting_pointer_down = false
+			if camera_brush != null:
+				camera_brush.drawing = false
+
+	if event is InputEventScreenDrag and painting_pointer_down and camera_brush != null:
+		_paint_at_viewport_point(event.position)
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			painting_pointer_down = true
+			if camera_brush != null:
+				_paint_at_viewport_point(event.position)
+				camera_brush.drawing = true
+		else:
+			painting_pointer_down = false
+			if camera_brush != null:
+				camera_brush.drawing = false
+
+	if event is InputEventScreenDrag and painting_pointer_down and camera_brush != null:
+		_paint_at_viewport_point(event.position)
 
 
 func _paint_at_viewport_point(_local_point: Vector2) -> void:
@@ -576,14 +689,31 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 			return
 		var hit_position: Vector3 = hit.get("position", Vector3.ZERO)
 		var hit_normal: Vector3 = hit.get("normal", Vector3.UP)
-		camera_brush.global_position = hit_position + hit_normal * 0.05
-		camera_brush.look_at(hit_position, Vector3.UP)
+		var brush_position = hit_position + hit_normal * 0.05
+		var up_dir = hit_normal
+		if absf(up_dir.dot(Vector3.UP)) > 0.995:
+			up_dir = Vector3.RIGHT
+
+		camera_brush.global_transform = Transform3D(
+			Basis().looking_at((hit_position - brush_position).normalized(), up_dir),
+			brush_position
+		)
 		camera_brush.drawing = true
 
 		if vehicle_preview_instance != null:
 			var local_position := vehicle_preview_instance.to_local(hit_position)
-			var local_normal: Vector3 = (vehicle_preview_instance.global_transform.basis.inverse() * hit_normal).normalized()
-			_add_paint_decal_from_data(local_position, local_normal, selected_vehicle_color, paint_brush_size, true)
+			var local_basis := vehicle_preview_instance.global_transform.basis.inverse()
+			var local_normal: Vector3 = local_basis * hit_normal
+			local_normal = local_normal.normalized()
+			var decal_color := selected_vehicle_color
+			var brush_size := paint_brush_size
+			_add_paint_decal_from_data(
+				local_position,
+				local_normal,
+				decal_color,
+				brush_size,
+				true,
+			)
 
 
 func _sync_gpu_paint_state() -> void:
@@ -591,8 +721,6 @@ func _sync_gpu_paint_state() -> void:
 		return
 	camera_brush.color = selected_vehicle_color
 	camera_brush.size = paint_brush_size
-	if not paint_mode_enabled:
-		camera_brush.drawing = false
 
 
 func _apply_paint_swatch_state(swatch: TextureButton, selected: bool) -> void:
@@ -652,14 +780,27 @@ func _find_preview_hit(local_point: Vector2) -> Dictionary:
 	for mesh_instance in _collect_preview_mesh_instances(vehicle_preview_instance):
 		if mesh_instance.mesh == null:
 			continue
-		var bounds: AABB = mesh_instance.global_transform * mesh_instance.get_aabb()
-		var hit := _intersect_ray_aabb(ray_origin, ray_direction, bounds)
+		var hit := _ray_intersect_mesh_instance(mesh_instance, ray_origin, ray_direction)
 		if hit.is_empty():
 			continue
 		var distance := float(hit.get("distance", INF))
 		if distance < best_distance:
 			best_distance = distance
 			best_hit = hit
+
+	# Fallback to AABB when detailed mesh intersection is unavailable.
+	if best_hit.is_empty():
+		for mesh_instance in _collect_preview_mesh_instances(vehicle_preview_instance):
+			if mesh_instance.mesh == null:
+				continue
+			var bounds: AABB = mesh_instance.global_transform * mesh_instance.get_aabb()
+			var hit := _intersect_ray_aabb(ray_origin, ray_direction, bounds)
+			if hit.is_empty():
+				continue
+			var distance := float(hit.get("distance", INF))
+			if distance < best_distance:
+				best_distance = distance
+				best_hit = hit
 
 	return best_hit
 
@@ -710,6 +851,104 @@ func _intersect_ray_aabb(ray_origin: Vector3, ray_direction: Vector3, bounds: AA
 		"normal": hit_normal,
 		"distance": distance,
 	}
+
+
+func _ray_intersect_mesh_instance(
+	mesh_instance: MeshInstance3D,
+	ray_origin: Vector3,
+	ray_direction: Vector3
+) -> Dictionary:
+	if mesh_instance.mesh == null:
+		return {}
+
+	var local_origin = mesh_instance.to_local(ray_origin)
+	var local_end = mesh_instance.to_local(ray_origin + ray_direction)
+	var local_direction = (local_end - local_origin).normalized()
+	if local_direction.length() < 0.00001:
+		return {}
+
+	var mesh = mesh_instance.mesh
+	var best_local_distance = INF
+	var best_local_position = Vector3.ZERO
+	var best_local_normal = Vector3.ZERO
+
+	for surface_index in range(mesh.get_surface_count()):
+		var arrays = mesh.surface_get_arrays(surface_index)
+		if arrays.is_empty():
+			continue
+
+		var vertices = arrays[Mesh.ARRAY_VERTEX]
+		var indices = arrays[Mesh.ARRAY_INDEX]
+
+		if indices and indices.size() > 0:
+			for idx in range(0, indices.size(), 3):
+				var a = int(indices[idx])
+				var b = int(indices[idx + 1])
+				var c = int(indices[idx + 2])
+				if a >= vertices.size() or b >= vertices.size() or c >= vertices.size():
+					continue
+				var v0 = vertices[a]
+				var v1 = vertices[b]
+				var v2 = vertices[c]
+				var t = _intersect_ray_triangle(local_origin, local_direction, v0, v1, v2)
+				if t > 0.0 and t < best_local_distance:
+					best_local_distance = t
+					best_local_position = local_origin + local_direction * t
+					best_local_normal = (v1 - v0).cross(v2 - v0).normalized()
+		else:
+			for vi in range(0, vertices.size(), 3):
+				if vi + 2 >= vertices.size():
+					break
+				var v0 = vertices[vi]
+				var v1 = vertices[vi + 1]
+				var v2 = vertices[vi + 2]
+				var t = _intersect_ray_triangle(local_origin, local_direction, v0, v1, v2)
+				if t > 0.0 and t < best_local_distance:
+					best_local_distance = t
+					best_local_position = local_origin + local_direction * t
+					best_local_normal = (v1 - v0).cross(v2 - v0).normalized()
+
+	if best_local_distance == INF:
+		return {}
+
+	var world_position = mesh_instance.to_global(best_local_position)
+	var world_normal = (mesh_instance.global_transform.basis * best_local_normal).normalized()
+	var world_distance = ray_origin.distance_to(world_position)
+
+	return {
+		"position": world_position,
+		"normal": world_normal,
+		"distance": world_distance,
+	}
+
+
+func _intersect_ray_triangle(
+	ray_origin: Vector3,
+	ray_direction: Vector3,
+	v0: Vector3,
+	v1: Vector3,
+	v2: Vector3
+) -> float:
+	var epsilon = 0.000001
+	var edge1 = v1 - v0
+	var edge2 = v2 - v0
+	var h = ray_direction.cross(edge2)
+	var a = edge1.dot(h)
+	if absf(a) < epsilon:
+		return -1.0
+	var f = 1.0 / a
+	var s = ray_origin - v0
+	var u = f * s.dot(h)
+	if u < 0.0 or u > 1.0:
+		return -1.0
+	var q = s.cross(edge1)
+	var v = f * ray_direction.dot(q)
+	if v < 0.0 or u + v > 1.0:
+		return -1.0
+	var t = f * edge2.dot(q)
+	if t > epsilon:
+		return t
+	return -1.0
 
 
 func _collect_preview_mesh_instances(

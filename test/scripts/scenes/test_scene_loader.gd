@@ -80,7 +80,7 @@ func test_vehicle_select_smoke_controls() -> void:
 	await get_tree().process_frame
 
 	var vehicle_option = _find_child_by_name(instance, "VehicleOption")
-	var brush_size_option = _find_child_by_name(instance, "BrushSizeOption")
+	var brush_size_selector = _find_child_by_name(instance, "BrushSizeSelector")
 	var paint_palette = _find_child_by_name(instance, "PaintColorPalette")
 	var preview_container = _find_child_by_name(instance, "VehiclePreviewContainer")
 	var name_label = _find_child_by_name(instance, "VehicleNameLabel")
@@ -88,7 +88,8 @@ func test_vehicle_select_smoke_controls() -> void:
 	var overlay_manager = _find_child_by_name(instance, "OverlayAtlasManager")
 
 	assert_that(vehicle_option).is_not_null()
-	assert_that(brush_size_option).is_not_null()
+	assert_that(brush_size_selector).is_not_null()
+	assert_that(brush_size_selector.get_child_count()).is_equal(5)
 	assert_that(paint_palette).is_not_null()
 	assert_that(preview_container).is_not_null()
 	assert_that(name_label).is_not_null()
@@ -113,30 +114,24 @@ func test_vehicle_select_paint_controls_and_clear_flow() -> void:
 	add_child(instance)
 	await get_tree().process_frame
 
-	var paint_mode_toggle = _find_child_by_name(instance, "PaintModeToggle")
-	var brush_size_option = _find_child_by_name(instance, "BrushSizeOption")
+	var brush_size_selector = _find_child_by_name(instance, "BrushSizeSelector")
 	var paint_palette = _find_child_by_name(instance, "PaintColorPalette")
 	var paint_color_swatch = _find_child_by_name(instance, "PaintColorSwatch_00")
 	var clear_paint_button = _find_child_by_name(instance, "ClearPaintButton")
 	var camera_brush = _find_child_by_name(instance, "CameraBrush")
 	var overlay_manager = _find_child_by_name(instance, "OverlayAtlasManager")
 
-	assert_that(paint_mode_toggle).is_not_null()
-	assert_that(brush_size_option).is_not_null()
+	assert_that(brush_size_selector).is_not_null()
+	assert_that(brush_size_selector.get_child_count()).is_equal(5)
 	assert_that(paint_palette).is_not_null()
 	assert_that(paint_color_swatch).is_not_null()
 	assert_that(clear_paint_button).is_not_null()
 	assert_that(camera_brush).is_not_null()
 	assert_that(overlay_manager).is_not_null()
-	assert_that(paint_mode_toggle is CheckBox).is_true()
-	(paint_mode_toggle as CheckBox).button_pressed = true
-	assert_that((paint_mode_toggle as CheckBox).button_pressed).is_true()
 	assert_that(paint_palette.get_child_count()).is_equal(24)
 
-	if instance.has_method("_on_paint_mode_toggled"):
-		instance.call("_on_paint_mode_toggled", true)
-	if instance.has_method("_on_brush_preset_selected"):
-		instance.call("_on_brush_preset_selected", 2)
+	if instance.has_method("_on_brush_size_selected"):
+		instance.call("_on_brush_size_selected", 2)
 	assert_that(float(instance.get("paint_brush_size"))).is_equal(0.35)
 
 	if instance.has_method("_on_paint_color_selected"):

@@ -83,16 +83,14 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	assert_that(vehicle_scene.is_inside_tree()).is_true()
 
 	var paint_palette := _find_node_recursive(vehicle_scene, "PaintColorPalette") as GridContainer
-	var brush_size_option := _find_node_recursive(vehicle_scene, "BrushSizeOption") as OptionButton
-	var paint_mode_toggle := _find_node_recursive(vehicle_scene, "PaintModeToggle") as CheckBox
+	var brush_size_button := _find_node_recursive(vehicle_scene, "BrushSizeButton_02") as TextureButton
 	var paint_color_swatch := (
 		_find_node_recursive(vehicle_scene, "PaintColorSwatch_00") as BaseButton
 	)
 	var camera_brush := _find_node_recursive(vehicle_scene, "CameraBrush")
 	var overlay_manager := _find_node_recursive(vehicle_scene, "OverlayAtlasManager")
 	assert_that(paint_palette).is_not_null()
-	assert_that(brush_size_option).is_not_null()
-	assert_that(paint_mode_toggle).is_not_null()
+	assert_that(brush_size_button).is_not_null()
 	assert_that(paint_color_swatch).is_not_null()
 	assert_that(camera_brush).is_not_null()
 	assert_that(overlay_manager).is_not_null()
@@ -103,12 +101,9 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	var brush_before := (camera_brush as Node3D).global_position
 
 	paint_color_swatch.emit_signal("pressed")
-	brush_size_option.select(2)
-	brush_size_option.emit_signal("item_selected", 2)
-	paint_mode_toggle.button_pressed = true
-	vehicle_scene.call("_on_paint_mode_toggled", true)
+	brush_size_button.emit_signal("pressed")
 	vehicle_scene.call("_on_paint_color_selected", 0)
-	vehicle_scene.call("_on_brush_preset_selected", 2)
+	vehicle_scene.call("_on_brush_size_selected", 2)
 
 	var preview_container := (
 		_find_node_recursive(vehicle_scene, "VehiclePreviewContainer") as SubViewportContainer
@@ -136,7 +131,6 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 
 	vehicle_scene.call("_on_clear_paint_pressed")
 	assert_that((camera_brush as CameraBrush).drawing).is_false()
-	assert_that((paint_mode_toggle as CheckBox).button_pressed).is_false()
 
 
 func test_reading_mode_scene_with_scene_runner() -> void:

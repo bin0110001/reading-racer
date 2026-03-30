@@ -82,6 +82,9 @@ func test_vehicle_select_smoke_controls() -> void:
 	var main_vbox = _find_child_by_name(instance, "MainVBox")
 	var vehicle_option = _find_child_by_name(instance, "VehicleOption")
 	var brush_size_selector = _find_child_by_name(instance, "BrushSizeSelector")
+	var rotation_controls = _find_child_by_name(instance, "VehicleRotationControls")
+	var rotate_top_button = _find_child_by_name(instance, "RotateVehicleTopButton")
+	var rotate_reset_button = _find_child_by_name(instance, "RotateVehicleResetButton")
 	var paint_palette = _find_child_by_name(instance, "PaintColorPalette")
 	var preview_container = _find_child_by_name(instance, "VehiclePreviewContainer")
 	var name_label = _find_child_by_name(instance, "VehicleNameLabel")
@@ -93,6 +96,9 @@ func test_vehicle_select_smoke_controls() -> void:
 	assert_that(main_vbox).is_not_null()
 	assert_that(vehicle_option).is_not_null()
 	assert_that(brush_size_selector).is_not_null()
+	assert_that(rotation_controls).is_not_null()
+	assert_that(rotate_top_button).is_not_null()
+	assert_that(rotate_reset_button).is_not_null()
 	assert_that(back_button).is_not_null()
 	assert_that(brush_size_selector.get_child_count()).is_equal(5)
 	assert_that(paint_palette).is_not_null()
@@ -104,6 +110,20 @@ func test_vehicle_select_smoke_controls() -> void:
 	assert_that(paint_snapshot.get("overlay_manager_ready", false)).is_true()
 	assert_that(paint_snapshot.get("camera_brush_ready", false)).is_true()
 	assert_that(paint_snapshot.get("brush_viewport_ready", false)).is_true()
+	var rotation_degrees: Vector3 = paint_snapshot.get("vehicle_rotation_degrees", Vector3.ZERO)
+	assert_that(rotation_degrees.is_equal_approx(Vector3.ZERO)).is_true()
+
+	rotate_top_button.emit_signal("pressed")
+	await get_tree().process_frame
+	paint_snapshot = instance.call("get_paint_debug_snapshot")
+	rotation_degrees = paint_snapshot.get("vehicle_rotation_degrees", Vector3.ZERO)
+	assert_that(rotation_degrees.x).is_equal(-90.0)
+
+	rotate_reset_button.emit_signal("pressed")
+	await get_tree().process_frame
+	paint_snapshot = instance.call("get_paint_debug_snapshot")
+	rotation_degrees = paint_snapshot.get("vehicle_rotation_degrees", Vector3.ZERO)
+	assert_that(rotation_degrees.is_equal_approx(Vector3.ZERO)).is_true()
 
 	# Basic live methods should run without error
 	if instance.has_method("_refresh_vehicle_preview"):

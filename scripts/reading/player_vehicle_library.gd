@@ -108,6 +108,8 @@ const _VEHICLES := [
 	},
 ]
 
+var vehicle_select_utils := VehicleSelectUtils.new()
+
 
 static func list_vehicles() -> Array[Dictionary]:
 	var vehicles: Array[Dictionary] = []
@@ -376,7 +378,11 @@ static func apply_vehicle_decals(instance: Node3D, decals: Array) -> int:
 		decal_node.albedo_mix = 1.0
 		decal_node.modulate = Color(1, 1, 1, 1)
 
-		decal_node.size = Vector3.ONE * (size * 1.5)
+		decal_node.size = Vector3(
+			size * 1.5,
+			size * 1.5,
+			maxf(size * 0.12, 0.06),
+		)
 		decal_node.transform = decal_pose
 		# Project onto all preview layers so the decal can actually affect the car meshes.
 		decal_node.cull_mask = -1
@@ -391,6 +397,7 @@ static func apply_vehicle_decals(instance: Node3D, decals: Array) -> int:
 					"local_position": local_position,
 					"local_normal": local_normal,
 					"cull_mask": decal_node.cull_mask,
+					"decal_size": decal_node.size,
 					"child_count": instance.get_child_count(),
 				},
 			)
@@ -432,7 +439,7 @@ static func _create_decal_texture(color: Color, brush_shape: String = "circle") 
 					else:
 						image.set_pixel(x, y, Color(0, 0, 0, 0))
 		"smoke":
-			var smoke_shape = VehicleSelectUtils.create_smoke_brush_shape(size)
+			var smoke_shape = _create_smoke_brush_shape(size)
 			for y in range(size):
 				for x in range(size):
 					var c = smoke_shape.get_pixel(x, y)
@@ -455,6 +462,21 @@ static func _create_decal_texture(color: Color, brush_shape: String = "circle") 
 						image.set_pixel(x, y, Color(0, 0, 0, 0))
 
 	return ImageTexture.create_from_image(image)
+
+
+static func _create_smoke_brush_shape(size: int = 32) -> Image:
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var center := Vector2(size * 0.5, size * 0.5)
+	var radius := size * 0.38
+	var feather := maxf(size * 0.08, 2.0)
+	for y in range(size):
+		for x in range(size):
+			var pos := Vector2(float(x) + 0.5, float(y) + 0.5)
+			var dist := pos.distance_to(center)
+			var alpha : float= clamp(1.0 - ((dist - radius) / feather), 0.0, 1.0)
+			image.set_pixel(x, y, Color(1, 1, 1, alpha))
+	return image
 
 
 static func _create_quadratic_decal_material(decal_texture: Texture2D) -> StandardMaterial3D:

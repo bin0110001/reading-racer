@@ -88,6 +88,9 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	assert_that(initial_snapshot.get("brush_viewport_ready", false)).is_true()
 
 	var paint_palette := _find_node_recursive(vehicle_scene, "PaintColorPalette") as GridContainer
+	var rotation_controls := _find_node_recursive(vehicle_scene, "VehicleRotationControls")
+	var rotate_side_button := _find_node_recursive(vehicle_scene, "RotateVehicleSideButton")
+	var rotate_reset_button := _find_node_recursive(vehicle_scene, "RotateVehicleResetButton")
 	var brush_size_button := (
 		_find_node_recursive(vehicle_scene, "BrushSizeButton_02") as TextureButton
 	)
@@ -97,11 +100,26 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	var camera_brush := _find_node_recursive(vehicle_scene, "CameraBrush")
 	var overlay_manager := _find_node_recursive(vehicle_scene, "OverlayAtlasManager")
 	assert_that(paint_palette).is_not_null()
+	assert_that(rotation_controls).is_not_null()
+	assert_that(rotate_side_button).is_not_null()
+	assert_that(rotate_reset_button).is_not_null()
 	assert_that(brush_size_button).is_not_null()
 	assert_that(paint_color_swatch).is_not_null()
 	assert_that(camera_brush).is_not_null()
 	assert_that(overlay_manager).is_not_null()
 	assert_that(paint_palette.get_child_count()).is_equal(24)
+
+	rotate_side_button.emit_signal("pressed")
+	await runner.simulate_frames(1)
+	var side_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
+	var rotation_degrees: Vector3 = side_snapshot.get("vehicle_rotation_degrees", Vector3.ZERO)
+	assert_that(rotation_degrees.y).is_equal(90.0)
+
+	rotate_reset_button.emit_signal("pressed")
+	await runner.simulate_frames(1)
+	var reset_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
+	rotation_degrees = reset_snapshot.get("vehicle_rotation_degrees", Vector3.ZERO)
+	assert_that(rotation_degrees.is_equal_approx(Vector3.ZERO)).is_true()
 
 	await runner.simulate_frames(2)
 	assert_that((camera_brush as CameraBrush).viewport).is_not_null()

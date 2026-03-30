@@ -40,38 +40,37 @@ static func create_color_swatch_texture(color: Color, selected: bool) -> Texture
 static func create_circular_brush_shape(size: int = 256) -> Image:
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size * 0.5, size * 0.5)
-	var radius := size * 0.5
+	var radius := size * 0.38
+	var feather := maxf(size * 0.08, 2.0)
 	for y in range(size):
 		for x in range(size):
 			var pos = Vector2(x + 0.5, y + 0.5)
 			var dist = pos.distance_to(center)
-			if dist <= radius:
-				image.set_pixel(x, y, Color(1, 1, 1, 1))
-			else:
-				image.set_pixel(x, y, Color(1, 1, 1, 0))
+			var alpha : float = clamp(1.0 - ((dist - radius) / feather), 0.0, 1.0)
+			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 
 
 static func create_square_brush_shape(size: int = 256) -> Image:
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size * 0.5, size * 0.5)
-	var half := size * 0.5
+	var half := size * 0.38
+	var feather := maxf(size * 0.08, 2.0)
 	for y in range(size):
 		for x in range(size):
 			var pos = Vector2(x + 0.5, y + 0.5) - center
 			var max_dist = max(abs(pos.x), abs(pos.y))
-			if max_dist <= half:
-				image.set_pixel(x, y, Color(1, 1, 1, 1))
-			else:
-				image.set_pixel(x, y, Color(1, 1, 1, 0))
+			var alpha : float = clamp(1.0 - ((max_dist - half) / feather), 0.0, 1.0)
+			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 
 
 static func create_star_brush_shape(size: int = 256) -> Image:
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size * 0.5, size * 0.5)
-	var outer_radius := size * 0.5
+	var outer_radius := size * 0.38
 	var inner_radius := outer_radius * 0.42
+	var feather := maxf(size * 0.08, 2.0)
 	for y in range(size):
 		for x in range(size):
 			var pos = Vector2(x + 0.5, y + 0.5) - center
@@ -82,10 +81,8 @@ static func create_star_brush_shape(size: int = 256) -> Image:
 			var angle = atan2(pos.y, pos.x)
 			var spoke = (cos(5.0 * angle) * 0.5) + 0.5
 			var radius_at_angle = lerp(inner_radius, outer_radius, spoke)
-			if r <= radius_at_angle:
-				image.set_pixel(x, y, Color(1, 1, 1, 1))
-			else:
-				image.set_pixel(x, y, Color(1, 1, 1, 0))
+			var alpha : float = clamp(1.0 - ((r - radius_at_angle) / feather), 0.0, 1.0)
+			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 
 

@@ -56,6 +56,8 @@ static func default_settings() -> Dictionary:
 		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR:
 		PlayerVehicleLibrary.DEFAULT_PAINT_COLOR_HEX,
 		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS: [],
+		"paint_brush_size": 0.35,
+		"paint_brush_shape": "circle",
 	}
 
 
@@ -115,7 +117,14 @@ func load_settings() -> Dictionary:
 		settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS] = parsed
 	else:
 		settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS] = []
-
+	settings["paint_brush_size"] = clampf(
+		float(config.get_value("reading", "paint_brush_size", settings["paint_brush_size"])),
+		0.05,
+		2.0
+	)
+	settings["paint_brush_shape"] = str(
+		config.get_value("reading", "paint_brush_shape", settings["paint_brush_shape"])
+	)
 	return settings
 
 
@@ -153,6 +162,8 @@ func save_settings(settings: Dictionary) -> void:
 		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS,
 		JSON.stringify(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS])
 	)
+	config.set_value("reading", "paint_brush_size", str(merged["paint_brush_size"]))
+	config.set_value("reading", "paint_brush_shape", str(merged["paint_brush_shape"]))
 	config.save(SAVE_PATH)
 
 

@@ -79,6 +79,7 @@ func test_vehicle_select_smoke_controls() -> void:
 	add_child(instance)
 	await get_tree().process_frame
 
+	var main_vbox = _find_child_by_name(instance, "MainVBox")
 	var vehicle_option = _find_child_by_name(instance, "VehicleOption")
 	var brush_size_selector = _find_child_by_name(instance, "BrushSizeSelector")
 	var paint_palette = _find_child_by_name(instance, "PaintColorPalette")
@@ -87,7 +88,9 @@ func test_vehicle_select_smoke_controls() -> void:
 	var camera_brush = _find_child_by_name(instance, "CameraBrush")
 	var overlay_manager = _find_child_by_name(instance, "OverlayAtlasManager")
 	var back_button = _find_child_by_name(instance, "BackButton")
+	var paint_snapshot: Dictionary = instance.call("get_paint_debug_snapshot")
 
+	assert_that(main_vbox).is_not_null()
 	assert_that(vehicle_option).is_not_null()
 	assert_that(brush_size_selector).is_not_null()
 	assert_that(back_button).is_not_null()
@@ -98,6 +101,9 @@ func test_vehicle_select_smoke_controls() -> void:
 	assert_that(camera_brush).is_not_null()
 	assert_that(overlay_manager).is_not_null()
 	assert_that(paint_palette.get_child_count()).is_equal(24)
+	assert_that(paint_snapshot.get("overlay_manager_ready", false)).is_true()
+	assert_that(paint_snapshot.get("camera_brush_ready", false)).is_true()
+	assert_that(paint_snapshot.get("brush_viewport_ready", false)).is_true()
 
 	# Basic live methods should run without error
 	if instance.has_method("_refresh_vehicle_preview"):

@@ -142,6 +142,14 @@ Example: When you modify `reading_mode.tscn`, the suite will immediately test th
 - If we run into other issues creating GD Scripts or scene tests, keep this up to date.
 - UI text for kid-focused pages should be minimal and icon-first (e.g., arrows for selection, emoji for actions, short labels).
 
+## Painting debug guide
+- Root log file: `.github/painting_debug_log.md`
+- Always update this file when applying a new hypothesis or code change for painting.
+- Include: symptom, file(s) changed, patch details, engine/log output, and result.
+- Call out whether fix is in overlay path (`OverlayAtlasManager` + `CameraBrush`) or decal path (`Decal` nodes).
+
+Note for Copilot: when trapping persistent painting bugs, reference and append this file for thread safety and onboarding.
+
 Inline quick-run command (really good):
 
 ```powershell

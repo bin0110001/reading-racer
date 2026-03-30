@@ -1,12 +1,12 @@
-[gd_scene format=3 uid="uid://new_vehicle_select_scene"]
+[gd_scene format=3 uid="uid://co8jf1mf4syx7"]
 
-[ext_resource type="Script" uid="uid://new_vehicle_select_script" path="res://scripts/reading/vehicle_select.gd" id="1"]
+[ext_resource type="Script" uid="uid://cij3gwpulmx6h" path="res://scripts/reading/vehicle_select.gd" id="1"]
 
-[node name="VehicleSelect" type="Control"]
-script = ExtResource("1")
+[node name="VehicleSelect" type="Control" unique_id=1953482611]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("1")

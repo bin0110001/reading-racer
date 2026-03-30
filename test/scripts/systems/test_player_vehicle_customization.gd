@@ -106,14 +106,21 @@ func test_player_vehicle_library_apply_vehicle_decals_adds_decal_nodes() -> void
 		}
 	]
 
-	player_library.apply_vehicle_decals_instance(root, decals)
+	var added_decal_count := player_library.apply_vehicle_decals_instance(root, decals)
+	assert_that(added_decal_count).is_equal(1)
 
 	var decal_count := 0
+	var first_decal: Decal = null
 	for child in root.get_children():
 		if child is Decal:
 			decal_count += 1
+			if first_decal == null:
+				first_decal = child as Decal
 
 	assert_that(decal_count).is_equal(1)
+	assert_that(first_decal).is_not_null()
+	assert_that(first_decal.texture_albedo).is_not_null()
+	assert_that(first_decal.cull_mask).is_equal(4294967295)
 
 
 func test_build_vehicle_settings_persists_empty_decals() -> void:

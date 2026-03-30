@@ -41,16 +41,101 @@ static func create_circular_brush_shape(size: int = 256) -> Image:
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size * 0.5, size * 0.5)
 	var radius := size * 0.5
-	for y in size:
-		for x in size:
+	for y in range(size):
+		for x in range(size):
 			var pos = Vector2(x + 0.5, y + 0.5)
 			var dist = pos.distance_to(center)
-			var alpha = clampf(1.0 - (dist / radius), 0.0, 1.0)
 			if dist <= radius:
-				image.set_pixel(x, y, Color(1, 1, 1, alpha))
+				image.set_pixel(x, y, Color(1, 1, 1, 1))
 			else:
 				image.set_pixel(x, y, Color(1, 1, 1, 0))
 	return image
+
+
+static func create_square_brush_shape(size: int = 256) -> Image:
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center := Vector2(size * 0.5, size * 0.5)
+	var half := size * 0.5
+	for y in range(size):
+		for x in range(size):
+			var pos = Vector2(x + 0.5, y + 0.5) - center
+			var max_dist = max(abs(pos.x), abs(pos.y))
+			if max_dist <= half:
+				image.set_pixel(x, y, Color(1, 1, 1, 1))
+			else:
+				image.set_pixel(x, y, Color(1, 1, 1, 0))
+	return image
+
+
+static func create_star_brush_shape(size: int = 256) -> Image:
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center := Vector2(size * 0.5, size * 0.5)
+	var outer_radius := size * 0.5
+	var inner_radius := outer_radius * 0.42
+	for y in range(size):
+		for x in range(size):
+			var pos = Vector2(x + 0.5, y + 0.5) - center
+			var r = pos.length()
+			if r == 0.0:
+				image.set_pixel(x, y, Color(1, 1, 1, 1))
+				continue
+			var angle = atan2(pos.y, pos.x)
+			var spoke = (cos(5.0 * angle) * 0.5) + 0.5
+			var radius_at_angle = lerp(inner_radius, outer_radius, spoke)
+			if r <= radius_at_angle:
+				image.set_pixel(x, y, Color(1, 1, 1, 1))
+			else:
+				image.set_pixel(x, y, Color(1, 1, 1, 0))
+	return image
+
+
+static func create_smoke_brush_shape(size: int = 256) -> Image:
+	var texture := load("res://sprites/smoke.png")
+	if texture == null:
+		return create_circular_brush_shape(size)
+
+	if typeof(texture) != TYPE_OBJECT or not texture is Texture2D:
+		return create_circular_brush_shape(size)
+
+	var image: Image = Image.new()
+	if texture is ImageTexture:
+		image = (texture as ImageTexture).get_data()
+	elif texture.has_method("get_image"):
+		image = texture.get_image()
+	else:
+		return create_circular_brush_shape(size)
+
+	if image == null or image.get_width() == 0 or image.get_height() == 0:
+		return create_circular_brush_shape(size)
+
+	if image.is_compressed():
+		image.decompress()
+
+	if image.get_format() != Image.FORMAT_RGBA8:
+		image.convert(Image.FORMAT_RGBA8)
+
+	if image.get_width() != size or image.get_height() != size:
+		image.resize(size, size, Image.INTERPOLATE_BILINEAR)
+
+	return image
+
+
+static func create_brush_shape_preview_texture(shape_id: String, size: int = 64) -> Texture2D:
+	var image: Image
+	match shape_id:
+		"circle":
+			image = create_circular_brush_shape(size)
+		"square":
+			image = create_square_brush_shape(size)
+		"star":
+			image = create_star_brush_shape(size)
+		"smoke":
+			image = create_smoke_brush_shape(size)
+		_:
+			image = create_circular_brush_shape(size)
+
+	var texture := ImageTexture.create_from_image(image)
+	return texture
 
 
 static func find_closest_brush_preset_index(brush_size: float, brush_presets: Array) -> int:

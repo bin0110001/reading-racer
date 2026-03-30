@@ -82,6 +82,11 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	assert_that(vehicle_scene).is_not_null()
 	assert_that(vehicle_scene.is_inside_tree()).is_true()
 
+	var initial_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
+	assert_that(initial_snapshot.get("overlay_manager_ready", false)).is_true()
+	assert_that(initial_snapshot.get("camera_brush_ready", false)).is_true()
+	assert_that(initial_snapshot.get("brush_viewport_ready", false)).is_true()
+
 	var paint_palette := _find_node_recursive(vehicle_scene, "PaintColorPalette") as GridContainer
 	var brush_size_button := (
 		_find_node_recursive(vehicle_scene, "BrushSizeButton_02") as TextureButton
@@ -123,6 +128,11 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	assert_that((camera_brush as CameraBrush).drawing).is_true()
 	assert_that((camera_brush as Node3D).global_position).is_not_equal(brush_before)
 
+	var painting_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
+	assert_that(int(painting_snapshot.get("paint_hit_count", 0))).is_greater(0)
+	assert_that((painting_snapshot.get("last_paint_hit", {}) as Dictionary).is_empty()).is_false()
+	assert_that(int(painting_snapshot.get("overlay_apply_count", 0))).is_greater(0)
+
 	var release_event := InputEventMouseButton.new()
 	release_event.button_index = MOUSE_BUTTON_LEFT
 	release_event.pressed = false
@@ -130,6 +140,9 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	vehicle_scene.call("_on_vehicle_preview_gui_input", release_event)
 	await runner.simulate_frames(1)
 	assert_that((camera_brush as CameraBrush).drawing).is_false()
+
+	var after_release_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
+	assert_that(after_release_snapshot.get("brush_drawing", true)).is_false()
 
 	vehicle_scene.call("_on_clear_paint_pressed")
 	assert_that((camera_brush as CameraBrush).drawing).is_false()

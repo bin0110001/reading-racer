@@ -232,8 +232,8 @@ func apply_paint_color_instance(instance: Node3D, paint_color: Color) -> void:
 	apply_paint_color(instance, paint_color)
 
 
-func apply_vehicle_decals_instance(instance: Node3D, decals: Array) -> void:
-	apply_vehicle_decals(instance, decals)
+func apply_vehicle_decals_instance(instance: Node3D, decals: Array) -> int:
+	return apply_vehicle_decals(instance, decals)
 
 
 func fit_instance_to_dimension_instance(instance: Node3D, max_dimension: float) -> void:
@@ -340,7 +340,8 @@ static func _create_tinted_material(material: Material, paint_color: Color) -> M
 	return fallback
 
 
-static func apply_vehicle_decals(instance: Node3D, decals: Array) -> void:
+static func apply_vehicle_decals(instance: Node3D, decals: Array) -> int:
+	var added_decal_count := 0
 	for decal_info in decals:
 		if typeof(decal_info) != TYPE_DICTIONARY:
 			continue
@@ -355,36 +356,120 @@ static func apply_vehicle_decals(instance: Node3D, decals: Array) -> void:
 
 		# Place decals in instance-local coordinates
 		# so this works before instance is added to the scene tree
-		var local_decal_position = local_position + local_normal * 0.01
+		var local_decal_position = local_position + local_normal * 0.001
 		var local_decal_normal = local_normal.normalized()
 
-		var decal_node = Decal.new()
-		decal_node.texture_albedo = _create_decal_texture(color)
-		decal_node.albedo_mix = 0.75
-		decal_node.modulate = Color(1, 1, 1, 1)
-		decal_node.size = Vector3.ONE * size
+		var brush_shape = str(decal_info.get("shape", "circle"))
+		var decal_texture = _create_decal_texture(color, brush_shape)
+
+		# Use Decal projection for accurate surface adherence and alpha shape.
 		var decal_pose := Transform3D()
 		decal_pose.origin = local_decal_position
 		var up_dir: Vector3 = Vector3.UP
 		if absf(local_decal_normal.dot(up_dir)) > 0.995:
 			up_dir = Vector3.RIGHT
 		decal_pose = decal_pose.looking_at(local_decal_position + local_decal_normal, up_dir)
+
+		# Keep Decal node path as primary painting mechanism.
+		var decal_node = Decal.new()
+		decal_node.texture_albedo = decal_texture
+		decal_node.albedo_mix = 1.0
+		decal_node.modulate = Color(1, 1, 1, 1)
+
+		decal_node.size = Vector3.ONE * (size * 1.5)
 		decal_node.transform = decal_pose
+		# Project onto all preview layers so the decal can actually affect the car meshes.
+		decal_node.cull_mask = -1
 		instance.add_child(decal_node)
+		added_decal_count += 1
+		if OS.is_debug_build():
+			print(
+				"[PlayerVehicleLibrary][PAINT] Added decal | ",
+				{
+					"shape": brush_shape,
+					"size": size,
+					"local_position": local_position,
+					"local_normal": local_normal,
+					"cull_mask": decal_node.cull_mask,
+					"child_count": instance.get_child_count(),
+				},
+			)
 
-	return
+	return added_decal_count
 
 
-static func _create_decal_texture(color: Color) -> Texture2D:
-	var image := Image.create(32, 32, false, Image.FORMAT_RGBA8)
-	for y in range(32):
-		for x in range(32):
-			var offset := Vector2(float(x) - 15.5, float(y) - 15.5).length()
-			if offset <= 14.0:
-				image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
-			else:
-				image.set_pixel(x, y, Color(0, 0, 0, 0))
+static func _create_decal_texture(color: Color, brush_shape: String = "circle") -> Texture2D:
+	var size := 32
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var center := Vector2(size * 0.5, size * 0.5)
+	var radius := size * 0.5 - 1.0
+
+	match brush_shape:
+		"square":
+			for y in range(size):
+				for x in range(size):
+					var delta := Vector2(float(x), float(y)) - center
+					if absf(delta.x) <= radius and absf(delta.y) <= radius:
+						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
+					else:
+						image.set_pixel(x, y, Color(0, 0, 0, 0))
+		"star":
+			var outer_radius := radius
+			var inner_radius := outer_radius * 0.42
+			for y in range(size):
+				for x in range(size):
+					var pos = Vector2(float(x), float(y)) - center
+					var r = pos.length()
+					if r == 0.0:
+						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
+						continue
+					var angle = atan2(pos.y, pos.x)
+					var spoke = (cos(5.0 * angle) * 0.5) + 0.5
+					var radius_at_angle = lerp(inner_radius, outer_radius, spoke)
+					if r <= radius_at_angle:
+						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
+					else:
+						image.set_pixel(x, y, Color(0, 0, 0, 0))
+		"smoke":
+			var smoke_shape = VehicleSelectUtils.create_smoke_brush_shape(size)
+			for y in range(size):
+				for x in range(size):
+					var c = smoke_shape.get_pixel(x, y)
+					image.set_pixel(x, y, Color(color.r, color.g, color.b, c.a))
+		"circle":
+			for y in range(size):
+				for x in range(size):
+					var offset := Vector2(float(x), float(y)).distance_to(center)
+					if offset <= radius:
+						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
+					else:
+						image.set_pixel(x, y, Color(0, 0, 0, 0))
+		_:
+			for y in range(size):
+				for x in range(size):
+					var offset := Vector2(float(x), float(y)).distance_to(center)
+					if offset <= radius:
+						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
+					else:
+						image.set_pixel(x, y, Color(0, 0, 0, 0))
+
 	return ImageTexture.create_from_image(image)
+
+
+static func _create_quadratic_decal_material(decal_texture: Texture2D) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.flags_unshaded = true
+	mat.flags_transparent = true
+	mat.albedo_texture = decal_texture
+	mat.albedo_color = Color(1, 1, 1, 1)
+	mat.roughness = 1.0
+	mat.metallic = 0.0
+	# Use numeric enum value to avoid missing constant issue in this engine version
+	mat.depth_draw_mode = 1  # 0=DEPTH_DRAW_OPAQUE, 1=DEPTH_DRAW_ALPHA_PREPASS, 2=DEPTH_DRAW_ALWAYS
+	mat.params_cull_mode = BaseMaterial3D.CULL_DISABLED
+	return mat
 
 
 static func _encode_vector3(value: Vector3) -> Dictionary:

@@ -19,6 +19,13 @@ const GPU_OVERLAY_SHADER := preload(
 	GPU_TEXTURE_PAINTER_BASE + "overlay_shaders/" + "default_overlay.gdshader"
 )
 const VehicleSelectUtils = preload("res://scripts/reading/vehicle_select_utils.gd")
+const VehicleSelectPaintHelpers = preload("res://scripts/reading/vehicle_select_paint_helpers.gd")
+
+const PAINT_LOG_LEVEL_NONE := 0
+const PAINT_LOG_LEVEL_ERROR := 1
+const PAINT_LOG_LEVEL_WARN := 2
+const PAINT_LOG_LEVEL_INFO := 3
+const PAINT_LOG_LEVEL_VERBOSE := 4
 
 const PAINT_COLOR_OPTIONS := [
 	Color(0.98, 0.24, 0.20),
@@ -55,6 +62,13 @@ const BRUSH_PRESETS := [
 	{"label": "XL", "size": 0.72},
 ]
 
+const BRUSH_SHAPE_OPTIONS := [
+	{"label": "Circle", "id": "circle"},
+	{"label": "Square", "id": "square"},
+	{"label": "Star", "id": "star"},
+	{"label": "Smoke", "id": "smoke"},
+]
+
 var settings_store := ReadingSettingsStoreScript.new()
 var vehicle_catalog: Array[Dictionary] = []
 var selected_vehicle_id := PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID
@@ -66,6 +80,7 @@ var vehicle_select_next_button := Button.new()
 var vehicle_option_label := Label.new()
 var paint_color_palette := GridContainer.new()
 var brush_size_buttons: Array = []
+var brush_shape_preview := TextureRect.new()
 var vehicle_name_label := Label.new()
 var vehicle_preview_container := SubViewportContainer.new()
 var selected_vehicle_index := 0
@@ -79,25 +94,27 @@ var save_feedback_label := Label.new()
 var vehicle_preview_camera: Camera3D = null
 var painting_pointer_down := false
 var paint_brush_size := 0.35
+var selected_brush_shape := "circle"
+var brush_shape_selector: OptionButton = null
 var selected_vehicle_decals: Array = []
 var selected_paint_color_index := 0
 var paint_color_buttons: Array[BaseButton] = []
 var overlay_refresh_pending := false
+var overlay_apply_count := 0
+var paint_hit_count := 0
+var last_paint_hit: Dictionary = {}
+var paint_log_level := PAINT_LOG_LEVEL_INFO
 
 @onready var main_vbox: VBoxContainer = null
 
 
 func _ready() -> void:
+	VehicleSelectPaintHelpers.configure_paint_logging(self)
 	_build_vehicle_ui()
 	_populate_vehicle_options()
 	_load_settings()
-	set_process(true)
-
-
-func _process(delta: float) -> void:
-	if vehicle_preview_pivot == null:
-		return
-	vehicle_preview_pivot.rotate_y(delta * 0.45)
+	VehicleSelectPaintHelpers.sync_gpu_paint_state(self)
+	_request_overlay_refresh()
 
 
 func _build_vehicle_ui() -> void:
@@ -121,25 +138,11 @@ func _build_vehicle_ui() -> void:
 	panel.anchor_bottom = 1.0
 
 	main_vbox = VBoxContainer.new()
+	main_vbox.name = "MainVBox"
 	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(main_vbox)
-
-	var title := Label.new()
-	title.text = "Vehicle Selection"
-	title.add_theme_font_size_override("font_size", 42)
-	main_vbox.add_child(title)
-
-	var header_bar := HBoxContainer.new()
-	header_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	header_bar.add_theme_constant_override("separation", 12)
-	main_vbox.add_child(header_bar)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_bar.add_child(spacer)
 
 	var customizer_row := HBoxContainer.new()
 	customizer_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -174,6 +177,18 @@ func _build_vehicle_ui() -> void:
 	overlay_atlas_manager.overlay_shader = GPU_OVERLAY_SHADER
 	overlay_atlas_manager.apply_on_ready = false
 	vehicle_preview_pivot.add_child(overlay_atlas_manager)
+	(
+		VehicleSelectPaintHelpers
+		. log_paint(
+			self,
+			PAINT_LOG_LEVEL_VERBOSE,
+			"Overlay atlas manager created",
+			{
+				"atlas_size": overlay_atlas_manager.atlas_size,
+				"apply_on_ready": overlay_atlas_manager.apply_on_ready,
+			},
+		)
+	)
 
 	var environment := WorldEnvironment.new()
 	environment.environment = Environment.new()
@@ -216,8 +231,8 @@ func _build_vehicle_ui() -> void:
 	camera_brush.projection = Camera3D.PROJECTION_PERSPECTIVE
 	camera_brush.fov = 20.0
 	camera_brush.max_distance = 25.0
-	camera_brush.min_bleed = 1
-	camera_brush.max_bleed = 1
+	camera_brush.min_bleed = 0
+	camera_brush.max_bleed = 0
 	camera_brush.brush_shape = VehicleSelectUtils.create_circular_brush_shape(256)
 	camera_brush.resolution = Vector2i(512, 512)
 	camera_brush.size = 0.5
@@ -225,6 +240,20 @@ func _build_vehicle_ui() -> void:
 	camera_brush.drawing = false
 	vehicle_preview_root.add_child(camera_brush)
 	camera_brush.global_transform = preview_camera.global_transform
+	(
+		VehicleSelectPaintHelpers
+		. log_paint(
+			self,
+			PAINT_LOG_LEVEL_VERBOSE,
+			"Camera brush created",
+			{
+				"projection": camera_brush.projection,
+				"fov": camera_brush.fov,
+				"size": camera_brush.size,
+				"max_distance": camera_brush.max_distance,
+			},
+		)
+	)
 
 	var controls_panel := VBoxContainer.new()
 	controls_panel.custom_minimum_size = Vector2(300, 0)
@@ -263,7 +292,27 @@ func _build_vehicle_ui() -> void:
 	brush_label.text = "Brush"
 	controls_panel.add_child(brush_label)
 
-	_build_brush_size_selector(controls_panel)
+	VehicleSelectPaintHelpers.build_brush_size_selector(self, controls_panel)
+
+	var shape_label := Label.new()
+	shape_label.text = "Brush Shape"
+	controls_panel.add_child(shape_label)
+
+	brush_shape_selector = OptionButton.new()
+	for idx in range(BRUSH_SHAPE_OPTIONS.size()):
+		brush_shape_selector.add_item(BRUSH_SHAPE_OPTIONS[idx].get("label", ""), idx)
+	brush_shape_selector.selected = _find_brush_shape_option_index(selected_brush_shape)
+	brush_shape_selector.focus_mode = Control.FOCUS_NONE
+	brush_shape_selector.connect("item_selected", Callable(self, "_on_brush_shape_selected"))
+	controls_panel.add_child(brush_shape_selector)
+
+	brush_shape_preview = TextureRect.new()
+	brush_shape_preview.expand = true
+	brush_shape_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	brush_shape_preview.texture = VehicleSelectUtils.create_brush_shape_preview_texture(
+		selected_brush_shape, 64
+	)
+	controls_panel.add_child(brush_shape_preview)
 
 	var paint_mode_hint := Label.new()
 	paint_mode_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -280,8 +329,8 @@ func _build_vehicle_ui() -> void:
 	paint_color_palette.add_theme_constant_override("v_separation", 10)
 	controls_panel.add_child(paint_color_palette)
 
-	_build_paint_color_palette()
-	_set_selected_paint_color(selected_vehicle_color, false)
+	VehicleSelectPaintHelpers.build_paint_color_palette(self)
+	VehicleSelectPaintHelpers.set_selected_paint_color(self, selected_vehicle_color, false)
 
 	var clear_paint_button := Button.new()
 	clear_paint_button.name = "ClearPaintButton"
@@ -347,13 +396,35 @@ func _update_vehicle_selection_display() -> void:
 
 func _load_settings() -> void:
 	var settings = settings_store.load_settings()
-	_set_selected_paint_color(PlayerVehicleLibraryScript.resolve_paint_color(settings), false)
+	VehicleSelectPaintHelpers.set_selected_paint_color(
+		self, PlayerVehicleLibraryScript.resolve_paint_color(settings), false
+	)
 	selected_vehicle_decals = settings.get(
 		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS, []
 	)
-	_set_brush_preset_by_size(float(settings.get("paint_brush_size", paint_brush_size)), false)
+	VehicleSelectPaintHelpers.set_brush_preset_by_size(
+		self, float(settings.get("paint_brush_size", paint_brush_size)), false
+	)
+	VehicleSelectPaintHelpers.set_selected_brush_shape(
+		self, str(settings.get("paint_brush_shape", selected_brush_shape)), false
+	)
 	_select_vehicle(str(settings.get(PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID, "")))
 	_refresh_vehicle_preview()
+	(
+		VehicleSelectPaintHelpers
+		. log_paint(
+			self,
+			PAINT_LOG_LEVEL_VERBOSE,
+			"Settings loaded",
+			{
+				"selected_vehicle_id": selected_vehicle_id,
+				"paint_color": selected_vehicle_color.to_html(true),
+				"brush_size": paint_brush_size,
+				"brush_shape": selected_brush_shape,
+				"decal_count": selected_vehicle_decals.size(),
+			},
+		)
+	)
 
 
 func _select_vehicle(vehicle_id: String) -> void:
@@ -387,9 +458,25 @@ func _refresh_vehicle_preview() -> void:
 	vehicle_preview_pivot.add_child(vehicle_preview_instance)
 	var selected_vehicle := PlayerVehicleLibraryScript.get_vehicle_by_id(selected_vehicle_id)
 	vehicle_name_label.text = str(selected_vehicle.get("name", "Vehicle"))
+	(
+		VehicleSelectPaintHelpers
+		. log_paint(
+			self,
+			PAINT_LOG_LEVEL_INFO,
+			"Preview vehicle refreshed",
+			{
+				"vehicle_id": selected_vehicle_id,
+				"vehicle_name": vehicle_name_label.text,
+				"mesh_count": _collect_preview_mesh_instances(vehicle_preview_instance).size(),
+			},
+		)
+	)
 
 	_apply_preview_decals()
-	_sync_gpu_paint_state()
+	VehicleSelectPaintHelpers.sync_gpu_paint_state(self)
+	if camera_brush != null:
+		camera_brush.get_atlas_textures()
+
 	_request_overlay_refresh()
 
 
@@ -413,46 +500,9 @@ func _setup_paint_collision(_node: Node) -> void:
 	return
 
 
-func _add_paint_decal_from_data(
-	_local_position, _local_normal, _color: Color, _size: float, _save_data := true
-) -> void:
-	if vehicle_preview_instance == null:
-		return
-
-	var decal_info := {
-		"position":
-		{
-			"x": float(_local_position.x),
-			"y": float(_local_position.y),
-			"z": float(_local_position.z),
-		},
-		"normal":
-		{
-			"x": float(_local_normal.x),
-			"y": float(_local_normal.y),
-			"z": float(_local_normal.z),
-		},
-		"color": _color.to_html(true),
-		"size": _size,
-	}
-
-	if _save_data:
-		selected_vehicle_decals.append(decal_info)
-
-	PlayerVehicleLibraryScript.apply_vehicle_decals(vehicle_preview_instance, [decal_info])
-	_request_overlay_refresh()
-
-
-func _create_decal_material(_color: Color) -> Material:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = _color
-	mat.unshaded = true
-	return mat
-
-
 func _collect_decals(node: Node) -> Array:
 	var decals: Array = []
-	if node is Decal:
+	if node is Decal or (node is MeshInstance3D and node.name.begins_with("PaintDecal")):
 		decals.append(node)
 	for child in node.get_children():
 		if child is Node:
@@ -466,8 +516,9 @@ func _apply_vehicle_settings(settings: Dictionary) -> void:
 	)
 	for key in vehicle_settings.keys():
 		settings[key] = vehicle_settings[key]
-	# Keep brush size setting in sync with the preview state.
+	# Keep brush size and shape setting in sync with the preview state.
 	settings["paint_brush_size"] = paint_brush_size
+	settings["paint_brush_shape"] = selected_brush_shape
 	# Ensure empty decal lists override prior saved decals.
 	settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS] = selected_vehicle_decals
 
@@ -499,146 +550,54 @@ func _on_next_vehicle() -> void:
 
 
 func _build_paint_color_palette() -> void:
-	paint_color_buttons.clear()
-	for child in paint_color_palette.get_children():
-		child.queue_free()
-
-	for index in range(PAINT_COLOR_OPTIONS.size()):
-		var color: Color = PAINT_COLOR_OPTIONS[index]
-		var swatch := TextureButton.new()
-		swatch.name = "PaintColorSwatch_%02d" % index
-		swatch.toggle_mode = true
-		swatch.focus_mode = Control.FOCUS_NONE
-		swatch.ignore_texture_size = true
-		swatch.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-		swatch.custom_minimum_size = Vector2(28, 28)
-		swatch.tooltip_text = color.to_html(true)
-		swatch.texture_normal = VehicleSelectUtils.create_color_swatch_texture(color, false)
-		swatch.texture_pressed = VehicleSelectUtils.create_color_swatch_texture(color, true)
-		swatch.texture_hover = swatch.texture_normal
-		swatch.texture_focused = swatch.texture_normal
-		swatch.pressed.connect(_on_paint_color_selected.bind(index))
-		paint_color_palette.add_child(swatch)
-		paint_color_buttons.append(swatch)
-
-	_update_paint_color_swatches()
+	VehicleSelectPaintHelpers.build_paint_color_palette(self)
 
 
 func _build_brush_size_selector(parent: Control) -> void:
-	brush_size_buttons.clear()
-	var size_row := HBoxContainer.new()
-	size_row.name = "BrushSizeSelector"
-	size_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	size_row.add_theme_constant_override("separation", 8)
-	parent.add_child(size_row)
-
-	for index in range(BRUSH_PRESETS.size()):
-		var preset: Dictionary = BRUSH_PRESETS[index]
-		var preset_size := float(preset.get("size", paint_brush_size))
-		var button: TextureButton = TextureButton.new()
-		button.name = "BrushSizeButton_%02d" % index
-		button.toggle_mode = true
-		button.focus_mode = Control.FOCUS_NONE
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
-		button.custom_minimum_size = Vector2(48, 48)
-		button.texture_normal = VehicleSelectUtils.create_brush_size_texture(preset_size, false)
-		button.texture_pressed = VehicleSelectUtils.create_brush_size_texture(preset_size, true)
-		button.texture_hover = button.texture_normal
-		button.texture_focused = button.texture_normal
-		button.pressed.connect(_on_brush_size_selected.bind(index))
-		size_row.add_child(button)
-		brush_size_buttons.append(button)
-
-	_update_brush_size_button_states(_find_closest_brush_preset_index(paint_brush_size))
+	VehicleSelectPaintHelpers.build_brush_size_selector(self, parent)
 
 
 func _update_brush_size_button_states(selected_index: int) -> void:
-	for index in range(brush_size_buttons.size()):
-		var button: TextureButton = brush_size_buttons[index] as TextureButton
-		button.button_pressed = index == selected_index
-		button.texture_normal = VehicleSelectUtils.create_brush_size_texture(
-			float(BRUSH_PRESETS[index].get("size", paint_brush_size)), index == selected_index
-		)
-		button.texture_pressed = VehicleSelectUtils.create_brush_size_texture(
-			float(BRUSH_PRESETS[index].get("size", paint_brush_size)), index == selected_index
-		)
+	VehicleSelectPaintHelpers.update_brush_size_button_states(self, selected_index)
 
 
 func _find_closest_brush_preset_index(brush_size: float) -> int:
 	return VehicleSelectUtils.find_closest_brush_preset_index(brush_size, BRUSH_PRESETS)
 
 
-func _update_paint_color_swatches() -> void:
-	for index in range(paint_color_buttons.size()):
-		var swatch := paint_color_buttons[index]
-		_apply_paint_swatch_state(swatch, index == selected_paint_color_index)
-		swatch.button_pressed = index == selected_paint_color_index
+func _find_brush_shape_option_index(shape_id: String) -> int:
+	return VehicleSelectPaintHelpers.find_brush_shape_option_index(self, shape_id)
 
 
-func _set_selected_paint_color(color: Color, refresh_preview := true) -> void:
-	selected_vehicle_color = color
-	selected_paint_color_index = _find_closest_paint_color_index(color)
-	_update_paint_color_swatches()
-	_sync_gpu_paint_state()
-	if refresh_preview:
-		_refresh_vehicle_preview()
+func _set_selected_brush_shape(shape_id: String, refresh_preview := true) -> void:
+	VehicleSelectPaintHelpers.set_selected_brush_shape(self, shape_id, refresh_preview)
 
 
-func _find_closest_paint_color_index(color: Color) -> int:
-	return VehicleSelectUtils.find_closest_paint_color_index(color, PAINT_COLOR_OPTIONS)
-
-
-func _set_brush_preset_by_size(brush_size: float, refresh_preview := true) -> void:
-	paint_brush_size = brush_size
-	var closest_index := 0
-	var closest_distance := INF
-	for index in range(BRUSH_PRESETS.size()):
-		var preset_size := float(BRUSH_PRESETS[index].get("size", paint_brush_size))
-		var distance := absf(preset_size - brush_size)
-		if distance < closest_distance:
-			closest_distance = distance
-			closest_index = index
-	_update_brush_size_button_states(closest_index)
-	_sync_gpu_paint_state()
-	if refresh_preview:
-		_refresh_vehicle_preview()
-
-
-func _on_brush_size_selected(index: int) -> void:
-	if index < 0 or index >= BRUSH_PRESETS.size():
-		return
-	_set_brush_preset_by_size(float(BRUSH_PRESETS[index].get("size", paint_brush_size)))
-
-
-func _on_paint_color_selected(index: int) -> void:
-	if index < 0 or index >= PAINT_COLOR_OPTIONS.size():
-		return
-	_set_selected_paint_color(PAINT_COLOR_OPTIONS[index])
-
-
-func _on_brush_preset_selected(index: int) -> void:
-	if index < 0 or index >= BRUSH_PRESETS.size():
-		return
-	_set_brush_preset_by_size(float(BRUSH_PRESETS[index].get("size", paint_brush_size)))
+func _on_brush_shape_selected(index: int) -> void:
+	VehicleSelectPaintHelpers.on_brush_shape_selected(self, index)
 
 
 func _on_clear_paint_pressed() -> void:
 	selected_vehicle_decals.clear()
 	_clear_preview_decals()
 	_request_overlay_refresh()
+	VehicleSelectPaintHelpers.log_paint(
+		self, PAINT_LOG_LEVEL_INFO, "Cleared paint state", _paint_debug_snapshot()
+	)
 	if camera_brush != null:
 		camera_brush.drawing = false
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		var local_point = vehicle_preview_container.get_local_mouse_position()
-		var inside_x = local_point.x >= 0 and local_point.x <= vehicle_preview_container.size.x
-		var inside_y = local_point.y >= 0 and local_point.y <= vehicle_preview_container.size.y
-		if not inside_x or not inside_y:
-			return
-		_paint_at_viewport_point(local_point)
+func _on_brush_size_selected(index: int) -> void:
+	VehicleSelectPaintHelpers.on_brush_size_selected(self, index)
+
+
+func _on_paint_color_selected(index: int) -> void:
+	VehicleSelectPaintHelpers.on_paint_color_selected(self, index)
+
+
+func _on_brush_preset_selected(index: int) -> void:
+	VehicleSelectPaintHelpers.on_brush_preset_selected(self, index)
 
 
 func _on_vehicle_preview_gui_input(event: InputEvent) -> void:
@@ -689,10 +648,31 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 		var viewport_point := _container_point_to_viewport_point(_local_point)
 		var hit := _find_preview_hit(viewport_point)
 		if hit.is_empty():
+			(
+				VehicleSelectPaintHelpers
+				. log_paint(
+					self,
+					PAINT_LOG_LEVEL_WARN,
+					"Paint ray missed preview mesh",
+					{
+						"local_point": _local_point,
+						"viewport_point": viewport_point,
+						"container_size": vehicle_preview_container.size,
+						"viewport_size": Vector2(vehicle_preview_viewport.size),
+						"preview_mesh_count":
+						_collect_preview_mesh_instances(vehicle_preview_instance).size(),
+						"preview_camera_ready": vehicle_preview_camera != null,
+					},
+				)
+			)
 			return
+		paint_hit_count += 1
+		last_paint_hit = hit
 		var hit_position: Vector3 = hit.get("position", Vector3.ZERO)
 		var hit_normal: Vector3 = hit.get("normal", Vector3.UP)
-		var brush_position = hit_position + hit_normal * 0.05
+		# Keep brush camera slightly in front of the surface to stay outside the near plane.
+		var safe_distance = max(0.02, paint_brush_size * 0.5)
+		var brush_position = hit_position + hit_normal * safe_distance
 		var look_direction = (hit_position - brush_position).normalized()
 		var up_dir = Vector3.UP
 		if absf(look_direction.dot(up_dir)) > 0.995:
@@ -701,8 +681,30 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 		camera_brush.global_transform = Transform3D(
 			Basis().looking_at(look_direction, up_dir), brush_position
 		)
+		VehicleSelectPaintHelpers.sync_gpu_paint_state(self)
+
 		camera_brush.drawing = true
 
+		(
+			VehicleSelectPaintHelpers
+			. log_paint(
+				self,
+				PAINT_LOG_LEVEL_INFO,
+				"Paint hit accepted",
+				{
+					"hit_position": hit_position,
+					"hit_normal": hit_normal,
+					"brush_position": brush_position,
+					"paint_hit_count": paint_hit_count,
+				},
+			)
+		)
+
+		# Force overlay manager refresh after each paint action.
+		# The GPU painter effect reuses the current atlas on the next frame.
+		_request_overlay_refresh()
+
+		# Fallback realtime visuals: add a Decal node directly so painting is visible.
 		if vehicle_preview_instance != null:
 			var local_position := vehicle_preview_instance.to_local(hit_position)
 			var local_basis := vehicle_preview_instance.global_transform.basis.inverse()
@@ -710,51 +712,126 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 			local_normal = local_normal.normalized()
 			var decal_color := selected_vehicle_color
 			var brush_size := paint_brush_size
-			_add_paint_decal_from_data(
-				local_position,
-				local_normal,
-				decal_color,
-				brush_size,
-				true,
+			var added_decal_count := 0
+			added_decal_count = (
+				PlayerVehicleLibraryScript
+				. apply_vehicle_decals(
+					vehicle_preview_instance,
+					[
+						{
+							"position":
+							{
+								"x": float(local_position.x),
+								"y": float(local_position.y),
+								"z": float(local_position.z),
+							},
+							"normal":
+							{
+								"x": float(local_normal.x),
+								"y": float(local_normal.y),
+								"z": float(local_normal.z),
+							},
+							"color": decal_color.to_html(true),
+							"size": brush_size,
+							"shape": selected_brush_shape,
+						}
+					]
+				)
+			)
+			(
+				selected_vehicle_decals
+				. append(
+					{
+						"position":
+						{
+							"x": float(local_position.x),
+							"y": float(local_position.y),
+							"z": float(local_position.z),
+						},
+						"normal":
+						{
+							"x": float(local_normal.x),
+							"y": float(local_normal.y),
+							"z": float(local_normal.z),
+						},
+						"color": decal_color.to_html(true),
+						"size": brush_size,
+						"shape": selected_brush_shape,
+					}
+				)
+			)
+			(
+				VehicleSelectPaintHelpers
+				. log_paint(
+					self,
+					PAINT_LOG_LEVEL_INFO,
+					"Preview decal added",
+					{
+						"added_decal_count": added_decal_count,
+						"decal_count": selected_vehicle_decals.size(),
+						"shape": selected_brush_shape,
+						"brush_size": brush_size,
+						"color": decal_color.to_html(true),
+					},
+				)
+			)
+			(
+				VehicleSelectPaintHelpers
+				. log_paint(
+					self,
+					PAINT_LOG_LEVEL_VERBOSE,
+					"Preview decal payload queued",
+					{
+						"local_position": local_position,
+						"local_normal": local_normal,
+						"child_count": vehicle_preview_instance.get_child_count(),
+					},
+				)
+			)
+			VehicleSelectPaintHelpers.spawn_debug_paint_marker(
+				self, hit_position, selected_vehicle_color
 			)
 
 
-func _sync_gpu_paint_state() -> void:
-	if camera_brush == null:
-		return
-	camera_brush.color = selected_vehicle_color
-	camera_brush.size = paint_brush_size
+func get_paint_debug_snapshot() -> Dictionary:
+	return VehicleSelectPaintHelpers.paint_debug_snapshot(self)
 
 
-func _apply_paint_swatch_state(swatch: TextureButton, selected: bool) -> void:
-	if selected:
-		swatch.modulate = Color(1.2, 1.2, 1.2)
-	else:
-		swatch.modulate = Color(0.92, 0.92, 0.92)
-
-	var frame := StyleBoxFlat.new()
-	frame.bg_color = Color(0.08, 0.09, 0.11, 1.0)
-	frame.border_width_left = 2
-	frame.border_width_top = 2
-	frame.border_width_right = 2
-	frame.border_width_bottom = 2
-	frame.corner_radius_top_left = 5
-	frame.corner_radius_top_right = 5
-	frame.corner_radius_bottom_left = 5
-	frame.corner_radius_bottom_right = 5
-	frame.border_color = Color(0.95, 0.72, 0.25, 1.0) if selected else Color(0.3, 0.33, 0.38, 1.0)
-	swatch.add_theme_stylebox_override("normal", frame)
-	swatch.add_theme_stylebox_override("hover", frame)
-	swatch.add_theme_stylebox_override("pressed", frame)
-	swatch.add_theme_stylebox_override("focus", frame)
+func _paint_debug_snapshot() -> Dictionary:
+	return get_paint_debug_snapshot()
 
 
 func _request_overlay_refresh() -> void:
 	if overlay_atlas_manager == null:
+		(
+			VehicleSelectPaintHelpers
+			. log_paint(
+				self,
+				PAINT_LOG_LEVEL_WARN,
+				"Overlay refresh skipped: manager missing",
+			)
+		)
 		return
 	if overlay_refresh_pending:
+		(
+			VehicleSelectPaintHelpers
+			. log_paint(
+				self,
+				PAINT_LOG_LEVEL_VERBOSE,
+				"Overlay refresh already pending",
+			)
+		)
 		return
 	overlay_refresh_pending = true
+	(
+		VehicleSelectPaintHelpers
+		. log_paint(
+			self,
+			PAINT_LOG_LEVEL_VERBOSE,
+			"Overlay refresh scheduled",
+			_paint_debug_snapshot(),
+		)
+	)
 	_refresh_overlay_after_frame()
 
 
@@ -767,8 +844,30 @@ func _refresh_overlay_after_frame() -> void:
 	await tree.process_frame
 	overlay_refresh_pending = false
 	if overlay_atlas_manager == null or vehicle_preview_instance == null:
+		(
+			VehicleSelectPaintHelpers
+			. log_paint(
+				self,
+				PAINT_LOG_LEVEL_WARN,
+				"Overlay refresh aborted after frame",
+				_paint_debug_snapshot(),
+			)
+		)
 		return
+
 	overlay_atlas_manager.apply()
+	overlay_apply_count += 1
+	if camera_brush != null:
+		camera_brush.get_atlas_textures()
+	(
+		VehicleSelectPaintHelpers
+		. log_paint(
+			self,
+			PAINT_LOG_LEVEL_INFO,
+			"Overlay refresh applied",
+			_paint_debug_snapshot(),
+		)
+	)
 
 
 func _find_preview_hit(local_point: Vector2) -> Dictionary:
@@ -914,6 +1013,9 @@ func _ray_intersect_mesh_instance(
 
 	var world_position = mesh_instance.to_global(best_local_position)
 	var world_normal = (mesh_instance.global_transform.basis * best_local_normal).normalized()
+	# Ensure normal points toward the ray origin (camera side).
+	if world_normal.dot(ray_direction) > 0.0:
+		world_normal = -world_normal
 	var world_distance = ray_origin.distance_to(world_position)
 
 	return {

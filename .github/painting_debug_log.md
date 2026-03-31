@@ -62,6 +62,11 @@ This page records the sequence of issues and attempted fixes for the vehicle pre
 - Added a vehicle-select smoke regression test that asserts `MainVBox`, the paint controls, and the initial paint snapshot readiness flags.
 - This should catch future `_ready()`/scene-tree wiring regressions immediately during GDUnit runs.
 
+### 2026-03-30 shape-mask fix
+- Fixed the GPU brush shader to sample the brush shape in brush-local space instead of screen-space, which was producing square-looking paint footprints.
+- Added a smoke-mask fallback in `VehicleSelectPaintHelpers` and `PlayerVehicleLibrary` so a square-looking imported smoke asset cannot leak into the final brush texture.
+- Expanded the regression tests to inspect alpha values on the generated brush textures and decal textures, not just node creation.
+
 ### 2026-03-30 projection fix
 - Changed preview decal projection to use `cull_mask = -1` instead of setting the decal node layer, so the decal can actually project onto the vehicle meshes.
 - Made the debug paint spheres semi-transparent so they act like a visual marker instead of blocking the view of the paint result.

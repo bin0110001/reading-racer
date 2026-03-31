@@ -3,15 +3,15 @@ extends Control
 
 const ReadingSettingsStore = preload("res://scripts/reading/settings_store.gd")
 const ReadingContentLoader = preload("res://scripts/reading/content_loader.gd")
-const PlayerVehicleLibrary = preload("res://scripts/reading/player_vehicle_library.gd")
+const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
 
 var settings_store := ReadingSettingsStore.new()
 var content_loader := ReadingContentLoader.new()
 var selected_group: String = ""
 var level_buttons: Array[Button] = []
 var vehicle_catalog: Array[Dictionary] = []
-var selected_vehicle_id: String = PlayerVehicleLibrary.DEFAULT_VEHICLE_ID
-var selected_vehicle_color: Color = PlayerVehicleLibrary.get_default_paint_color()
+var selected_vehicle_id: String = PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID
+var selected_vehicle_color: Color = PlayerVehicleLibraryScript.get_default_paint_color()
 var selected_vehicle_decals: Array = []
 
 var vehicle_option := OptionButton.new()
@@ -173,15 +173,15 @@ func _build_vehicle_customizer() -> void:
 
 
 func _populate_vehicle_options() -> void:
-	vehicle_catalog = PlayerVehicleLibrary.list_vehicles()
+	vehicle_catalog = PlayerVehicleLibraryScript.list_vehicles()
 	vehicle_option.clear()
 	for vehicle in vehicle_catalog:
 		vehicle_option.add_item(str(vehicle.get("name", "Vehicle")))
 
 
 func _select_vehicle(vehicle_id: String) -> void:
-	selected_vehicle_id = PlayerVehicleLibrary.resolve_vehicle_id(
-		{PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID: vehicle_id}
+	selected_vehicle_id = PlayerVehicleLibraryScript.resolve_vehicle_id(
+		{PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID: vehicle_id}
 	)
 	for index in range(vehicle_catalog.size()):
 		var vehicle := vehicle_catalog[index]
@@ -195,18 +195,20 @@ func _refresh_vehicle_preview() -> void:
 		vehicle_preview_instance.queue_free()
 		vehicle_preview_instance = null
 
-	var vehicle_settings: Dictionary = PlayerVehicleLibrary.build_vehicle_settings(
+	var vehicle_settings: Dictionary = PlayerVehicleLibraryScript.build_vehicle_settings(
 		selected_vehicle_id, selected_vehicle_color
 	)
-	vehicle_preview_instance = PlayerVehicleLibrary.instantiate_vehicle_from_settings(
-		vehicle_settings, PlayerVehicleLibrary.PREVIEW_MAX_DIMENSION
+	vehicle_preview_instance = PlayerVehicleLibraryScript.instantiate_vehicle_from_settings(
+		vehicle_settings, PlayerVehicleLibraryScript.PREVIEW_MAX_DIMENSION
 	)
 	if vehicle_preview_instance == null:
 		vehicle_name_label.text = "Preview unavailable"
 		return
 
 	vehicle_preview_pivot.add_child(vehicle_preview_instance)
-	var selected_vehicle: Dictionary = PlayerVehicleLibrary.get_vehicle_by_id(selected_vehicle_id)
+	var selected_vehicle: Dictionary = PlayerVehicleLibraryScript.get_vehicle_by_id(
+		selected_vehicle_id
+	)
 	vehicle_name_label.text = str(selected_vehicle.get("name", "Vehicle"))
 
 

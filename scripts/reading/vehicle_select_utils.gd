@@ -46,7 +46,7 @@ static func create_circular_brush_shape(size: int = 256) -> Image:
 		for x in range(size):
 			var pos = Vector2(x + 0.5, y + 0.5)
 			var dist = pos.distance_to(center)
-			var alpha : float = clamp(1.0 - ((dist - radius) / feather), 0.0, 1.0)
+			var alpha: float = clamp(1.0 - ((dist - radius) / feather), 0.0, 1.0)
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 
@@ -60,7 +60,7 @@ static func create_square_brush_shape(size: int = 256) -> Image:
 		for x in range(size):
 			var pos = Vector2(x + 0.5, y + 0.5) - center
 			var max_dist = max(abs(pos.x), abs(pos.y))
-			var alpha : float = clamp(1.0 - ((max_dist - half) / feather), 0.0, 1.0)
+			var alpha: float = clamp(1.0 - ((max_dist - half) / feather), 0.0, 1.0)
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 
@@ -81,7 +81,7 @@ static func create_star_brush_shape(size: int = 256) -> Image:
 			var angle = atan2(pos.y, pos.x)
 			var spoke = (cos(5.0 * angle) * 0.5) + 0.5
 			var radius_at_angle = lerp(inner_radius, outer_radius, spoke)
-			var alpha : float = clamp(1.0 - ((r - radius_at_angle) / feather), 0.0, 1.0)
+			var alpha: float = clamp(1.0 - ((r - radius_at_angle) / feather), 0.0, 1.0)
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 

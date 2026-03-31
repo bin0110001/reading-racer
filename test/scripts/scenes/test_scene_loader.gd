@@ -26,8 +26,8 @@ func test_all_scenes_load_without_errors() -> void:
 
 func test_main_scene_structure() -> void:
 	"""Verify main.tscn has basic expected structure."""
-	var scene = load("res://scenes/main.tscn")
-	var instance = scene.instantiate()
+	var scene: PackedScene = load("res://scenes/main.tscn") as PackedScene
+	var instance: Node = scene.instantiate() as Node
 
 	# Main scene should have a root node
 	assert_that(instance).is_not_null()
@@ -38,8 +38,8 @@ func test_main_scene_structure() -> void:
 
 func test_reading_mode_scene_structure() -> void:
 	"""Verify reading_mode.tscn has basic expected structure."""
-	var scene = load("res://scenes/reading_mode.tscn")
-	var instance = scene.instantiate()
+	var scene: PackedScene = load("res://scenes/reading_mode.tscn") as PackedScene
+	var instance: Node = scene.instantiate() as Node
 
 	# Reading mode should have a root node
 	assert_that(instance).is_not_null()
@@ -50,8 +50,8 @@ func test_reading_mode_scene_structure() -> void:
 
 func test_level_select_scene_structure() -> void:
 	"""Verify level_select.tscn has basic expected structure."""
-	var scene = load("res://scenes/level_select.tscn")
-	var instance = scene.instantiate()
+	var scene: PackedScene = load("res://scenes/level_select.tscn") as PackedScene
+	var instance: Node = scene.instantiate() as Node
 
 	# Level select should have a root node
 	assert_that(instance).is_not_null()
@@ -62,8 +62,8 @@ func test_level_select_scene_structure() -> void:
 
 func test_vehicle_select_scene_structure() -> void:
 	"""Verify vehicle_select.tscn has basic expected structure."""
-	var scene = load(VEHICLE_SELECT_SCENE_PATH)
-	var instance = scene.instantiate()
+	var scene: PackedScene = load(VEHICLE_SELECT_SCENE_PATH) as PackedScene
+	var instance: Node = scene.instantiate() as Node
 
 	assert_that(instance).is_not_null()
 	assert_that(instance is Node).is_true()

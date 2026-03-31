@@ -474,7 +474,29 @@ static func _create_smoke_brush_shape(size: int = 32) -> Image:
 		for x in range(size):
 			var pos := Vector2(float(x) + 0.5, float(y) + 0.5)
 			var dist := pos.distance_to(center)
-			var alpha : float= clamp(1.0 - ((dist - radius) / feather), 0.0, 1.0)
+			var alpha: float = clamp(1.0 - ((dist - radius) / feather), 0.0, 1.0)
+			image.set_pixel(x, y, Color(1, 1, 1, alpha))
+	var corner_alpha := maxf(
+		maxf(image.get_pixel(0, 0).a, image.get_pixel(size - 1, 0).a),
+		maxf(image.get_pixel(0, size - 1).a, image.get_pixel(size - 1, size - 1).a)
+	)
+	if corner_alpha > 0.05:
+		return _create_circular_brush_shape(size)
+	return image
+
+
+static func _create_circular_brush_shape(size: int = 32) -> Image:
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var center := Vector2(size * 0.5, size * 0.5)
+	var radius := size * 0.38
+	var feather := maxf(size * 0.08, 2.0)
+	for y in range(size):
+		for x in range(size):
+			var offset := Vector2(float(x) + 0.5, float(y) + 0.5)
+			var alpha: float = clamp(
+				1.0 - ((offset.distance_to(center) - radius) / feather), 0.0, 1.0
+			)
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 

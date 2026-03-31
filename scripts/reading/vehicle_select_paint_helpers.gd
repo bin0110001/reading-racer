@@ -215,7 +215,7 @@ static func create_circular_brush_shape(size: int = 256) -> Image:
 		for x in range(size):
 			var pos := Vector2(x + 0.5, y + 0.5)
 			var dist := pos.distance_to(center)
-			var alpha : float = clamp(1.0 - ((dist - radius) / feather), 0.0, 1.0)
+			var alpha: float = clamp(1.0 - ((dist - radius) / feather), 0.0, 1.0)
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 
@@ -228,8 +228,8 @@ static func create_square_brush_shape(size: int = 256) -> Image:
 	for y in range(size):
 		for x in range(size):
 			var pos := Vector2(x + 0.5, y + 0.5) - center
-			var max_dist : float = max(abs(pos.x), abs(pos.y))
-			var alpha : float = clamp(1.0 - ((max_dist - half) / feather), 0.0, 1.0)
+			var max_dist: float = max(abs(pos.x), abs(pos.y))
+			var alpha: float = clamp(1.0 - ((max_dist - half) / feather), 0.0, 1.0)
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 
@@ -249,8 +249,8 @@ static func create_star_brush_shape(size: int = 256) -> Image:
 				continue
 			var angle := atan2(pos.y, pos.x)
 			var spoke := (cos(5.0 * angle) * 0.5) + 0.5
-			var radius_at_angle : float = lerp(inner_radius, outer_radius, spoke)
-			var alpha : float = clamp(1.0 - ((r - radius_at_angle) / feather), 0.0, 1.0)
+			var radius_at_angle: float = lerp(inner_radius, outer_radius, spoke)
+			var alpha: float = clamp(1.0 - ((r - radius_at_angle) / feather), 0.0, 1.0)
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return image
 
@@ -279,6 +279,13 @@ static func create_smoke_brush_shape(size: int = 256) -> Image:
 
 	if image.get_width() != size or image.get_height() != size:
 		image.resize(size, size, Image.INTERPOLATE_BILINEAR)
+
+	var corner_alpha := maxf(
+		maxf(image.get_pixel(0, 0).a, image.get_pixel(size - 1, 0).a),
+		maxf(image.get_pixel(0, size - 1).a, image.get_pixel(size - 1, size - 1).a)
+	)
+	if corner_alpha > 0.05:
+		return create_circular_brush_shape(size)
 
 	return image
 

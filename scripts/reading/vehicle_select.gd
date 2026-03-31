@@ -3,7 +3,9 @@ extends Control
 const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
 const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
 const VehicleSelectUtilsScript = preload("res://scripts/reading/vehicle_select_utils.gd")
-const VehicleSelectPaintHelpersScript = preload("res://scripts/reading/vehicle_select_paint_helpers.gd")
+const VehicleSelectPaintHelpersScript = preload(
+	"res://scripts/reading/vehicle_select_paint_helpers.gd"
+)
 const GPU_TEXTURE_PAINTER_BASE := (
 	"res://addons/gpu-texture-painter/"
 	+ "gpu-texture-painter-f4faff9106b51a2e95ef6d74abec774ce86cd453/"
@@ -12,9 +14,7 @@ const GPU_TEXTURE_PAINTER_BASE := (
 const GPUOverlayAtlasManager = preload(
 	GPU_TEXTURE_PAINTER_BASE + "manager/" + "overlay_atlas_manager.gd"
 )
-const GPUCameraBrush = preload(
-	GPU_TEXTURE_PAINTER_BASE + "brush/" + "camera_brush.gd"
-)
+const GPUCameraBrush = preload(GPU_TEXTURE_PAINTER_BASE + "brush/" + "camera_brush.gd")
 const GPU_BRUSH_SHAPE := preload(
 	GPU_TEXTURE_PAINTER_BASE + "brush_shapes/" + "smooth_brush_shape.webp"
 )
@@ -74,7 +74,6 @@ var settings_store := ReadingSettingsStoreScript.new()
 var vehicle_catalog: Array[Dictionary] = []
 var selected_vehicle_id := PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID
 var selected_vehicle_color := PlayerVehicleLibraryScript.get_default_paint_color()
-
 var vehicle_select_container := HBoxContainer.new()
 var vehicle_select_prev_button := Button.new()
 var vehicle_select_next_button := Button.new()
@@ -460,9 +459,9 @@ func _refresh_vehicle_preview() -> void:
 
 	vehicle_preview_pivot.add_child(vehicle_preview_instance)
 	vehicle_preview_instance.rotation_degrees = selected_vehicle_rotation
-	var selected_vehicle: Dictionary = PlayerVehicleLibraryScript.get_vehicle_by_id(
-		selected_vehicle_id
-	) as Dictionary
+	var selected_vehicle: Dictionary = (
+		PlayerVehicleLibraryScript.get_vehicle_by_id(selected_vehicle_id) as Dictionary
+	)
 	var vehicle_name: String = str(selected_vehicle.get("name", "Vehicle"))
 	vehicle_name_label.text = vehicle_name
 	(
@@ -1089,6 +1088,7 @@ func _on_save_pressed() -> void:
 	await get_tree().create_timer(0.8).timeout
 	get_tree().change_scene_to_file("res://scenes/level_select.tscn")
 
+
 func _show_feedback(message: String, duration: float = 1.0) -> void:
 	if save_feedback_label == null:
 		return
@@ -1097,6 +1097,4 @@ func _show_feedback(message: String, duration: float = 1.0) -> void:
 	if save_feedback_label != null:
 		save_feedback_label.text = ""
 
-
-func _on_back_pressed() -> void:
-	get_tree().change_scene_to_file("res://scenes/level_select.tscn")
+func _on_back_pressed() -> void: get_tree().change_scene_to_file("res://scenes/level_select.tscn")

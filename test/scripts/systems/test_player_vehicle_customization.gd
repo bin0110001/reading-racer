@@ -120,6 +120,9 @@ func test_player_vehicle_library_apply_vehicle_decals_adds_decal_nodes() -> void
 	assert_that(decal_count).is_equal(1)
 	assert_that(first_decal).is_not_null()
 	assert_that(first_decal.texture_albedo).is_not_null()
+	var decal_image := (first_decal.texture_albedo as ImageTexture).get_image()
+	assert_that(decal_image.get_pixel(0, 0).a).is_equal(0.0)
+	assert_that(decal_image.get_pixel(16, 16).a).is_equal(1.0)
 	assert_that(first_decal.cull_mask).is_equal(4294967295)
 	assert_that(first_decal.size.z).is_less(0.1)
 
@@ -134,6 +137,7 @@ func test_vehicle_select_brush_shapes_have_soft_edges() -> void:
 	var circle_shape := vehicle_select_utils.create_circular_brush_shape(64)
 	var square_shape := vehicle_select_utils.create_square_brush_shape(64)
 	var star_shape := vehicle_select_utils.create_star_brush_shape(64)
+	var smoke_shape := vehicle_select_utils.create_smoke_brush_shape(64)
 
 	assert_that(circle_shape.get_pixel(0, 0).a).is_equal(0.0)
 	assert_that(circle_shape.get_pixel(32, 32).a).is_equal(1.0)
@@ -141,6 +145,8 @@ func test_vehicle_select_brush_shapes_have_soft_edges() -> void:
 	assert_that(square_shape.get_pixel(32, 32).a).is_equal(1.0)
 	assert_that(star_shape.get_pixel(0, 0).a).is_equal(0.0)
 	assert_that(star_shape.get_pixel(32, 32).a).is_equal(1.0)
+	assert_that(smoke_shape.get_pixel(0, 0).a).is_equal(0.0)
+	assert_that(smoke_shape.get_pixel(32, 32).a).is_greater(0.5)
 
 
 func test_player_vehicle_library_sets_overlay_lightmap_hints() -> void:

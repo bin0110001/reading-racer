@@ -6,7 +6,7 @@ const CameraController3DClass = preload("res://scripts/reading/CameraController3
 const MovementSystem = preload("res://scripts/reading/systems/MovementSystem.gd")
 const MapDisplayManager = preload("res://scripts/reading/systems/MapDisplayManager.gd")
 const GameplayController = preload("res://scripts/reading/systems/GameplayController.gd")
-const PlayerVehicleLibrary = preload("res://scripts/reading/player_vehicle_library.gd")
+const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
 
 # Grid layout constants
 const GRID_WIDTH := 7  # Z-axis: 7 columns (decorations + 1 road + decorations)
@@ -941,8 +941,8 @@ func _attach_player_model() -> void:
 	if vehicle_settings.is_empty():
 		vehicle_settings = settings_store.load_settings()
 
-	var model := PlayerVehicleLibrary.instantiate_vehicle_from_settings(
-		vehicle_settings, PlayerVehicleLibrary.RUNTIME_MAX_DIMENSION
+	var model := PlayerVehicleLibraryScript.instantiate_vehicle_from_settings(
+		vehicle_settings, PlayerVehicleLibraryScript.RUNTIME_MAX_DIMENSION
 	)
 	if model == null:
 		return

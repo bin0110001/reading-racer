@@ -1,7 +1,7 @@
 class_name ReadingSettingsStore
 extends RefCounted
 
-const PlayerVehicleLibrary = preload("res://scripts/reading/player_vehicle_library.gd")
+const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
 
 const SAVE_PATH := "user://reading_racer_settings.cfg"
 const CONTROL_MODE_KEYBOARD := "keyboard"
@@ -50,12 +50,15 @@ static func default_settings() -> Dictionary:
 		"map_style": MAP_STYLE_CIRCULAR,
 		"holiday_mode": HOLIDAY_MODE_AUTO,
 		"holiday_name": HOLIDAY_NONE,
-		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID: PlayerVehicleLibrary.DEFAULT_VEHICLE_ID,
-		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH:
-		PlayerVehicleLibrary.get_vehicle_scene_path(PlayerVehicleLibrary.DEFAULT_VEHICLE_ID),
-		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR:
-		PlayerVehicleLibrary.DEFAULT_PAINT_COLOR_HEX,
-		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS: [],
+		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID:
+		PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID,
+		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH:
+		PlayerVehicleLibraryScript.get_vehicle_scene_path(
+			PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID
+		),
+		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR:
+		PlayerVehicleLibraryScript.DEFAULT_PAINT_COLOR_HEX,
+		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS: [],
 		"paint_brush_size": 0.35,
 		"paint_brush_shape": "circle",
 	}
@@ -87,30 +90,30 @@ func load_settings() -> Dictionary:
 	settings["holiday_name"] = str(
 		config.get_value("reading", "holiday_name", settings["holiday_name"])
 	)
-	settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID] = str(
+	settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID] = str(
 		config.get_value(
 			"reading",
-			PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID,
-			settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID]
+			PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID,
+			settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID]
 		)
 	)
-	settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH] = str(
+	settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH] = str(
 		config.get_value(
 			"reading",
-			PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH,
-			settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH]
+			PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH,
+			settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH]
 		)
 	)
-	settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR] = str(
+	settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR] = str(
 		config.get_value(
 			"reading",
-			PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR,
-			settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR]
+			PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR,
+			settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR]
 		)
 	)
 
 	var raw_decals := str(
-		config.get_value("reading", PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS, "[]")
+		config.get_value("reading", PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS, "[]")
 	)
 	var parsed = JSON.parse_string(raw_decals)
 	if parsed is Array:

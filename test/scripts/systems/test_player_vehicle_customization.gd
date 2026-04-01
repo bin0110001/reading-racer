@@ -4,6 +4,51 @@ extends GdUnitTestSuite
 var vehicle_select_utils := VehicleSelectUtils.new()
 
 
+class PaintHelperOwnerStub:
+	extends RefCounted
+	const PAINT_LOG_LEVEL_NONE := 0
+	const PAINT_LOG_LEVEL_ERROR := 1
+	const PAINT_LOG_LEVEL_WARN := 2
+	const PAINT_LOG_LEVEL_INFO := 3
+	const PAINT_LOG_LEVEL_VERBOSE := 4
+	const BRUSH_PRESETS := [
+		{"label": "Fine", "size": 0.12},
+		{"label": "Small", "size": 0.20},
+		{"label": "Medium", "size": 0.35},
+		{"label": "Large", "size": 0.50},
+		{"label": "XL", "size": 0.72},
+	]
+	const BRUSH_SHAPE_OPTIONS := [
+		{"label": "Circle", "id": "circle"},
+		{"label": "Square", "id": "square"},
+		{"label": "Star", "id": "star"},
+		{"label": "Smoke", "id": "smoke"},
+	]
+
+	var paint_log_level := PAINT_LOG_LEVEL_VERBOSE
+	var selected_vehicle_id := "sedan"
+	var selected_vehicle_color := Color(0.15, 0.45, 0.9, 1.0)
+	var paint_brush_size := 0.35
+	var selected_brush_shape := "circle"
+	var brush_size_buttons: Array = []
+	var camera_brush: CameraBrush = CameraBrush.new()
+	var brush_shape_selector: OptionButton = OptionButton.new()
+	var brush_shape_preview: TextureRect = TextureRect.new()
+	var vehicle_name_label: Label = Label.new()
+	var vehicle_preview_instance: Node3D = null
+	var overlay_atlas_manager: Node = null
+	var overlay_apply_count := 0
+	var overlay_refresh_pending := false
+	var paint_hit_count := 0
+	var last_paint_hit: Dictionary = {}
+	var selected_vehicle_rotation := Vector3.ZERO
+	var selected_vehicle_decals: Array = []
+
+	func _init() -> void:
+		for option in BRUSH_SHAPE_OPTIONS:
+			brush_shape_selector.add_item(str(option.get("label", "")))
+
+
 func test_player_vehicle_library_default_scene_exists() -> void:
 	var scene_path := PlayerVehicleLibrary.resolve_vehicle_scene_path({})
 	assert_that(scene_path.is_empty()).is_false()
@@ -127,6 +172,38 @@ func test_player_vehicle_library_apply_vehicle_decals_adds_decal_nodes() -> void
 	assert_that(first_decal.size.z).is_less(0.1)
 
 
+func test_player_vehicle_library_decal_textures_have_feathered_edges() -> void:
+	var player_library = PlayerVehicleLibrary.new()
+	var root := Node3D.new()
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = BoxMesh.new()
+	root.add_child(mesh)
+
+	var decals := [
+		{
+			"position": {"x": 0.0, "y": 0.5, "z": 0.0},
+			"normal": {"x": 0.0, "y": 1.0, "z": 0.0},
+			"color": "ff0000ff",
+			"size": 0.25,
+			"shape": "circle",
+		}
+	]
+
+	var added_decal_count := player_library.apply_vehicle_decals_instance(root, decals)
+	assert_that(added_decal_count).is_equal(1)
+
+	var first_decal: Decal = null
+	for child in root.get_children():
+		if child is Decal:
+			first_decal = child as Decal
+			break
+
+	assert_that(first_decal).is_not_null()
+	var decal_image := (first_decal.texture_albedo as ImageTexture).get_image()
+	var edge_alpha := decal_image.get_pixel(28, 16).a
+	assert_that(edge_alpha > 0.0 and edge_alpha < 1.0).is_true()
+
+
 func test_build_vehicle_settings_persists_empty_decals() -> void:
 	var settings := PlayerVehicleLibrary.build_vehicle_settings("mail_truck", Color(1, 0, 0), [])
 	assert_that(settings.has(PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS)).is_true()
@@ -147,6 +224,48 @@ func test_vehicle_select_brush_shapes_have_soft_edges() -> void:
 	assert_that(star_shape.get_pixel(32, 32).a).is_equal(1.0)
 	assert_that(smoke_shape.get_pixel(0, 0).a).is_equal(0.0)
 	assert_that(smoke_shape.get_pixel(32, 32).a).is_greater(0.5)
+
+
+func test_vehicle_select_paint_helpers_syncs_brush_shape_preview_and_bleed() -> void:
+	var owner := PaintHelperOwnerStub.new()
+	VehicleSelectPaintHelpers.set_selected_brush_shape(owner, "circle", false)
+
+	assert_that(owner.selected_brush_shape).is_equal("circle")
+	assert_that(owner.camera_brush).is_not_null()
+	assert_that(owner.camera_brush.min_bleed).is_greater(0)
+	assert_that(owner.camera_brush.max_bleed).is_greater_equal(owner.camera_brush.min_bleed)
+	assert_that(owner.brush_shape_preview.texture).is_not_null()
+
+	var preview_image := (owner.brush_shape_preview.texture as ImageTexture).get_image()
+	assert_that(preview_image.get_pixel(0, 0).a).is_equal(0.0)
+	assert_that(preview_image.get_pixel(32, 32).a).is_equal(1.0)
+	assert_that(owner.brush_shape_selector.selected).is_equal(0)
+
+
+func test_vehicle_select_paint_helpers_increases_bleed_with_brush_size() -> void:
+	var owner := PaintHelperOwnerStub.new()
+
+	VehicleSelectPaintHelpers.set_brush_preset_by_size(owner, 0.12, false)
+	var small_bleed := owner.camera_brush.min_bleed
+
+	VehicleSelectPaintHelpers.set_brush_preset_by_size(owner, 0.72, false)
+	var large_bleed := owner.camera_brush.min_bleed
+
+	assert_that(large_bleed).is_greater(small_bleed)
+
+
+func test_vehicle_select_overlay_shader_uses_alpha_blending() -> void:
+	var shader_path := (
+		"res://addons/gpu-texture-painter/"
+		+ "gpu-texture-painter-f4faff9106b51a2e95ef6d74abec774ce86cd453/"
+		+ "addons/gpu_texture_painter/overlay_shaders/default_overlay.gdshader"
+	)
+	assert_that(ResourceLoader.exists(shader_path)).is_true()
+
+	var shader := load(shader_path) as Shader
+	assert_that(shader).is_not_null()
+	assert_that(shader.code.contains("render_mode blend_mix")).is_true()
+	assert_that(shader.code.contains("depth_draw_alpha_prepass")).is_false()
 
 
 func test_player_vehicle_library_sets_overlay_lightmap_hints() -> void:

@@ -352,7 +352,26 @@ static func set_selected_brush_shape(owner, shape_id: String, refresh_preview :=
 		owner.brush_shape_preview.texture = (
 			vehicle_select_utils.create_brush_shape_preview_texture(shape_id, 64)
 		)
+	_apply_camera_brush_bleed(owner)
 	sync_gpu_paint_state(owner)
+	var bleed_info := {
+		"shape": shape_id,
+		"min_bleed": -1,
+		"max_bleed": -1,
+	}
+	if owner.camera_brush != null:
+		bleed_info["min_bleed"] = owner.camera_brush.min_bleed
+		bleed_info["max_bleed"] = owner.camera_brush.max_bleed
+
+	(
+		VehicleSelectPaintHelpers
+		. log_paint(
+			owner,
+			owner.PAINT_LOG_LEVEL_INFO,
+			"Brush shape changed",
+			bleed_info,
+		)
+	)
 	if refresh_preview:
 		owner._refresh_vehicle_preview()
 
@@ -367,6 +386,7 @@ static func set_selected_paint_color(owner, color: Color, refresh_preview := tru
 	owner.selected_vehicle_color = color
 	owner.selected_paint_color_index = find_closest_paint_color_index(owner, color)
 	update_paint_color_swatches(owner)
+	_apply_camera_brush_bleed(owner)
 	sync_gpu_paint_state(owner)
 	if refresh_preview:
 		owner._refresh_vehicle_preview()
@@ -388,8 +408,22 @@ static func find_closest_paint_color_index(owner, color: Color) -> int:
 	return closest_index
 
 
+static func _apply_camera_brush_bleed(owner) -> void:
+	if owner.camera_brush == null:
+		return
+	# Map user brush size to a bleed radius large enough for shape fidelity.
+	var normalized: float = clamp(owner.paint_brush_size, 0.01, 1.0)
+	var target_pixels := int(clampf(normalized * 45.0, 4.0, 48.0))
+	var bleed_pixels: float = max(1, target_pixels / 2)
+	owner.camera_brush.min_bleed = clampi(bleed_pixels, 1, 24)
+	owner.camera_brush.max_bleed = clampi(
+		owner.camera_brush.min_bleed + 2, owner.camera_brush.min_bleed, 32
+	)
+
+
 static func set_brush_preset_by_size(owner, brush_size: float, refresh_preview := true) -> void:
 	owner.paint_brush_size = brush_size
+	_apply_camera_brush_bleed(owner)
 	var closest_index := 0
 	var closest_distance := INF
 	for index in range(owner.BRUSH_PRESETS.size()):

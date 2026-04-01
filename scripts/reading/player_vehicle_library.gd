@@ -410,23 +410,23 @@ static func _create_decal_texture(color: Color, brush_shape: String = "circle") 
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	image.fill(Color(0, 0, 0, 0))
 	var center := Vector2(size * 0.5, size * 0.5)
-	var radius := size * 0.5 - 1.0
+	var radius := size * 0.38
+	var feather := maxf(size * 0.08, 2.0)
 
 	match brush_shape:
 		"square":
 			for y in range(size):
 				for x in range(size):
-					var delta := Vector2(float(x), float(y)) - center
-					if absf(delta.x) <= radius and absf(delta.y) <= radius:
-						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
-					else:
-						image.set_pixel(x, y, Color(0, 0, 0, 0))
+					var pos := Vector2(float(x) + 0.5, float(y) + 0.5) - center
+					var max_dist: float = max(absf(pos.x), absf(pos.y))
+					var alpha: float = clamp(1.0 - ((max_dist - radius) / feather), 0.0, 1.0)
+					image.set_pixel(x, y, Color(color.r, color.g, color.b, alpha))
 		"star":
 			var outer_radius := radius
 			var inner_radius := outer_radius * 0.42
 			for y in range(size):
 				for x in range(size):
-					var pos = Vector2(float(x), float(y)) - center
+					var pos = Vector2(float(x) + 0.5, float(y) + 0.5) - center
 					var r = pos.length()
 					if r == 0.0:
 						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
@@ -434,10 +434,8 @@ static func _create_decal_texture(color: Color, brush_shape: String = "circle") 
 					var angle = atan2(pos.y, pos.x)
 					var spoke = (cos(5.0 * angle) * 0.5) + 0.5
 					var radius_at_angle = lerp(inner_radius, outer_radius, spoke)
-					if r <= radius_at_angle:
-						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
-					else:
-						image.set_pixel(x, y, Color(0, 0, 0, 0))
+					var alpha: float = clamp(1.0 - ((r - radius_at_angle) / feather), 0.0, 1.0)
+					image.set_pixel(x, y, Color(color.r, color.g, color.b, alpha))
 		"smoke":
 			var smoke_shape = _create_smoke_brush_shape(size)
 			for y in range(size):
@@ -447,19 +445,15 @@ static func _create_decal_texture(color: Color, brush_shape: String = "circle") 
 		"circle":
 			for y in range(size):
 				for x in range(size):
-					var offset := Vector2(float(x), float(y)).distance_to(center)
-					if offset <= radius:
-						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
-					else:
-						image.set_pixel(x, y, Color(0, 0, 0, 0))
+					var offset := Vector2(float(x) + 0.5, float(y) + 0.5).distance_to(center)
+					var alpha: float = clamp(1.0 - ((offset - radius) / feather), 0.0, 1.0)
+					image.set_pixel(x, y, Color(color.r, color.g, color.b, alpha))
 		_:
 			for y in range(size):
 				for x in range(size):
-					var offset := Vector2(float(x), float(y)).distance_to(center)
-					if offset <= radius:
-						image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
-					else:
-						image.set_pixel(x, y, Color(0, 0, 0, 0))
+					var offset := Vector2(float(x) + 0.5, float(y) + 0.5).distance_to(center)
+					var alpha: float = clamp(1.0 - ((offset - radius) / feather), 0.0, 1.0)
+					image.set_pixel(x, y, Color(color.r, color.g, color.b, alpha))
 
 	return ImageTexture.create_from_image(image)
 

@@ -25,6 +25,7 @@ var _map_style_option := OptionButton.new()
 var _volume_slider := HSlider.new()
 var _debug_path_checkbox := CheckBox.new()
 
+var _back_button := Button.new()
 var _home_button := Button.new()
 var _debug_word_option := OptionButton.new()
 var _debug_phoneme_option := OptionButton.new()
@@ -37,6 +38,15 @@ func _ready() -> void:
 
 
 func _build_hud() -> void:
+	_back_button.name = "BackButton"
+	_back_button.text = "Back"
+	_back_button.anchor_left = 0.02
+	_back_button.anchor_top = 0.02
+	_back_button.offset_right = 96
+	_back_button.offset_bottom = 36
+	_back_button.pressed.connect(func() -> void: emit_signal("home_requested"))
+	add_child(_back_button)
+
 	_status_label.anchor_left = 0.02
 	_status_label.anchor_top = 0.03
 	_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -253,7 +263,7 @@ func is_options_open() -> bool:
 
 
 func get_home_button() -> Button:
-	return _home_button
+	return _back_button
 
 
 func set_control_mode(mode_name: String) -> void:

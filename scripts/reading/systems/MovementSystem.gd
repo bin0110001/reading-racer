@@ -65,6 +65,15 @@ func update_position_and_heading(delta: float, track_pose: Dictionary) -> void:
 		return
 
 	var target_lane_offset: float = LANE_POSITIONS[lane_index]
+	if control_profile is SmoothSteeringController:
+		var smooth_controller := control_profile as SmoothSteeringController
+		var steering_angle := smooth_controller.get_steering_angle()
+		var steering_ratio := 0.0
+		if SmoothSteeringController.MAX_STEERING_ANGLE > 0.0:
+			steering_ratio = clamp(
+				steering_angle / SmoothSteeringController.MAX_STEERING_ANGLE, -1.0, 1.0
+			)
+		target_lane_offset = steering_ratio * LANE_POSITIONS[LANE_POSITIONS.size() - 1]
 	player_lane_offset = move_toward(
 		player_lane_offset, target_lane_offset, LANE_CHANGE_SPEED * delta
 	)
@@ -120,13 +129,11 @@ func get_player_position(track_pose: Dictionary) -> Vector3:
 
 ## Get current player basis for visual rotation
 func get_player_basis() -> Basis:
-	var tilt_angle = float(lane_index - 1) * -0.14
 	var forward = Vector3(cos(player_heading), 0.0, sin(player_heading)).normalized()
 	var right = Vector3(-forward.z, 0.0, forward.x).normalized()
 	var world_up = Vector3.UP
 	var base_basis = Basis(right, world_up, forward).orthonormalized()
-	var banked_basis = base_basis.rotated(forward, tilt_angle)
-	return banked_basis
+	return base_basis
 
 
 ## Reset movement state for new word

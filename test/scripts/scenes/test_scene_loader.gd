@@ -52,10 +52,14 @@ func test_level_select_scene_structure() -> void:
 	"""Verify level_select.tscn has basic expected structure."""
 	var scene: PackedScene = load("res://scenes/level_select.tscn") as PackedScene
 	var instance: Node = scene.instantiate() as Node
+	var carousel_scroll = _find_child_by_name(instance, "LevelCarouselScroll")
+	var start_button = _find_child_by_name(instance, "StartButton")
 
 	# Level select should have a root node
 	assert_that(instance).is_not_null()
 	assert_that(instance is Node).is_true()
+	assert_that(carousel_scroll).is_not_null()
+	assert_that(start_button).is_null()
 
 	instance.queue_free()
 

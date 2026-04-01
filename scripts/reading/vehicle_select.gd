@@ -688,7 +688,7 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 		camera_brush.drawing = true
 
 		(
-			vehicle_select_paint_helpers
+			VehicleSelectPaintHelpersScript
 			. log_paint(
 				self,
 				PAINT_LOG_LEVEL_INFO,
@@ -702,8 +702,6 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 			)
 		)
 
-		# Force overlay manager refresh after each paint action.
-		# The GPU painter effect reuses the current atlas on the next frame.
 		_request_overlay_refresh()
 
 		# Fallback realtime visuals: add a Decal node directly so painting is visible.
@@ -779,7 +777,7 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 				)
 			)
 			(
-				vehicle_select_paint_helpers
+				VehicleSelectPaintHelpersScript
 				. log_paint(
 					self,
 					PAINT_LOG_LEVEL_VERBOSE,
@@ -791,7 +789,7 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 					},
 				)
 			)
-			vehicle_select_paint_helpers.spawn_debug_paint_marker(
+			VehicleSelectPaintHelpersScript.spawn_debug_paint_marker(
 				self, hit_position, selected_vehicle_color
 			)
 
@@ -1097,4 +1095,6 @@ func _show_feedback(message: String, duration: float = 1.0) -> void:
 	if save_feedback_label != null:
 		save_feedback_label.text = ""
 
-func _on_back_pressed() -> void: get_tree().change_scene_to_file("res://scenes/level_select.tscn")
+
+func _on_back_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/level_select.tscn")

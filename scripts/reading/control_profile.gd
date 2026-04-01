@@ -63,6 +63,17 @@ func set_mode(next_mode: String) -> void:
 
 
 func handle_input(event: InputEvent) -> void:
+	if event is InputEventAction:
+		var action_event := event as InputEventAction
+		if action_event.pressed and action_event.action == ACTION_MOVE_UP:
+			_pending_lane_delta = -1
+		elif action_event.pressed and action_event.action == ACTION_MOVE_DOWN:
+			_pending_lane_delta = 1
+	elif event.is_action_pressed(ACTION_MOVE_UP):
+		_pending_lane_delta = -1
+	elif event.is_action_pressed(ACTION_MOVE_DOWN):
+		_pending_lane_delta = 1
+
 	if mode != ReadingSettingsStore.CONTROL_MODE_SWIPE:
 		return
 
@@ -82,24 +93,20 @@ func handle_input(event: InputEvent) -> void:
 
 func consume_lane_delta(delta: float) -> int:
 	var result := 0
-	match mode:
-		ReadingSettingsStore.CONTROL_MODE_KEYBOARD:
-			if Input.is_action_just_pressed(ACTION_MOVE_UP):
-				result = -1
-			elif Input.is_action_just_pressed(ACTION_MOVE_DOWN):
-				result = 1
-		ReadingSettingsStore.CONTROL_MODE_SWIPE:
-			result = _pending_lane_delta
-			_pending_lane_delta = 0
-		ReadingSettingsStore.CONTROL_MODE_TILT:
-			_tilt_cooldown = maxf(_tilt_cooldown - delta, 0.0)
-			if _tilt_cooldown > 0.0:
-				result = 0
-			else:
-				var accelerometer := Input.get_accelerometer()
-				if accelerometer == Vector3.ZERO:
-					result = 0
-				elif accelerometer.x < -TILT_DEADZONE:
+	if _pending_lane_delta != 0:
+		result = _pending_lane_delta
+		_pending_lane_delta = 0
+		return result
+
+	if mode == ReadingSettingsStore.CONTROL_MODE_SWIPE:
+		result = _pending_lane_delta
+		_pending_lane_delta = 0
+	elif mode == ReadingSettingsStore.CONTROL_MODE_TILT:
+		_tilt_cooldown = maxf(_tilt_cooldown - delta, 0.0)
+		if _tilt_cooldown <= 0.0:
+			var accelerometer := Input.get_accelerometer()
+			if accelerometer != Vector3.ZERO:
+				if accelerometer.x < -TILT_DEADZONE:
 					_tilt_cooldown = TILT_REPEAT_SECONDS
 					result = -1
 				elif accelerometer.x > TILT_DEADZONE:

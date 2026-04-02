@@ -313,6 +313,14 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	assert_that((painting_snapshot.get("last_paint_hit", {}) as Dictionary).is_empty()).is_false()
 	assert_that(int(painting_snapshot.get("overlay_apply_count", 0))).is_greater(0)
 
+	var overlay_apply_before := int(painting_snapshot.get("overlay_apply_count", 0))
+
+	# Non-regression: live brush movement should not force repeated atlas apply calls.
+	await runner.simulate_frames(2)
+	var paint_snapshot2: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
+	var overlay_apply_after := int(paint_snapshot2.get("overlay_apply_count", 0))
+	assert_that(overlay_apply_after).is_less_equal(overlay_apply_before + 1)
+
 	var release_event := InputEventMouseButton.new()
 	release_event.button_index = MOUSE_BUTTON_LEFT
 	release_event.pressed = false

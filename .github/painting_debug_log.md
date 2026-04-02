@@ -71,6 +71,11 @@ This page records the sequence of issues and attempted fixes for the vehicle pre
 - Changed preview decal projection to use `cull_mask = -1` instead of setting the decal node layer, so the decal can actually project onto the vehicle meshes.
 - Made the debug paint spheres semi-transparent so they act like a visual marker instead of blocking the view of the paint result.
 
+### 2026-04-02 current state flag
+- Current behavior: paint still flashes and the vehicle color appears to change after clicks or color changes before the applied paint is visible.
+- Status: unresolved. The UI sync fix and the brush color-space cleanup did not fully resolve the paint visibility bug.
+- Active focus: overlay path color handling and refresh timing in `BrushCompositorEffect` + `OverlayAtlasManager`.
+
 ### Expected outcome
-- If the first fix is correct, logs should show a complete sequence from preview refresh -> overlay apply -> atlas rebind -> paint hit.
-- If not, the verbose log and snapshot should let us distinguish ray-hit failure from atlas/brush binding failure quickly.
+- Logs should now be treated as a diagnostic trace for the open paint bug, not as proof of resolution.
+- The next pass should distinguish ray-hit failure from atlas/brush binding failure and color-space mismatch.

@@ -1,12 +1,12 @@
+# gdlint: disable=max-public-methods
+
 class_name VehicleSelectPaintHelpers
 extends RefCounted
-
-static var vehicle_select_utils := VehicleSelectUtils.new()
 
 static var _brush_shape_texture_cache: Dictionary = {}
 
 
-static func configure_paint_logging(owner) -> void:
+func configure_paint_logging(owner) -> void:
 	var environment_level := (
 		str(OS.get_environment("READING_VEHICLE_PAINT_LOG_LEVEL")).strip_edges().to_lower()
 	)
@@ -27,7 +27,7 @@ static func configure_paint_logging(owner) -> void:
 			owner.paint_log_level = owner.PAINT_LOG_LEVEL_INFO
 
 
-static func log_paint(owner, level: int, message: String, payload: Variant = null) -> void:
+func log_paint(owner, level: int, message: String, payload: Variant = null) -> void:
 	if owner.paint_log_level < level:
 		return
 
@@ -48,7 +48,7 @@ static func log_paint(owner, level: int, message: String, payload: Variant = nul
 		print("[VehicleSelect][", level_name, "] ", message, " | ", payload)
 
 
-static func paint_debug_snapshot(owner) -> Dictionary:
+func paint_debug_snapshot(owner) -> Dictionary:
 	var preview_mesh_count := 0
 	if owner.vehicle_preview_instance != null:
 		preview_mesh_count = (
@@ -81,7 +81,7 @@ static func paint_debug_snapshot(owner) -> Dictionary:
 	}
 
 
-static func build_paint_color_palette(owner) -> void:
+func build_paint_color_palette(owner) -> void:
 	owner.paint_color_buttons.clear()
 	for child in owner.paint_color_palette.get_children():
 		child.queue_free()
@@ -96,8 +96,8 @@ static func build_paint_color_palette(owner) -> void:
 		swatch.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		swatch.custom_minimum_size = Vector2(28, 28)
 		swatch.tooltip_text = color.to_html(true)
-		swatch.texture_normal = vehicle_select_utils.create_color_swatch_texture(color, false)
-		swatch.texture_pressed = vehicle_select_utils.create_color_swatch_texture(color, true)
+		swatch.texture_normal = VehicleSelectUtils.create_color_swatch_texture(color, false)
+		swatch.texture_pressed = VehicleSelectUtils.create_color_swatch_texture(color, true)
 		swatch.texture_hover = swatch.texture_normal
 		swatch.texture_focused = swatch.texture_normal
 		swatch.pressed.connect(owner._on_paint_color_selected.bind(index))
@@ -107,7 +107,7 @@ static func build_paint_color_palette(owner) -> void:
 	update_paint_color_swatches(owner)
 
 
-static func build_brush_size_selector(owner, parent: Control) -> void:
+func build_brush_size_selector(owner, parent: Control) -> void:
 	owner.brush_size_buttons.clear()
 	var size_row := HBoxContainer.new()
 	size_row.name = "BrushSizeSelector"
@@ -125,8 +125,8 @@ static func build_brush_size_selector(owner, parent: Control) -> void:
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		button.custom_minimum_size = Vector2(48, 48)
-		button.texture_normal = vehicle_select_utils.create_brush_size_texture(preset_size, false)
-		button.texture_pressed = vehicle_select_utils.create_brush_size_texture(preset_size, true)
+		button.texture_normal = VehicleSelectUtils.create_brush_size_texture(preset_size, false)
+		button.texture_pressed = VehicleSelectUtils.create_brush_size_texture(preset_size, true)
 		button.texture_hover = button.texture_normal
 		button.texture_focused = button.texture_normal
 		button.pressed.connect(owner._on_brush_size_selected.bind(index))
@@ -137,7 +137,7 @@ static func build_brush_size_selector(owner, parent: Control) -> void:
 	update_brush_size_button_states(owner, closest_index)
 
 
-static func build_vehicle_rotation_controls(owner, parent: Control) -> void:
+func build_vehicle_rotation_controls(owner, parent: Control) -> void:
 	var rotation_row := HBoxContainer.new()
 	rotation_row.name = "VehicleRotationControls"
 	rotation_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -193,20 +193,20 @@ static func build_vehicle_rotation_controls(owner, parent: Control) -> void:
 	apply_vehicle_rotation(owner, owner.selected_vehicle_rotation)
 
 
-static func update_brush_size_button_states(owner, selected_index: int) -> void:
+func update_brush_size_button_states(owner, selected_index: int) -> void:
 	for index in range(owner.brush_size_buttons.size()):
 		var button: TextureButton = owner.brush_size_buttons[index] as TextureButton
-		button.button_pressed = index == selected_index
+		button.set_pressed_no_signal(index == selected_index)
 		var preset_size := float(owner.BRUSH_PRESETS[index].get("size", owner.paint_brush_size))
-		button.texture_normal = vehicle_select_utils.create_brush_size_texture(
+		button.texture_normal = VehicleSelectUtils.create_brush_size_texture(
 			preset_size, index == selected_index
 		)
-		button.texture_pressed = vehicle_select_utils.create_brush_size_texture(
+		button.texture_pressed = VehicleSelectUtils.create_brush_size_texture(
 			preset_size, index == selected_index
 		)
 
 
-static func create_circular_brush_shape(size: int = 256) -> Image:
+func create_circular_brush_shape(size: int = 256) -> Image:
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size * 0.5, size * 0.5)
 	var radius := size * 0.38
@@ -220,7 +220,7 @@ static func create_circular_brush_shape(size: int = 256) -> Image:
 	return image
 
 
-static func create_square_brush_shape(size: int = 256) -> Image:
+func create_square_brush_shape(size: int = 256) -> Image:
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size * 0.5, size * 0.5)
 	var half := size * 0.38
@@ -234,7 +234,7 @@ static func create_square_brush_shape(size: int = 256) -> Image:
 	return image
 
 
-static func create_star_brush_shape(size: int = 256) -> Image:
+func create_star_brush_shape(size: int = 256) -> Image:
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center := Vector2(size * 0.5, size * 0.5)
 	var outer_radius := size * 0.38
@@ -255,7 +255,7 @@ static func create_star_brush_shape(size: int = 256) -> Image:
 	return image
 
 
-static func create_smoke_brush_shape(size: int = 256) -> Image:
+func create_smoke_brush_shape(size: int = 256) -> Image:
 	var texture := load("res://sprites/smoke.png")
 	if texture == null or typeof(texture) != TYPE_OBJECT or not texture is Texture2D:
 		return create_circular_brush_shape(size)
@@ -290,7 +290,7 @@ static func create_smoke_brush_shape(size: int = 256) -> Image:
 	return image
 
 
-static func create_brush_shape_preview_texture(shape_id: String, size: int = 64) -> Texture2D:
+func create_brush_shape_preview_texture(shape_id: String, size: int = 64) -> Texture2D:
 	var image: Image
 	match shape_id:
 		"circle":
@@ -307,7 +307,7 @@ static func create_brush_shape_preview_texture(shape_id: String, size: int = 64)
 	return ImageTexture.create_from_image(image)
 
 
-static func apply_paint_swatch_state(swatch: TextureButton, selected: bool) -> void:
+func apply_paint_swatch_state(swatch: TextureButton, selected: bool) -> void:
 	if selected:
 		swatch.modulate = Color(1.2, 1.2, 1.2)
 	else:
@@ -330,28 +330,28 @@ static func apply_paint_swatch_state(swatch: TextureButton, selected: bool) -> v
 	swatch.add_theme_stylebox_override("focus", frame)
 
 
-static func update_paint_color_swatches(owner) -> void:
+func update_paint_color_swatches(owner) -> void:
 	for index in range(owner.paint_color_buttons.size()):
 		var swatch: TextureButton = owner.paint_color_buttons[index] as TextureButton
 		apply_paint_swatch_state(swatch, index == owner.selected_paint_color_index)
-		swatch.button_pressed = index == owner.selected_paint_color_index
+		swatch.set_pressed_no_signal(index == owner.selected_paint_color_index)
 
 
-static func find_brush_shape_option_index(owner, shape_id: String) -> int:
+func find_brush_shape_option_index(owner, shape_id: String) -> int:
 	for idx in range(owner.BRUSH_SHAPE_OPTIONS.size()):
 		if owner.BRUSH_SHAPE_OPTIONS[idx].get("id", "") == shape_id:
 			return idx
 	return 0
 
 
-static func set_selected_brush_shape(owner, shape_id: String, refresh_preview := true) -> void:
+func set_selected_brush_shape(owner, shape_id: String, refresh_preview := true) -> void:
 	owner.selected_brush_shape = shape_id
 	if owner.brush_shape_selector != null:
 		owner.brush_shape_selector.selected = find_brush_shape_option_index(owner, shape_id)
 	if owner.brush_shape_preview != null:
-		owner.brush_shape_preview.texture = (
-			vehicle_select_utils.create_brush_shape_preview_texture(shape_id, 64)
-		)
+		owner.brush_shape_preview.texture = (VehicleSelectUtils.create_brush_shape_preview_texture(
+			shape_id, 64
+		))
 	_apply_camera_brush_bleed(owner)
 	sync_gpu_paint_state(owner)
 	var bleed_info := {
@@ -363,26 +363,23 @@ static func set_selected_brush_shape(owner, shape_id: String, refresh_preview :=
 		bleed_info["min_bleed"] = owner.camera_brush.min_bleed
 		bleed_info["max_bleed"] = owner.camera_brush.max_bleed
 
-	(
-		VehicleSelectPaintHelpers
-		. log_paint(
-			owner,
-			owner.PAINT_LOG_LEVEL_INFO,
-			"Brush shape changed",
-			bleed_info,
-		)
+	log_paint(
+		owner,
+		owner.PAINT_LOG_LEVEL_INFO,
+		"Brush shape changed",
+		bleed_info,
 	)
 	if refresh_preview:
 		owner._refresh_vehicle_preview()
 
 
-static func on_brush_shape_selected(owner, index: int) -> void:
+func on_brush_shape_selected(owner, index: int) -> void:
 	if index < 0 or index >= owner.BRUSH_SHAPE_OPTIONS.size():
 		return
 	set_selected_brush_shape(owner, owner.BRUSH_SHAPE_OPTIONS[index].get("id", "circle"))
 
 
-static func set_selected_paint_color(owner, color: Color, refresh_preview := true) -> void:
+func set_selected_paint_color(owner, color: Color, refresh_preview := true) -> void:
 	owner.selected_vehicle_color = color
 	owner.selected_paint_color_index = find_closest_paint_color_index(owner, color)
 	update_paint_color_swatches(owner)
@@ -392,7 +389,7 @@ static func set_selected_paint_color(owner, color: Color, refresh_preview := tru
 		owner._refresh_vehicle_preview()
 
 
-static func find_closest_paint_color_index(owner, color: Color) -> int:
+func find_closest_paint_color_index(owner, color: Color) -> int:
 	var closest_index := 0
 	var closest_distance := INF
 	for index in range(owner.PAINT_COLOR_OPTIONS.size()):
@@ -408,20 +405,20 @@ static func find_closest_paint_color_index(owner, color: Color) -> int:
 	return closest_index
 
 
-static func _apply_camera_brush_bleed(owner) -> void:
+func _apply_camera_brush_bleed(owner) -> void:
 	if owner.camera_brush == null:
 		return
 	# Map user brush size to a bleed radius large enough for shape fidelity.
 	var normalized: float = clamp(owner.paint_brush_size, 0.01, 1.0)
 	var target_pixels := int(clampf(normalized * 45.0, 4.0, 48.0))
-	var bleed_pixels: float = max(1, target_pixels / 2)
-	owner.camera_brush.min_bleed = clampi(bleed_pixels, 1, 24)
+	var bleed_pixels: float = maxf(1.0, float(target_pixels) / 2.0)
+	owner.camera_brush.min_bleed = clampi(int(bleed_pixels), 1, 24)
 	owner.camera_brush.max_bleed = clampi(
 		owner.camera_brush.min_bleed + 2, owner.camera_brush.min_bleed, 32
 	)
 
 
-static func set_brush_preset_by_size(owner, brush_size: float, refresh_preview := true) -> void:
+func set_brush_preset_by_size(owner, brush_size: float, refresh_preview := true) -> void:
 	owner.paint_brush_size = brush_size
 	_apply_camera_brush_bleed(owner)
 	var closest_index := 0
@@ -438,7 +435,7 @@ static func set_brush_preset_by_size(owner, brush_size: float, refresh_preview :
 		owner._refresh_vehicle_preview()
 
 
-static func on_brush_size_selected(owner, index: int) -> void:
+func on_brush_size_selected(owner, index: int) -> void:
 	if index < 0 or index >= owner.BRUSH_PRESETS.size():
 		return
 	var preset: Dictionary = owner.BRUSH_PRESETS[index]
@@ -446,14 +443,14 @@ static func on_brush_size_selected(owner, index: int) -> void:
 	set_brush_preset_by_size(owner, preset_size)
 
 
-static func on_paint_color_selected(owner, index: int) -> void:
+func on_paint_color_selected(owner, index: int) -> void:
 	if index < 0 or index >= owner.PAINT_COLOR_OPTIONS.size():
 		return
 	var selected_color: Color = owner.PAINT_COLOR_OPTIONS[index]
 	set_selected_paint_color(owner, selected_color)
 
 
-static func on_brush_preset_selected(owner, index: int) -> void:
+func on_brush_preset_selected(owner, index: int) -> void:
 	if index < 0 or index >= owner.BRUSH_PRESETS.size():
 		return
 	var preset: Dictionary = owner.BRUSH_PRESETS[index]
@@ -461,7 +458,7 @@ static func on_brush_preset_selected(owner, index: int) -> void:
 	set_brush_preset_by_size(owner, preset_size)
 
 
-static func sync_gpu_paint_state(owner) -> void:
+func sync_gpu_paint_state(owner) -> void:
 	if owner.camera_brush == null:
 		return
 	owner.camera_brush.color = owner.selected_vehicle_color
@@ -469,7 +466,7 @@ static func sync_gpu_paint_state(owner) -> void:
 	owner.camera_brush.brush_shape = _get_brush_shape_texture(owner.selected_brush_shape)
 
 
-static func apply_vehicle_rotation(owner, rotation_degrees: Vector3) -> void:
+func apply_vehicle_rotation(owner, rotation_degrees: Vector3) -> void:
 	owner.selected_vehicle_rotation = rotation_degrees
 	if is_instance_valid(owner.vehicle_preview_instance):
 		owner.vehicle_preview_instance.rotation_degrees = rotation_degrees
@@ -485,13 +482,13 @@ static func apply_vehicle_rotation(owner, rotation_degrees: Vector3) -> void:
 	)
 
 
-static func rotate_vehicle_y(owner, delta_degrees: float) -> void:
+func rotate_vehicle_y(owner, delta_degrees: float) -> void:
 	var rotation_degrees: Vector3 = owner.selected_vehicle_rotation
 	rotation_degrees.y += delta_degrees
 	apply_vehicle_rotation(owner, rotation_degrees)
 
 
-static func set_vehicle_rotation_preset(owner, preset_name: String) -> void:
+func set_vehicle_rotation_preset(owner, preset_name: String) -> void:
 	var rotation_degrees := Vector3.ZERO
 	match preset_name:
 		"top":
@@ -507,7 +504,7 @@ static func set_vehicle_rotation_preset(owner, preset_name: String) -> void:
 	apply_vehicle_rotation(owner, rotation_degrees)
 
 
-static func _get_brush_shape_texture(shape_id: String) -> Image:
+func _get_brush_shape_texture(shape_id: String) -> Image:
 	if _brush_shape_texture_cache.has(shape_id):
 		return _brush_shape_texture_cache[shape_id]
 
@@ -528,7 +525,7 @@ static func _get_brush_shape_texture(shape_id: String) -> Image:
 	return brush_shape_texture
 
 
-static func spawn_debug_paint_marker(owner, global_position: Vector3, color: Color) -> void:
+func spawn_debug_paint_marker(owner, global_position: Vector3, color: Color) -> void:
 	var sphere = MeshInstance3D.new()
 	sphere.mesh = SphereMesh.new()
 	var mat = StandardMaterial3D.new()

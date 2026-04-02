@@ -1,5 +1,10 @@
+# gdlint: disable=max-line-length
 class_name TestPlayerVehicleCustomization
 extends GdUnitTestSuite
+
+const GPUCameraBrush = preload(
+	"res://addons/gpu-texture-painter/gpu-texture-painter-f4faff9106b51a2e95ef6d74abec774ce86cd453/addons/gpu_texture_painter/brush/camera_brush.gd"
+)
 
 var vehicle_select_utils := VehicleSelectUtils.new()
 
@@ -24,14 +29,19 @@ class PaintHelperOwnerStub:
 		{"label": "Star", "id": "star"},
 		{"label": "Smoke", "id": "smoke"},
 	]
+	const PAINT_COLOR_OPTIONS := VehicleSelect.PAINT_COLOR_OPTIONS
 
 	var paint_log_level := PAINT_LOG_LEVEL_VERBOSE
 	var selected_vehicle_id := "sedan"
 	var selected_vehicle_color := Color(0.15, 0.45, 0.9, 1.0)
 	var paint_brush_size := 0.35
 	var selected_brush_shape := "circle"
+	var selected_paint_color_index := 0
 	var brush_size_buttons: Array = []
-	var camera_brush: CameraBrush = CameraBrush.new()
+	var paint_color_buttons: Array = []
+	var paint_color_palette: GridContainer = GridContainer.new()
+	var brush_controls_parent: VBoxContainer = VBoxContainer.new()
+	var camera_brush: CameraBrush = GPUCameraBrush.new()
 	var brush_shape_selector: OptionButton = OptionButton.new()
 	var brush_shape_preview: TextureRect = TextureRect.new()
 	var vehicle_name_label: Label = Label.new()
@@ -43,10 +53,30 @@ class PaintHelperOwnerStub:
 	var last_paint_hit: Dictionary = {}
 	var selected_vehicle_rotation := Vector3.ZERO
 	var selected_vehicle_decals: Array = []
+	var paint_color_selection_calls := 0
+	var brush_size_selection_calls := 0
 
 	func _init() -> void:
 		for option in BRUSH_SHAPE_OPTIONS:
 			brush_shape_selector.add_item(str(option.get("label", "")))
+
+	func _on_paint_color_selected(index: int) -> void:
+		paint_color_selection_calls += 1
+		selected_paint_color_index = index
+
+	func _on_brush_size_selected(_index: int) -> void:
+		brush_size_selection_calls += 1
+
+	func _find_closest_brush_preset_index(brush_size: float) -> int:
+		var closest_index := 0
+		var closest_distance := INF
+		for index in range(BRUSH_PRESETS.size()):
+			var preset_size := float(BRUSH_PRESETS[index].get("size", brush_size))
+			var distance := absf(preset_size - brush_size)
+			if distance < closest_distance:
+				closest_distance = distance
+				closest_index = index
+		return closest_index
 
 
 func test_player_vehicle_library_default_scene_exists() -> void:
@@ -59,7 +89,7 @@ func test_reading_settings_store_persists_vehicle_customization() -> void:
 	var store = ReadingSettingsStore.new()
 	assert_that(store).is_not_null()
 	var original_settings := store.load_settings()
-	var updated_settings := store.default_settings()
+	var updated_settings := ReadingSettingsStore.default_settings()
 	updated_settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID] = "mail_truck"
 	updated_settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH] = (
 		PlayerVehicleLibrary.get_vehicle_scene_path("mail_truck")
@@ -211,10 +241,10 @@ func test_build_vehicle_settings_persists_empty_decals() -> void:
 
 
 func test_vehicle_select_brush_shapes_have_soft_edges() -> void:
-	var circle_shape := vehicle_select_utils.create_circular_brush_shape(64)
-	var square_shape := vehicle_select_utils.create_square_brush_shape(64)
-	var star_shape := vehicle_select_utils.create_star_brush_shape(64)
-	var smoke_shape := vehicle_select_utils.create_smoke_brush_shape(64)
+	var circle_shape := VehicleSelectUtils.create_circular_brush_shape(64)
+	var square_shape := VehicleSelectUtils.create_square_brush_shape(64)
+	var star_shape := VehicleSelectUtils.create_star_brush_shape(64)
+	var smoke_shape := VehicleSelectUtils.create_smoke_brush_shape(64)
 
 	assert_that(circle_shape.get_pixel(0, 0).a).is_equal(0.0)
 	assert_that(circle_shape.get_pixel(32, 32).a).is_equal(1.0)
@@ -227,31 +257,54 @@ func test_vehicle_select_brush_shapes_have_soft_edges() -> void:
 
 
 func test_vehicle_select_paint_helpers_syncs_brush_shape_preview_and_bleed() -> void:
-	var owner := PaintHelperOwnerStub.new()
-	VehicleSelectPaintHelpers.set_selected_brush_shape(owner, "circle", false)
+	var paint_owner := PaintHelperOwnerStub.new()
+	var paint_helpers := VehicleSelectPaintHelpers.new()
+	paint_helpers.set_selected_brush_shape(paint_owner, "circle", false)
 
-	assert_that(owner.selected_brush_shape).is_equal("circle")
-	assert_that(owner.camera_brush).is_not_null()
-	assert_that(owner.camera_brush.min_bleed).is_greater(0)
-	assert_that(owner.camera_brush.max_bleed).is_greater_equal(owner.camera_brush.min_bleed)
-	assert_that(owner.brush_shape_preview.texture).is_not_null()
+	assert_that(paint_owner.selected_brush_shape).is_equal("circle")
+	assert_that(paint_owner.camera_brush).is_not_null()
+	assert_that(paint_owner.camera_brush.min_bleed).is_greater(0)
+	assert_that(paint_owner.camera_brush.max_bleed).is_greater_equal(
+		paint_owner.camera_brush.min_bleed
+	)
+	assert_that(paint_owner.camera_brush.color).is_equal(paint_owner.selected_vehicle_color)
+	assert_that(paint_owner.brush_shape_preview.texture).is_not_null()
 
-	var preview_image := (owner.brush_shape_preview.texture as ImageTexture).get_image()
+	var preview_image := (paint_owner.brush_shape_preview.texture as ImageTexture).get_image()
 	assert_that(preview_image.get_pixel(0, 0).a).is_equal(0.0)
 	assert_that(preview_image.get_pixel(32, 32).a).is_equal(1.0)
-	assert_that(owner.brush_shape_selector.selected).is_equal(0)
+	assert_that(paint_owner.brush_shape_selector.selected).is_equal(0)
 
 
 func test_vehicle_select_paint_helpers_increases_bleed_with_brush_size() -> void:
-	var owner := PaintHelperOwnerStub.new()
+	var paint_owner := PaintHelperOwnerStub.new()
+	var paint_helpers := VehicleSelectPaintHelpers.new()
 
-	VehicleSelectPaintHelpers.set_brush_preset_by_size(owner, 0.12, false)
-	var small_bleed := owner.camera_brush.min_bleed
+	paint_helpers.set_brush_preset_by_size(paint_owner, 0.12, false)
+	var small_bleed := paint_owner.camera_brush.min_bleed
 
-	VehicleSelectPaintHelpers.set_brush_preset_by_size(owner, 0.72, false)
-	var large_bleed := owner.camera_brush.min_bleed
+	paint_helpers.set_brush_preset_by_size(paint_owner, 0.72, false)
+	var large_bleed := paint_owner.camera_brush.min_bleed
 
 	assert_that(large_bleed).is_greater(small_bleed)
+
+
+func test_vehicle_select_paint_helpers_sync_does_not_retrigger_selection_handlers() -> void:
+	var paint_owner := PaintHelperOwnerStub.new()
+	var paint_helpers := VehicleSelectPaintHelpers.new()
+	paint_helpers.build_paint_color_palette(paint_owner)
+	paint_helpers.build_brush_size_selector(paint_owner, paint_owner.brush_controls_parent)
+
+	assert_that(paint_owner.paint_color_selection_calls).is_equal(0)
+	assert_that(paint_owner.brush_size_selection_calls).is_equal(0)
+
+	paint_helpers.set_selected_paint_color(paint_owner, VehicleSelect.PAINT_COLOR_OPTIONS[7], false)
+	paint_helpers.set_brush_preset_by_size(paint_owner, 0.72, false)
+
+	assert_that(paint_owner.paint_color_selection_calls).is_equal(0)
+	assert_that(paint_owner.brush_size_selection_calls).is_equal(0)
+	assert_that(paint_owner.selected_paint_color_index).is_equal(7)
+	assert_that(paint_owner.selected_vehicle_color).is_equal(VehicleSelect.PAINT_COLOR_OPTIONS[7])
 
 
 func test_vehicle_select_overlay_shader_uses_alpha_blending() -> void:
@@ -269,10 +322,8 @@ func test_vehicle_select_overlay_shader_uses_alpha_blending() -> void:
 
 
 func test_player_vehicle_library_sets_overlay_lightmap_hints() -> void:
-	var player_library = PlayerVehicleLibrary.new()
-	var settings_store = ReadingSettingsStore.new()
-	var vehicle := player_library.instantiate_vehicle_from_settings(
-		settings_store.default_settings(), PlayerVehicleLibrary.PREVIEW_MAX_DIMENSION
+	var vehicle := PlayerVehicleLibrary.instantiate_vehicle_from_settings(
+		ReadingSettingsStore.default_settings(), PlayerVehicleLibrary.PREVIEW_MAX_DIMENSION
 	)
 	assert_that(vehicle).is_not_null()
 

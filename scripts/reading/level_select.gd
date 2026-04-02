@@ -4,6 +4,8 @@ extends Control
 const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
 const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
 const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
+const TrackGeneratorScript = preload("res://scripts/reading/track_generator/TrackGenerator.gd")
+const MapDisplayManagerScript = preload("res://scripts/reading/systems/MapDisplayManager.gd")
 const POLYGON_ICON_PREFABS_BASE := "res://Assets/PolygonIcons/Prefabs/"
 const ICON_PREFAB_PLAY := POLYGON_ICON_PREFABS_BASE + "SM_Icon_Play_01.prefab"
 const ICON_PREFAB_SETTINGS := POLYGON_ICON_PREFABS_BASE + "SM_Icon_Settings_01.prefab"
@@ -13,6 +15,18 @@ const ICON_SVG_SMOOTH_STEERING := "res://sprites/Tilt.svg"
 
 var settings_store := ReadingSettingsStoreScript.new()
 var content_loader := ReadingContentLoaderScript.new()
+var map_preview_viewport: SubViewport = null
+var map_preview_root: Node3D = null
+var map_preview_camera: Camera3D = null
+var map_preview_manager: MapDisplayManager = null
+var map_preview_generator: TrackGenerator = null
+var map_preview_map_center: Vector3 = Vector3.ZERO
+var map_preview_container: SubViewportContainer = null
+var map_preview_texture_rect: TextureRect = null
+var map_preview_base_position: Vector3 = Vector3.ZERO
+var map_preview_drift_time: float = 0.0
+var map_preview_drift_speed: float = 0.45
+var map_preview_drift_radius: float = 2.0
 var selected_group: String = ""
 var level_buttons: Array[Button] = []
 var selected_level_button: Button = null
@@ -61,19 +75,13 @@ func _ready() -> void:
 	_populate_options()
 	_load_settings()
 	_build_steering_type_buttons()
+	_build_map_preview()
 	if config_button:
 		config_button.pressed.connect(_on_config_button_pressed)
-		config_button.text = "Settings"
+		# Keep the existing gear icon settings path but hide explicit text label.
+		config_button.text = ""
 		config_button.tooltip_text = "Settings"
-	# Add a dedicated vehicle selection screen entry point from level select
-	var vehicle_button := Button.new()
-	vehicle_button.name = "VehicleSelectButton"
-	vehicle_button.text = "Vehicle"
-	vehicle_button.tooltip_text = "Vehicle"
-	vehicle_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vehicle_button.pressed.connect(_on_vehicle_button_pressed)
-	main_vbox.add_child(vehicle_button)
-	main_vbox.move_child(vehicle_button, 4)
+		config_button.visible = true
 	if save_button:
 		save_button.pressed.connect(_on_save_pressed)
 	if cancel_button:
@@ -82,13 +90,33 @@ func _ready() -> void:
 		config_page.visible = false
 	if config_page_content:
 		config_page_content.visible = false
+
+	# Main title branding
+	var title_label = $Panel/VBoxContainer/Title as Label
+	if title_label:
+		title_label.text = "Read & Roll"
+		var title_font = load("res://Assets/Fonts/squealer.embossed-regular.otf")
+		if title_font is Font:
+			title_label.add_theme_font_override("font", title_font)
+			title_label.add_theme_font_size_override("font_size", 48)
+
 	set_process(true)
 
 
 func _process(delta: float) -> void:
-	if vehicle_preview_pivot == null:
-		return
-	vehicle_preview_pivot.rotate_y(delta * 0.45)
+	if vehicle_preview_pivot != null:
+		vehicle_preview_pivot.rotate_y(delta * 0.45)
+
+	if map_preview_camera != null:
+		map_preview_drift_time += delta * map_preview_drift_speed
+		var drift_x := sin(map_preview_drift_time) * map_preview_drift_radius
+		var drift_z := cos(map_preview_drift_time * 0.8) * map_preview_drift_radius
+		map_preview_camera.position = Vector3(
+			map_preview_base_position.x + drift_x,
+			map_preview_base_position.y,
+			map_preview_base_position.z + drift_z,
+		)
+		map_preview_camera.look_at(Vector3(0, 0, 0), Vector3.UP)
 
 
 func _build_vehicle_customizer() -> void:
@@ -196,6 +224,143 @@ func _build_vehicle_customizer() -> void:
 	controls_panel.add_child(help_text)
 
 
+func _build_map_preview() -> void:
+	# Fullscreen background 3D map preview (under UI controls)
+	map_preview_container = SubViewportContainer.new()
+	map_preview_container.name = "MapPreviewBackground"
+	map_preview_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	map_preview_container.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	map_preview_container.set_v_size_flags(Control.SIZE_EXPAND_FILL)
+	map_preview_container.stretch = true
+	map_preview_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(map_preview_container)
+	move_child(map_preview_container, 0)
+
+	map_preview_viewport = SubViewport.new()
+	map_preview_viewport.size = Vector2i(960, 720)
+	map_preview_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	map_preview_viewport.msaa_3d = Viewport.MSAA_4X
+	map_preview_container.add_child(map_preview_viewport)
+
+	map_preview_root = Node3D.new()
+	map_preview_viewport.add_child(map_preview_root)
+
+	var environment := WorldEnvironment.new()
+	environment.environment = Environment.new()
+	environment.environment.background_mode = Environment.BG_COLOR
+	environment.environment.background_color = Color(0.05, 0.08, 0.12)
+	map_preview_root.add_child(environment)
+
+	var key_light := DirectionalLight3D.new()
+	key_light.rotation_degrees = Vector3(-60.0, 30.0, 0.0)
+	key_light.light_energy = 1.2
+	map_preview_root.add_child(key_light)
+
+	var fill_light := OmniLight3D.new()
+	fill_light.position = Vector3(-8.0, 6.0, 8.0)
+	fill_light.light_energy = 0.5
+	map_preview_root.add_child(fill_light)
+
+	map_preview_camera = Camera3D.new()
+	map_preview_camera.current = true
+	map_preview_camera.fov = 48.0
+	map_preview_root.add_child(map_preview_camera)
+
+	# Default top-down view; will correct once layout is built
+	map_preview_camera.position = Vector3(0.0, 20.0, 0.0)
+	map_preview_camera.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+
+	# Build the actual map geometry if available
+	_update_map_preview()
+
+
+func _update_map_preview() -> void:
+	if map_preview_manager == null:
+		map_preview_manager = MapDisplayManagerScript.new()
+		map_preview_manager.set_nodes(map_preview_root, map_preview_root)
+		# Show full generated preview regardless of dynamic follow.
+		map_preview_manager.stream_tiles_each_side = 64
+		map_preview_manager.stream_tiles_ahead = 64
+		map_preview_manager.stream_tiles_behind = 64
+
+	if map_preview_generator == null:
+		map_preview_generator = TrackGeneratorScript.new()
+
+	# Choose a sample word group for proto layout
+	var group_name := ""
+	var groups := content_loader.list_word_groups()
+	if groups.size() > 0:
+		group_name = str(groups[0])
+
+	var word_entries := []
+	if not group_name.is_empty():
+		word_entries = content_loader.load_word_entries(group_name)
+		if word_entries.size() > 8:
+			word_entries = word_entries.slice(0, 8)
+
+	if word_entries.size() == 0:
+		word_entries = [{"letters": ["a", "b", "c"]}]
+
+	# Use selected map style if available
+	var style := ReadingSettingsStore.MAP_STYLE_CIRCULAR
+	var map_index_is_valid := false
+	if map_option:
+		var selected := map_option.selected
+		map_index_is_valid = (selected >= 0 and selected < ReadingSettingsStore.MAP_STYLES.size())
+		if map_index_is_valid:
+			style = ReadingSettingsStore.MAP_STYLES[selected]
+
+	var layout_config := {
+		"path_style": style, "cell_world_length": 8.0, "checkpoint_count": 4, "start_slots": 8
+	}
+
+	var layout = map_preview_generator.generate_loop_layout(word_entries, layout_config)
+	if layout == null or layout.size == Vector3i.ZERO:
+		return
+
+	# Measure tile size and center layout
+	var road_sample := load(MapDisplayManagerScript.ROAD_MODEL_PATH) as PackedScene
+	if road_sample != null:
+		var road_instance = road_sample.instantiate() as Node3D
+		if road_instance != null:
+			map_preview_manager.measure_track_tile(road_instance)
+			road_instance.queue_free()
+
+	var tile_length: float = max(map_preview_manager.track_tile_length, 8.0)
+	var tile_width: float = max(map_preview_manager.track_tile_width, 8.0)
+	var grid_size: Vector3i = layout.size as Vector3i
+	var origin_x: float = -float(grid_size.x) * tile_length * 0.5
+	var origin_z: float = -float(grid_size.z) * tile_width * 0.5
+	var origin: Vector3 = Vector3(origin_x, 0.0, origin_z)
+
+	var layout_data = layout
+	var layout_origin_value = origin
+	var layout_tile_length_value = tile_length
+	var layout_tile_width_value = tile_width
+	map_preview_manager.set_layout_data(
+		layout_data, layout_origin_value, layout_tile_length_value, layout_tile_width_value
+	)
+	map_preview_manager.update_visible_cells(Vector3.ZERO, 0.0)
+
+	# position a top-down camera at a height that shows most of the track
+	var grid_len_x: float = float(grid_size.x * grid_size.x)
+	var grid_len_z: float = float(grid_size.z * grid_size.z)
+	var diagonal: float = sqrt(grid_len_x + grid_len_z)
+	var view_distance: float = clampf(diagonal * 0.55, 16.0, 100.0)
+	var cam_height: float = max(10.0, view_distance * 0.45)
+	var cam_dist: float = max(8.0, view_distance * 0.8)
+	map_preview_base_position = Vector3(0.0, cam_height, -cam_dist)
+	map_preview_camera.position = map_preview_base_position
+	map_preview_camera.look_at(Vector3(0, 0, 0), Vector3.UP)
+
+	# Bake an overall center point for later use
+	map_preview_map_center = Vector3(0, 0, 0)
+
+
+func _on_map_option_selected(_index: int) -> void:
+	_update_map_preview()
+
+
 func _populate_vehicle_options() -> void:
 	vehicle_catalog = PlayerVehicleLibraryScript.list_vehicles()
 	vehicle_option.clear()
@@ -260,8 +425,9 @@ func _populate_level_grid() -> void:
 		carousel_row.add_child(button)
 		level_buttons.append(button)
 
-	if not groups.is_empty():
-		_on_level_selected(groups[0])
+	# Start with no pre-selected level. Pressing a level button now immediately starts that mode.
+	selected_group = ""
+	selected_level_button = null
 
 
 func _populate_options() -> void:
@@ -275,6 +441,7 @@ func _populate_options() -> void:
 		map_option.clear()
 		for map_style in ReadingSettingsStore.MAP_STYLES:
 			map_option.add_item(map_style.capitalize())
+		map_option.item_selected.connect(_on_map_option_selected)
 
 	if holiday_mode_option:
 		holiday_mode_option.clear()
@@ -387,6 +554,28 @@ func _build_steering_type_buttons() -> void:
 	smooth_steering_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	smooth_steering_button.pressed.connect(_on_smooth_steering_button_pressed)
 	steering_row.add_child(smooth_steering_button)
+
+	var settings_button := Button.new()
+	settings_button.name = "SteeringSettingsButton"
+	settings_button.text = "⚙"
+	settings_button.custom_minimum_size = Vector2(120.0, 120.0)
+	settings_button.focus_mode = Control.FOCUS_NONE
+	settings_button.tooltip_text = "Settings"
+	settings_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	settings_button.pressed.connect(_on_config_button_pressed)
+	settings_button.add_theme_font_size_override("font_size", 32)
+	steering_row.add_child(settings_button)
+
+	var vehicle_button := Button.new()
+	vehicle_button.name = "SteeringVehicleButton"
+	vehicle_button.text = "🚗"
+	vehicle_button.custom_minimum_size = Vector2(120.0, 120.0)
+	vehicle_button.focus_mode = Control.FOCUS_NONE
+	vehicle_button.tooltip_text = "Vehicle"
+	vehicle_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vehicle_button.pressed.connect(_on_vehicle_button_pressed)
+	vehicle_button.add_theme_font_size_override("font_size", 32)
+	steering_row.add_child(vehicle_button)
 
 	main_vbox.add_child(steering_row)
 	main_vbox.move_child(steering_row, 3)
@@ -583,28 +772,21 @@ func _format_level_group_name(group: String) -> String:
 	return display_name
 
 
-func _apply_level_button_style(button: Button, is_selected: bool) -> void:
+func _apply_level_button_style(button: Button, _is_selected: bool) -> void:
 	if button == null:
 		return
 
-	button.self_modulate = (
-		Color(1.0, 1.0, 1.0, 1.0) if is_selected else Color(0.88, 0.91, 0.96, 0.94)
-	)
+	# No persistent selected highlighted state by default — levels are started immediately on press.
+	button.self_modulate = Color(1.0, 1.0, 1.0, 1.0)
 	button.add_theme_font_size_override("font_size", 28)
 	var normal_style := _create_level_button_stylebox(
-		Color(0.15, 0.18, 0.23, 0.98) if not is_selected else Color(0.20, 0.28, 0.40, 0.98),
-		Color(0.34, 0.40, 0.48, 1.0) if not is_selected else Color(0.96, 0.82, 0.22, 1.0),
-		is_selected
+		Color(0.15, 0.18, 0.23, 0.98), Color(0.34, 0.40, 0.48, 1.0), false
 	)
 	var hover_style := _create_level_button_stylebox(
-		Color(0.20, 0.24, 0.30, 1.0) if not is_selected else Color(0.26, 0.34, 0.48, 1.0),
-		Color(0.48, 0.54, 0.62, 1.0) if not is_selected else Color(0.96, 0.82, 0.22, 1.0),
-		is_selected
+		Color(0.20, 0.24, 0.30, 1.0), Color(0.48, 0.54, 0.62, 1.0), false
 	)
 	var pressed_style := _create_level_button_stylebox(
-		Color(0.18, 0.20, 0.26, 1.0) if not is_selected else Color(0.24, 0.30, 0.44, 1.0),
-		Color(0.42, 0.48, 0.56, 1.0) if not is_selected else Color(0.96, 0.82, 0.22, 1.0),
-		is_selected
+		Color(0.18, 0.20, 0.26, 1.0), Color(0.42, 0.48, 0.56, 1.0), false
 	)
 	button.add_theme_stylebox_override("normal", normal_style)
 	button.add_theme_stylebox_override("hover", hover_style)
@@ -661,6 +843,10 @@ func _apply_menu_icon(button: Button, icon_texture: Texture2D) -> void:
 	button.custom_minimum_size = Vector2(120.0, 120.0)
 	button.expand_icon = true
 	button.focus_mode = Control.FOCUS_NONE
+	button.icon_alignment = 1  # center horizontally
+	button.vertical_icon_alignment = 1  # center vertically
+
+	button.text = ""
 
 
 func _load_svg_icon_texture(svg_path: String) -> Texture2D:

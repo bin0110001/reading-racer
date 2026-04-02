@@ -47,7 +47,7 @@ alignment = 0
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 48
-text = "Reading Racer"
+text = "Read & Roll"
 
 [node name="LevelCarouselScroll" type="ScrollContainer" parent="Panel/VBoxContainer" unique_id=1345000909]
 layout_mode = 2

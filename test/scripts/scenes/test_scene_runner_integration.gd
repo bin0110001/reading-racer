@@ -174,7 +174,6 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	var lane_switch_button := level_scene.get("lane_switch_button") as Button
 	var smooth_steering_button := level_scene.get("smooth_steering_button") as Button
 	var config_button := level_scene.get("config_button") as Button
-	var vehicle_button := _find_node_recursive(level_scene, "VehicleSelectButton") as Button
 	var level_buttons: Array = level_scene.get("level_buttons") as Array
 	assert_that(level_buttons.size()).is_greater(0)
 	var first_level_button := level_buttons[0] as Button
@@ -182,7 +181,6 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	assert_that(lane_switch_button).is_not_null()
 	assert_that(smooth_steering_button).is_not_null()
 	assert_that(config_button).is_not_null()
-	assert_that(vehicle_button).is_not_null()
 	assert_that(first_level_button).is_not_null()
 	assert_that(first_level_button.custom_minimum_size.x).is_greater_equal(300.0)
 	assert_that(first_level_button.custom_minimum_size.y).is_greater_equal(220.0)

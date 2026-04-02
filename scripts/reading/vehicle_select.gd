@@ -151,10 +151,24 @@ func _build_vehicle_ui() -> void:
 	customizer_row.add_theme_constant_override("separation", 24)
 	main_vbox.add_child(customizer_row)
 
+	var preview_nav := HBoxContainer.new()
+	preview_nav.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preview_nav.alignment = BoxContainer.ALIGNMENT_CENTER
+	preview_nav.add_theme_constant_override("separation", 14)
+	customizer_row.add_child(preview_nav)
+
+	vehicle_select_prev_button.name = "VehiclePrevButton"
+	vehicle_select_prev_button.text = "◀"
+	vehicle_select_prev_button.custom_minimum_size = Vector2(70, 140)
+	vehicle_select_prev_button.add_theme_font_size_override("font_size", 32)
+	vehicle_select_prev_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vehicle_select_prev_button.pressed.connect(_on_prev_vehicle)
+	preview_nav.add_child(vehicle_select_prev_button)
+
 	var preview_panel := PanelContainer.new()
 	preview_panel.custom_minimum_size = Vector2(560, 380)
 	preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	customizer_row.add_child(preview_panel)
+	preview_nav.add_child(preview_panel)
 
 	vehicle_preview_container.name = "VehiclePreviewContainer"
 	vehicle_preview_container.stretch = true
@@ -162,6 +176,14 @@ func _build_vehicle_ui() -> void:
 	vehicle_preview_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	vehicle_preview_container.gui_input.connect(_on_vehicle_preview_gui_input)
 	preview_panel.add_child(vehicle_preview_container)
+
+	vehicle_select_next_button.name = "VehicleNextButton"
+	vehicle_select_next_button.text = "▶"
+	vehicle_select_next_button.custom_minimum_size = Vector2(70, 140)
+	vehicle_select_next_button.add_theme_font_size_override("font_size", 32)
+	vehicle_select_next_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vehicle_select_next_button.pressed.connect(_on_next_vehicle)
+	preview_nav.add_child(vehicle_select_next_button)
 
 	vehicle_preview_viewport.name = "VehiclePreviewViewport"
 	vehicle_preview_viewport.size = Vector2i(1280, 960)
@@ -262,30 +284,16 @@ func _build_vehicle_ui() -> void:
 	controls_panel.add_theme_constant_override("separation", 12)
 	customizer_row.add_child(controls_panel)
 
-	var vehicle_label := Label.new()
-	vehicle_label.text = "Car"
-	controls_panel.add_child(vehicle_label)
-
 	vehicle_select_container.name = "VehicleOption"
 	vehicle_select_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vehicle_select_container.alignment = BoxContainer.ALIGNMENT_CENTER
-
-	vehicle_select_prev_button.name = "VehiclePrevButton"
-	vehicle_select_prev_button.text = "◀"
-	vehicle_select_prev_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vehicle_select_prev_button.pressed.connect(_on_prev_vehicle)
-	vehicle_select_container.add_child(vehicle_select_prev_button)
+	vehicle_select_container.visible = false
 
 	vehicle_option_label.name = "VehicleNameLabel"
 	vehicle_option_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vehicle_option_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vehicle_option_label.visible = false
 	vehicle_select_container.add_child(vehicle_option_label)
-
-	vehicle_select_next_button.name = "VehicleNextButton"
-	vehicle_select_next_button.text = "▶"
-	vehicle_select_next_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vehicle_select_next_button.pressed.connect(_on_next_vehicle)
-	vehicle_select_container.add_child(vehicle_select_next_button)
 
 	controls_panel.add_child(vehicle_select_container)
 
@@ -393,7 +401,8 @@ func _update_vehicle_selection_display() -> void:
 	selected_vehicle_id = str(
 		selected_vehicle.get("id", PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID)
 	)
-	vehicle_option_label.text = str(selected_vehicle.get("name", "Car"))
+	# Keep the label hidden to support a clean arrow-only vehicle selector.
+	vehicle_option_label.text = ""
 
 
 func _load_settings() -> void:
@@ -1082,18 +1091,12 @@ func _on_save_pressed() -> void:
 	var settings = settings_store.load_settings()
 	_apply_vehicle_settings(settings)
 	settings_store.save_settings(settings)
-	_show_feedback("Saved vehicle customization", 0.8)
+	if save_feedback_label != null:
+		save_feedback_label.text = "Saved vehicle customization"
 	await get_tree().create_timer(0.8).timeout
-	get_tree().change_scene_to_file("res://scenes/level_select.tscn")
-
-
-func _show_feedback(message: String, duration: float = 1.0) -> void:
-	if save_feedback_label == null:
-		return
-	save_feedback_label.text = message
-	await get_tree().create_timer(duration).timeout
 	if save_feedback_label != null:
 		save_feedback_label.text = ""
+	get_tree().change_scene_to_file("res://scenes/level_select.tscn")
 
 
 func _on_back_pressed() -> void:

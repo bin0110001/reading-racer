@@ -49,13 +49,110 @@ func _load_config(config_path: String) -> void:
 		config = {}
 
 
-func _holiday_date_range(holiday_name: String) -> Dictionary:
+func _get_date_parts(date_time) -> Dictionary:
+	var parts := {"year": 1, "month": 1, "day": 1}
+	if date_time is Dictionary:
+		parts["year"] = int(date_time.get("year", parts["year"]))
+		parts["month"] = int(date_time.get("month", parts["month"]))
+		parts["day"] = int(date_time.get("day", parts["day"]))
+	elif date_time != null and typeof(date_time) == TYPE_OBJECT and date_time.has_method("year"):
+		parts["year"] = int(date_time.year)
+		parts["month"] = int(date_time.month)
+		parts["day"] = int(date_time.day)
+	return parts
+
+
+func _is_leap_year(year: int) -> bool:
+	return (year % 4 == 0 and year % 100 != 0) or year % 400 == 0
+
+
+func _days_in_month(year: int, month: int) -> int:
+	match month:
+		1, 3, 5, 7, 8, 10, 12:
+			return 31
+		4, 6, 9, 11:
+			return 30
+		2:
+			return 29 if _is_leap_year(year) else 28
+		_:
+			return 30
+
+
+func _shift_date_parts(year: int, month: int, day: int, offset_days: int) -> Dictionary:
+	var shifted_year := year
+	var shifted_month := month
+	var shifted_day := day + offset_days
+
+	while shifted_day > _days_in_month(shifted_year, shifted_month):
+		shifted_day -= _days_in_month(shifted_year, shifted_month)
+		shifted_month += 1
+		if shifted_month > 12:
+			shifted_month = 1
+			shifted_year += 1
+
+	while shifted_day <= 0:
+		shifted_month -= 1
+		if shifted_month < 1:
+			shifted_month = 12
+			shifted_year -= 1
+		shifted_day += _days_in_month(shifted_year, shifted_month)
+
+	return {"year": shifted_year, "month": shifted_month, "day": shifted_day}
+
+
+func _calculate_easter_date(year: int) -> Dictionary:
+	var a := year % 19
+	var b := int(year / 100)
+	var c := year % 100
+	var d := int(b / 4)
+	var e := b % 4
+	var f := int((b + 8) / 25)
+	var g := int((b - f + 1) / 3)
+	var h := (19 * a + b - d - g + 15) % 30
+	var i := int(c / 4)
+	var k := c % 4
+	var l := (32 + 2 * e + 2 * i - h - k) % 7
+	var m := int((a + 11 * h + 22 * l) / 451)
+	var month := int((h + l - 7 * m + 114) / 31)
+	var day := ((h + l - 7 * m + 114) % 31) + 1
+	return {"year": year, "month": month, "day": day}
+
+
+func _holiday_date_range(holiday_name: String, date_time = null) -> Dictionary:
+	if holiday_name == "easter":
+		var date_parts := _get_date_parts(date_time)
+		var easter_date := _calculate_easter_date(int(date_parts.get("year", 1)))
+		var holiday_start := _shift_date_parts(
+			int(easter_date.get("year", 1)),
+			int(easter_date.get("month", 1)),
+			int(easter_date.get("day", 1)),
+			-2
+		)
+		var holiday_end := _shift_date_parts(
+			int(easter_date.get("year", 1)),
+			int(easter_date.get("month", 1)),
+			int(easter_date.get("day", 1)),
+			1
+		)
+		return {
+			"start":
+			{
+				"month": int(holiday_start.get("month", 1)),
+				"day": int(holiday_start.get("day", 1)),
+			},
+			"end":
+			{
+				"month": int(holiday_end.get("month", 1)),
+				"day": int(holiday_end.get("day", 1)),
+			},
+		}
 	var holidays = config.get("holiday_ranges", {}) as Dictionary
 	return holidays.get(holiday_name, {}) as Dictionary
 
 
 func is_holiday_in_date_range(holiday_name: String, date_time) -> bool:
-	var range = _holiday_date_range(holiday_name)
+	var date_parts := _get_date_parts(date_time)
+	var range = _holiday_date_range(holiday_name, date_parts)
 	if range.is_empty():
 		return false
 
@@ -64,10 +161,9 @@ func is_holiday_in_date_range(holiday_name: String, date_time) -> bool:
 	if start.is_empty() or end.is_empty():
 		return false
 
-	var year = date_time.year
-	var today_md = date_time.month * 100 + date_time.day
 	var start_md = int(start.get("month", 1)) * 100 + int(start.get("day", 1))
 	var end_md = int(end.get("month", 12)) * 100 + int(end.get("day", 31))
+	var today_md = int(date_parts.get("month", 1)) * 100 + int(date_parts.get("day", 1))
 
 	# Handle range wrapping around year-end
 	if start_md <= end_md:

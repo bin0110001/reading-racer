@@ -31,8 +31,9 @@ const MAP_STYLES := [
 
 const HOLIDAY_NONE := "none"
 const HOLIDAY_CHRISTMAS := "christmas"
+const HOLIDAY_EASTER := "easter"
 const HOLIDAY_HALLOWEEN := "halloween"
-const HOLIDAY_OPTIONS := [HOLIDAY_NONE, HOLIDAY_CHRISTMAS, HOLIDAY_HALLOWEEN]
+const HOLIDAY_OPTIONS := [HOLIDAY_NONE, HOLIDAY_CHRISTMAS, HOLIDAY_HALLOWEEN, HOLIDAY_EASTER]
 
 const HOLIDAY_MODE_AUTO := "auto"
 const HOLIDAY_MODE_ON := "on"
@@ -178,6 +179,82 @@ func apply_master_volume(linear_volume: float) -> void:
 	AudioServer.set_bus_volume_db(bus_index, linear_to_db(safe_volume))
 
 
+func _get_date_parts(date = null) -> Dictionary:
+	var date_source = date
+	if date_source == null:
+		date_source = Time.get_datetime_dict_from_system()
+		if date_source.is_empty():
+			date_source = Time.get_date_dict_from_system()
+
+	var parts := {"year": 1, "month": 1, "day": 1}
+	if date_source is Dictionary:
+		parts["year"] = int(date_source.get("year", parts["year"]))
+		parts["month"] = int(date_source.get("month", parts["month"]))
+		parts["day"] = int(date_source.get("day", parts["day"]))
+	elif typeof(date_source) == TYPE_OBJECT and date_source.has_method("year"):
+		parts["year"] = int(date_source.year)
+		parts["month"] = int(date_source.month)
+		parts["day"] = int(date_source.day)
+
+	return parts
+
+
+func _is_leap_year(year: int) -> bool:
+	return (year % 4 == 0 and year % 100 != 0) or year % 400 == 0
+
+
+func _days_in_month(year: int, month: int) -> int:
+	match month:
+		1, 3, 5, 7, 8, 10, 12:
+			return 31
+		4, 6, 9, 11:
+			return 30
+		2:
+			return 29 if _is_leap_year(year) else 28
+		_:
+			return 30
+
+
+func _shift_date_parts(year: int, month: int, day: int, offset_days: int) -> Dictionary:
+	var shifted_year := year
+	var shifted_month := month
+	var shifted_day := day + offset_days
+
+	while shifted_day > _days_in_month(shifted_year, shifted_month):
+		shifted_day -= _days_in_month(shifted_year, shifted_month)
+		shifted_month += 1
+		if shifted_month > 12:
+			shifted_month = 1
+			shifted_year += 1
+
+	while shifted_day <= 0:
+		shifted_month -= 1
+		if shifted_month < 1:
+			shifted_month = 12
+			shifted_year -= 1
+		shifted_day += _days_in_month(shifted_year, shifted_month)
+
+	return {"year": shifted_year, "month": shifted_month, "day": shifted_day}
+
+
+func _calculate_easter_date(year: int) -> Dictionary:
+	var a := year % 19
+	var b := int(year / 100)
+	var c := year % 100
+	var d := int(b / 4)
+	var e := b % 4
+	var f := int((b + 8) / 25)
+	var g := int((b - f + 1) / 3)
+	var h := (19 * a + b - d - g + 15) % 30
+	var i := int(c / 4)
+	var k := c % 4
+	var l := (32 + 2 * e + 2 * i - h - k) % 7
+	var m := int((a + 11 * h + 22 * l) / 451)
+	var month := int((h + l - 7 * m + 114) / 31)
+	var day := ((h + l - 7 * m + 114) % 31) + 1
+	return {"year": year, "month": month, "day": day}
+
+
 func _date_in_range(date, start_md: int, end_md: int) -> bool:
 	var month: int = 1
 	var day: int = 1
@@ -193,20 +270,48 @@ func _date_in_range(date, start_md: int, end_md: int) -> bool:
 	return today_md >= start_md or today_md <= end_md
 
 
-func get_holiday_date_range(holiday_name: String) -> Dictionary:
+func get_holiday_date_range(holiday_name: String, date_override = null) -> Dictionary:
+	var date_parts := _get_date_parts(date_override)
 	match holiday_name:
 		HOLIDAY_CHRISTMAS:
 			return {"start": {"month": 12, "day": 1}, "end": {"month": 12, "day": 31}}
+		HOLIDAY_EASTER:
+			var easter_date := _calculate_easter_date(int(date_parts.get("year", 1)))
+			var holiday_start := _shift_date_parts(
+				int(easter_date.get("year", 1)),
+				int(easter_date.get("month", 1)),
+				int(easter_date.get("day", 1)),
+				-2
+			)
+			var holiday_end := _shift_date_parts(
+				int(easter_date.get("year", 1)),
+				int(easter_date.get("month", 1)),
+				int(easter_date.get("day", 1)),
+				1
+			)
+			return {
+				"start":
+				{
+					"month": int(holiday_start.get("month", 1)),
+					"day": int(holiday_start.get("day", 1)),
+				},
+				"end":
+				{
+					"month": int(holiday_end.get("month", 1)),
+					"day": int(holiday_end.get("day", 1)),
+				},
+			}
 		HOLIDAY_HALLOWEEN:
 			return {"start": {"month": 10, "day": 25}, "end": {"month": 10, "day": 31}}
 		_:
 			return {}
 
 
-func is_holiday_in_date_range(holiday_name: String) -> bool:
+func is_holiday_in_date_range(holiday_name: String, date_override = null) -> bool:
 	if holiday_name == HOLIDAY_NONE:
 		return false
-	var range = get_holiday_date_range(holiday_name)
+	var date_parts := _get_date_parts(date_override)
+	var range = get_holiday_date_range(holiday_name, date_parts)
 	if range.is_empty():
 		return false
 	var start = range.get("start", {}) as Dictionary
@@ -214,28 +319,43 @@ func is_holiday_in_date_range(holiday_name: String) -> bool:
 	if start.is_empty() or end.is_empty():
 		return false
 
-	var date = {"month": 1, "day": 1}
-	if OS.has_method("get_date"):
-		date = OS.call("get_date")
-	elif OS.has_method("get_datetime"):
-		date = OS.call("get_datetime")
-	# if no date API exists, remain at default Jan 1 (safe fallback)
-
 	var start_md = int(start.get("month", 1)) * 100 + int(start.get("day", 1))
 	var end_md = int(end.get("month", 12)) * 100 + int(end.get("day", 31))
-	return _date_in_range(date, start_md, end_md)
+	return _date_in_range(date_parts, start_md, end_md)
 
 
-func resolve_effective_holiday(settings: Dictionary) -> String:
+func _holiday_month(holiday_name: String, date_override = null) -> int:
+	var date_parts := _get_date_parts(date_override)
+	match holiday_name:
+		HOLIDAY_CHRISTMAS:
+			return 12
+		HOLIDAY_HALLOWEEN:
+			return 10
+		HOLIDAY_EASTER:
+			var easter_date := _calculate_easter_date(int(date_parts.get("year", 1)))
+			return int(easter_date.get("month", 1))
+		_:
+			return 0
+
+
+func _get_auto_holiday(date_override = null) -> String:
+	var date_parts := _get_date_parts(date_override)
+	var current_month := int(date_parts.get("month", 1))
+	for holiday_name in HOLIDAY_OPTIONS:
+		if holiday_name == HOLIDAY_NONE:
+			continue
+		if _holiday_month(holiday_name, date_override) == current_month:
+			return holiday_name
+	return HOLIDAY_NONE
+
+
+func resolve_effective_holiday(settings: Dictionary, date_override = null) -> String:
 	var mode = str(settings.get("holiday_mode", HOLIDAY_MODE_AUTO))
 	var selected = str(settings.get("holiday_name", HOLIDAY_NONE))
 	if mode == HOLIDAY_MODE_OFF:
 		return HOLIDAY_NONE
-	if selected == HOLIDAY_NONE:
-		return HOLIDAY_NONE
 	if mode == HOLIDAY_MODE_ON:
+		if selected == HOLIDAY_NONE:
+			return HOLIDAY_NONE
 		return selected
-	# auto
-	if is_holiday_in_date_range(selected):
-		return selected
-	return HOLIDAY_NONE
+	return _get_auto_holiday(date_override)

@@ -158,6 +158,15 @@ func test_level_select_settings_menu_opens_and_saves() -> void:
 	assert_that(panel.visible).is_true()
 
 	settings_store.save_settings(original_settings)
+	var restored_auto_settings = settings_store.load_settings()
+	(
+		assert_that(
+			ReadingSettingsStore.new().resolve_effective_holiday(
+				restored_auto_settings, christmas_date
+			)
+		)
+		. is_equal(ReadingSettingsStore.HOLIDAY_CHRISTMAS)
+	)
 
 
 func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> void:
@@ -498,7 +507,7 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 
 
 func test_level_select_holiday_settings_flow() -> void:
-	"""Test opening config, setting holiday to Christmas, and restoring settings."""
+	"""Test opening config, saving Christmas and Easter holidays, and restoring settings."""
 	var settings_store = ReadingSettingsStore.new()
 	var original_settings = settings_store.load_settings()
 
@@ -518,6 +527,8 @@ func test_level_select_holiday_settings_flow() -> void:
 		_find_node_by_name_token(level_scene, "HolidayNameOption") as OptionButton
 	)
 	var save_button: Button = _find_node_by_name_token(level_scene, "SaveButton") as Button
+	var christmas_date := {"year": 2026, "month": 12, "day": 25}
+	var easter_date := {"year": 2026, "month": 4, "day": 5}
 
 	assert_that(config_page.visible).is_false()
 	config_button.emit_signal("pressed")
@@ -532,6 +543,8 @@ func test_level_select_holiday_settings_flow() -> void:
 	)
 	assert_that(holiday_on_idx).is_greater_equal(0)
 	assert_that(christmas_idx).is_greater_equal(0)
+	var easter_idx = ReadingSettingsStore.HOLIDAY_OPTIONS.find(ReadingSettingsStore.HOLIDAY_EASTER)
+	assert_that(easter_idx).is_greater_equal(0)
 
 	holiday_mode_option.select(holiday_on_idx)
 	holiday_name_option.select(christmas_idx)
@@ -542,9 +555,27 @@ func test_level_select_holiday_settings_flow() -> void:
 	var settings = settings_store.load_settings()
 	assert_that(settings.get("holiday_mode")).is_equal(ReadingSettingsStore.HOLIDAY_MODE_ON)
 	assert_that(settings.get("holiday_name")).is_equal(ReadingSettingsStore.HOLIDAY_CHRISTMAS)
-	assert_that(ReadingSettingsStore.new().resolve_effective_holiday(settings)).is_equal(
-		ReadingSettingsStore.HOLIDAY_CHRISTMAS
+	var resolved_christmas := ReadingSettingsStore.new().resolve_effective_holiday(
+		settings, christmas_date
 	)
+	assert_that(resolved_christmas).is_equal(ReadingSettingsStore.HOLIDAY_CHRISTMAS)
+
+	# Save Easter too so the UI and settings round-trip both seasonal options.
+	config_button.emit_signal("pressed")
+	await runner.simulate_frames(1)
+	assert_that(config_page.visible).is_true()
+	holiday_mode_option.select(holiday_on_idx)
+	holiday_name_option.select(easter_idx)
+	save_button.emit_signal("pressed")
+	await runner.simulate_frames(1)
+
+	var easter_settings = settings_store.load_settings()
+	assert_that(easter_settings.get("holiday_mode")).is_equal(ReadingSettingsStore.HOLIDAY_MODE_ON)
+	assert_that(easter_settings.get("holiday_name")).is_equal(ReadingSettingsStore.HOLIDAY_EASTER)
+	var resolved_easter := ReadingSettingsStore.new().resolve_effective_holiday(
+		easter_settings, easter_date
+	)
+	assert_that(resolved_easter).is_equal(ReadingSettingsStore.HOLIDAY_EASTER)
 
 	# restore previous settings
 	config_button.emit_signal("pressed")

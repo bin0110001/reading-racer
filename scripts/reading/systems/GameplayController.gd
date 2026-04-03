@@ -72,6 +72,18 @@ func set_player(p_player: Area3D) -> void:
 	player = p_player
 
 
+func _get_obstacle_scale(obstacle_data: Dictionary) -> float:
+	return maxf(float(obstacle_data.get("scale", 1.0)), 0.1)
+
+
+func _apply_obstacle_scale(
+	obstacle_trigger: ReadingObstacleTrigger, obstacle_data: Dictionary
+) -> void:
+	var obstacle_scale := _get_obstacle_scale(obstacle_data)
+	obstacle_trigger.trigger_width *= obstacle_scale
+	obstacle_trigger.trigger_depth *= obstacle_scale
+
+
 ## Load entry and prepare gameplay
 func load_entry(entry: Dictionary, entry_index: int) -> void:
 	current_entry = entry
@@ -297,13 +309,14 @@ func spawn_course_pickups_and_obstacles(
 			var obstacle_model_path = str(obstacle_data.get("model_path", OBSTACLE_MODEL_PATH))
 			var hit_sounds = obstacle_data.get("sound_paths", ["res://audio/skid.ogg"]) as Array
 			obstacle_trigger.hit_sound_paths = hit_sounds
+			_apply_obstacle_scale(obstacle_trigger, obstacle_data)
 
 			spawn_root.add_child(obstacle_trigger)
 
 			# Add visual model
 			var obstacle_visual := _instantiate_scene(obstacle_model_path)
 			if obstacle_visual != null:
-				obstacle_visual.scale = Vector3.ONE * 0.6
+				obstacle_visual.scale = Vector3.ONE * _get_obstacle_scale(obstacle_data)
 				obstacle_trigger.add_child(obstacle_visual)
 
 			obstacle_trigger.obstacle_hit.connect(_on_obstacle_hit.bindv([obstacle_trigger]))
@@ -593,12 +606,13 @@ func _spawn_word_course_plan(
 		var obstacle_model_path = str(obstacle_data.get("model_path", OBSTACLE_MODEL_PATH))
 		var hit_sounds = obstacle_data.get("sound_paths", ["res://audio/skid.ogg"]) as Array
 		obstacle_trigger.hit_sound_paths = hit_sounds
+		_apply_obstacle_scale(obstacle_trigger, obstacle_data)
 
 		spawn_root.add_child(obstacle_trigger)
 
 		var obstacle_visual := _instantiate_scene(obstacle_model_path)
 		if obstacle_visual != null:
-			obstacle_visual.scale = Vector3.ONE * 0.6
+			obstacle_visual.scale = Vector3.ONE * _get_obstacle_scale(obstacle_data)
 			obstacle_trigger.add_child(obstacle_visual)
 
 		obstacle_trigger.obstacle_hit.connect(_on_obstacle_hit.bindv([obstacle_trigger]))

@@ -20,9 +20,101 @@
 		]
 	},
 	"seasonal_obstacles": {
+		"easter": [
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_1.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_2.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_3.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_4.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_5.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_6.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_7.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_8.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_9.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_10.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_11.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_12.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_13.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_14.prefab.scn",
+				"scale": 5.0,
+				"sound_paths": ["res://audio/skid.ogg"]
+			}
+		],
 		"christmas": [
 			{
-				"model_path": "res://models/decoration-tents.glb",
+				"model_path": "res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Gingerbread_CandyCane_01.prefab.scn",
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Gingerbread_Fence_01.prefab.scn",
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Gingerbread_House_01.prefab.scn",
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Gingerbread_Lollypop_01.prefab.scn",
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Tree_Cookie_Small_01.prefab.scn",
+				"sound_paths": ["res://audio/skid.ogg"]
+			},
+			{
+				"model_path": "res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Tree_Cookie_Large_01.prefab.scn",
 				"sound_paths": ["res://audio/skid.ogg"]
 			}
 		],

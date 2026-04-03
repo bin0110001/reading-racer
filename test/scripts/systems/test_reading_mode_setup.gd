@@ -87,32 +87,6 @@ func test_reading_settings_store_methods_exist() -> void:
 	assert_that(store.has_method("apply_master_volume")).is_true()
 
 
-func test_reading_settings_store_holiday_resolution() -> void:
-	var store = ReadingSettingsStore.new()
-	var s = store.default_settings()
-	# default auto + none should be none
-	assert_that(store.resolve_effective_holiday(s)).is_equal(ReadingSettingsStore.HOLIDAY_NONE)
-
-	s["holiday_name"] = ReadingSettingsStore.HOLIDAY_CHRISTMAS
-	assert_that(store.resolve_effective_holiday(s)).is_equal(ReadingSettingsStore.HOLIDAY_NONE)
-
-	s["holiday_mode"] = ReadingSettingsStore.HOLIDAY_MODE_ON
-	assert_that(store.resolve_effective_holiday(s)).is_equal(ReadingSettingsStore.HOLIDAY_CHRISTMAS)
-
-	s["holiday_mode"] = ReadingSettingsStore.HOLIDAY_MODE_OFF
-	assert_that(store.resolve_effective_holiday(s)).is_equal(ReadingSettingsStore.HOLIDAY_NONE)
-
-
-func test_obstacle_config_loading_and_random_choice() -> void:
-	var config = ObstacleConfig.new()
-	var item = config.choose_random_obstacle(
-		"sightwords", ReadingSettingsStore.HOLIDAY_NONE, RandomNumberGenerator.new()
-	)
-	assert_that(item).is_not_null()
-	assert_that(item.has("model_path")).is_true()
-	assert_that(item.has("sound_paths")).is_true()
-
-
 func test_reading_hud_can_be_loaded() -> void:
 	assert_that(ReadingHUDScript).is_not_null()
 

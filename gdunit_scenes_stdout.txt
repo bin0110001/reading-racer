@@ -1,0 +1,106 @@
+WorkerThreadPool: 12 threads, 3 max low-priority.
+Godot Engine v4.6.stable.mono.official.89cea1439 - https://godotengine.org
+TextServer: Added interface "Dummy"
+TextServer: Added interface "ICU / HarfBuzz / Graphite (Built-in)"
+Unrecognized output string "misc2" in mapping:
+030000000d0f00000202000000000000,Horipad O Nintendo Switch 2 Controller,a:b1,b:b0,back:b8,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b12,leftshoulder:b4,leftstick:b10,lefttrigger:b6,leftx:a0,lefty:a1,misc1:b13,misc2:b14,rightshoulder:b5,rightstick:b11,righttrigger:b7,rightx:a2,righty:a3,start:b9,x:b3,y:b2,platform:Windows,
+Unrecognized output string "misc2" in mapping:
+030000000d0f00009601000000000000,Horipad Steam,a:b0,b:b1,back:b10,dpdown:h0.4,dpleft:h0.8,dpright:h0.2,dpup:h0.1,guide:b12,leftshoulder:b6,leftstick:b13,lefttrigger:b8,leftx:a0,lefty:a1,misc2:b2,paddle1:b5,paddle2:b15,paddle3:b18,paddle4:b19,rightshoulder:b7,rightstick:b14,righttrigger:b9,rightx:a3,righty:a4,start:b11,x:b3,y:b4,platform:Windows,
+Unrecognized output string "misc2" in mapping:
+030000007e0500006920000000000000,Nintendo Switch 2 Pro Controller,a:b0,b:b1,back:b14,dpdown:b8,dpleft:b10,dpright:b9,dpup:b11,guide:b16,leftshoulder:b12,leftstick:b15,lefttrigger:b13,leftx:a0,lefty:a1~,misc1:b17,misc2:b20,paddle1:b18,paddle2:b19,rightshoulder:b4,rightstick:b7,righttrigger:b5,rightx:a2,righty:a3~,start:b6,x:b2,y:b3,platform:Windows,
+Using "default" pen tablet driver...
+
+TextServer: Primary interface set to: "ICU / HarfBuzz / Graphite (Built-in)".
+.NET: Initializing module...
+Found hostfxr: C:/Program Files/dotnet/host/fxr/10.0.4/hostfxr.dll
+.NET: hostfxr initialized
+.NET: GodotPlugins initialized
+CORE API HASH: 599720610
+EDITOR API HASH: 3907223672
+Loading resource: res://addons/gdUnit4/bin/GdUnitCmdTool.gd
+SceneTreeFTI: traversal method DEFAULT
+Loading resource: res://scripts/reading/startup_diagnostic.gd
+Loaded system CA certificates
+
+=== Reading Racer Diagnostic Report ===
+
+ERROR: Class 'TrackGenerator' not found
+ERROR: Class 'TrackSegment' not found
+ERROR: Class 'StraightSegment' not found
+ERROR: Class 'CurveSegment' not found
+ERROR: Class 'ControlProfile' not found
+ERROR: Class 'LaneChangeController' not found
+ERROR: Class 'SmoothSteeringController' not found
+ERROR: Class 'ThrottleSteeringController' not found
+ERROR: Class 'ReadingPickupTrigger' not found
+ERROR: Class 'ReadingObstacleTrigger' not found
+ERROR: Class 'ReadingFinishGateTrigger' not found
+ERROR: Class 'ReadingContentLoader' not found
+ERROR: Class 'ReadingSettingsStore' not found
+ERROR: Class 'ReadingHUD' not found
+ERROR: Class 'PhonemePlayer' not found
+
+=== Diagnostic Results ===
+
+âœ— TrackGenerator
+âœ— TrackSegment
+âœ— StraightSegment
+âœ— CurveSegment
+âœ— ControlProfile
+âœ— LaneChangeController
+âœ— SmoothSteeringController
+âœ— ThrottleSteeringController
+âœ— ReadingPickupTrigger
+âœ— ReadingObstacleTrigger
+âœ— ReadingFinishGateTrigger
+âœ— ReadingContentLoader
+âœ— ReadingSettingsStore
+âœ— ReadingHUD
+âœ— PhonemePlayer
+âœ“ res://scenes/reading_mode.tscn
+
+Passed: 1/16
+
+âœ— Some systems failed to load. See above for details.
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitBoolAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitStringAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitIntAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitFloatAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitVectorAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitArrayAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitDictionaryAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitFileAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitObjectAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitResultAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitFuncAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitSignalAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitFailureAssertImpl.gd
+Loading resource: res://addons/gdUnit4/src/asserts/GdUnitGodotErrorAssertImpl.gd
+[2J[H[38;2;233;150;122m
+--------------------------------------------------------------------------------------------------
+GdUnit4 Comandline Tool
+--------------------------------------------------------------------------------------------------[0m
+[38;2;0;191;255mSet write reports to reports\gdscript-check\run-scene-debug[0m
+[38;2;0;191;255mSet report history count to 1[0m
+[38;2;220;20;60m
+Headless mode is not supported!
+
+Please note that tests that use UI interaction do not work correctly in headless mode.
+Godot 'InputEvents' are not transported by the Godot engine in headless mode and therefore
+have no effect in the test!
+
+You can run with '--ignoreHeadlessMode' to swtich off this check.
+[0m
+[38;2;220;20;60mAbnormal exit with 103[0m
+----------------------------------------------------------------
+Cleanup singletons []
+----------------------------------------------------------------
+Finallize .. done
+Finallize ..
+-Orphan nodes report-----------------------
+Finallize .. done
+Unloading: Disposing tracked instances...
+Unloading: Finished disposing tracked instances.
+XR: Clearing primary interface
+XR: Removed interface "Native mobile"
+XR: Removed interface "OpenXR"

@@ -1,0 +1,45 @@
+Godot Engine v4.6.stable.mono.official.89cea1439 - https://godotengine.org
+
+res://Assets/Synty/PolygonEaster/Materials/PolygonEaster_01.material save=0 albedo=(res://Assets/Synty/PolygonEaster/Textures/PolygonEaster_01.png):<CompressedTexture2D#-9223372010128669253> normal=<Object#null>
+res://Assets/Synty/PolygonGingerBread/Materials/PolygonGingerbread_01_A.material save=0 albedo=(res://Assets/Synty/PolygonGingerBread/Textures/PolygonGingerbread_01_A.png):<CompressedTexture2D#-9223372009843456581> normal=(res://Assets/Synty/PolygonGingerBread/Textures/PolygonGingerbread_01_Normals.png):<CompressedTexture2D#-9223372009642129988>
+
+=== Reading Racer Diagnostic Report ===
+
+ERROR: Class 'TrackGenerator' not found
+ERROR: Class 'TrackSegment' not found
+ERROR: Class 'StraightSegment' not found
+ERROR: Class 'CurveSegment' not found
+ERROR: Class 'ControlProfile' not found
+ERROR: Class 'LaneChangeController' not found
+ERROR: Class 'SmoothSteeringController' not found
+ERROR: Class 'ThrottleSteeringController' not found
+ERROR: Class 'ReadingPickupTrigger' not found
+ERROR: Class 'ReadingObstacleTrigger' not found
+ERROR: Class 'ReadingFinishGateTrigger' not found
+ERROR: Class 'ReadingContentLoader' not found
+ERROR: Class 'ReadingSettingsStore' not found
+ERROR: Class 'ReadingHUD' not found
+ERROR: Class 'PhonemePlayer' not found
+
+=== Diagnostic Results ===
+
+Γ£ù TrackGenerator
+Γ£ù TrackSegment
+Γ£ù StraightSegment
+Γ£ù CurveSegment
+Γ£ù ControlProfile
+Γ£ù LaneChangeController
+Γ£ù SmoothSteeringController
+Γ£ù ThrottleSteeringController
+Γ£ù ReadingPickupTrigger
+Γ£ù ReadingObstacleTrigger
+Γ£ù ReadingFinishGateTrigger
+Γ£ù ReadingContentLoader
+Γ£ù ReadingSettingsStore
+Γ£ù ReadingHUD
+Γ£ù PhonemePlayer
+Γ£ô res://scenes/reading_mode.tscn
+
+Passed: 1/16
+
+Γ£ù Some systems failed to load. See above for details.

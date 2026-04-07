@@ -1,0 +1,135 @@
+Godot Engine v4.6.stable.mono.official.89cea1439 - https://godotengine.org
+
+=== res://Assets/Synty/PolygonEaster/Prefabs/SM_Easter_Egg_1.prefab.scn ===
+load_type=24 class=PackedScene
+SM_Easter_Egg_1 [Node3D]
+  MeshRenderer [MeshInstance3D]
+    mesh=SM_Easter_Egg_1 (res://Assets/Synty/PolygonEaster/Models/extracted/SM_Easter_Egg_1.SM_Easter_Egg_1.mesh):<ArrayMesh#-9223372010095114817>
+    surface=0 material=Polygon_Xmas (res://Assets/Synty/PolygonEaster/Models/extracted/SM_Easter_Egg_1.SM_Easter_Egg_1.mesh::StandardMaterial3D_fntra):<StandardMaterial3D#-9223372010111892034>
+      albedo_texture=<Object#null>
+      resource_path=res://Assets/Synty/PolygonEaster/Models/extracted/SM_Easter_Egg_1.SM_Easter_Egg_1.mesh::StandardMaterial3D_fntra
+=== res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Gingerbread_House_01.prefab.scn ===
+load_type=24 class=PackedScene
+SM_Prop_Gingerbread_House_01 [Node3D]
+  MeshRenderer [MeshInstance3D]
+    mesh=SM_Prop_Gingerbread_House_01 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01.mesh):<ArrayMesh#-9223372009507912250>
+    surface=0 material=MAT_01A1 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01.mesh::StandardMaterial3D_y1fqg):<StandardMaterial3D#-9223372009524689469>
+      albedo_texture=<Object#null>
+      resource_path=res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01.mesh::StandardMaterial3D_y1fqg
+  MeshCollider [StaticBody3D]
+    CollisionShape3D [CollisionShape3D]
+  SM_Prop_Gingerbread_House_01_Awning_01 [Node3D]
+    MeshRenderer [MeshInstance3D]
+      mesh=SM_Prop_Gingerbread_House_01_Awning_01 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Awning_01.mesh):<ArrayMesh#-9223372008887155251>
+      surface=0 material=MAT_01A1 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Awning_01.mesh::StandardMaterial3D_y1fqg):<StandardMaterial3D#-9223372008903932472>
+        albedo_texture=<Object#null>
+        resource_path=res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Awning_01.mesh::StandardMaterial3D_y1fqg
+    MeshCollider [StaticBody3D]
+      CollisionShape3D [CollisionShape3D]
+  SM_Prop_Gingerbread_House_01_Awning_Frosting_01 [Node3D]
+    MeshRenderer [MeshInstance3D]
+      mesh=SM_Prop_Gingerbread_House_01_Awning_Frosting_01 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Awning_Frosting_01.mesh):<ArrayMesh#-9223372008769714734>
+      surface=0 material=MAT_01A1 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Awning_Frosting_01.mesh::StandardMaterial3D_y1fqg):<StandardMaterial3D#-9223372008786491951>
+        albedo_texture=<Object#null>
+        resource_path=res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Awning_Frosting_01.mesh::StandardMaterial3D_y1fqg
+  SM_Prop_Gingerbread_House_01_Chimney_01 [Node3D]
+    MeshRenderer [MeshInstance3D]
+      mesh=SM_Prop_Gingerbread_House_01_Chimney_01 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Chimney_01.mesh):<ArrayMesh#-9223372008534833705>
+      surface=0 material=MAT_01A1 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Chimney_01.mesh::StandardMaterial3D_y1fqg):<StandardMaterial3D#-9223372008551610922>
+        albedo_texture=<Object#null>
+        resource_path=res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Chimney_01.mesh::StandardMaterial3D_y1fqg
+    MeshCollider [StaticBody3D]
+      CollisionShape3D [CollisionShape3D]
+  SM_Prop_Gingerbread_House_01_Door_01 [Node3D]
+    MeshRenderer [MeshInstance3D]
+      mesh=SM_Prop_Gingerbread_House_01_Door_01 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Door_01.mesh):<ArrayMesh#-9223372008417393190>
+      surface=0 material=MAT_01A1 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Door_01.mesh::StandardMaterial3D_y1fqg):<StandardMaterial3D#-9223372008434170407>
+        albedo_texture=<Object#null>
+        resource_path=res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Door_01.mesh::StandardMaterial3D_y1fqg
+  SM_Prop_Gingerbread_House_01_Frosting_01 [Node3D]
+    MeshRenderer [MeshInstance3D]
+      mesh=SM_Prop_Gingerbread_House_01_Frosting_01 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Frosting_01.mesh):<ArrayMesh#-9223372008299952675>
+      surface=0 material=MAT_01A1 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Frosting_01.mesh::StandardMaterial3D_y1fqg):<StandardMaterial3D#-9223372008316729892>
+        albedo_texture=<Object#null>
+        resource_path=res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Frosting_01.mesh::StandardMaterial3D_y1fqg
+  SM_Prop_Gingerbread_House_01_Roof_01 [Node3D]
+    MeshRenderer [MeshInstance3D]
+      mesh=SM_Prop_Gingerbread_House_01_Roof_01 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Roof_01.mesh):<ArrayMesh#-9223372008182512160>
+      surface=0 material=MAT_01A1 (res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Roof_01.mesh::StandardMaterial3D_y1fqg):<StandardMaterial3D#-9223372008199289377>
+        albedo_texture=<Object#null>
+        resource_path=res://Assets/Synty/PolygonGingerBread/Models/extracted/SM_Prop_Gingerbread_House_01.SM_Prop_Gingerbread_House_01_Roof_01.mesh::StandardMaterial3D_y1fqg
+=== res://Assets/Synty/PolygonEaster/Materials/PolygonEaster_01.material ===
+load_type=24 class=StandardMaterial3D
+=== res://Assets/Synty/PolygonGingerBread/Materials/PolygonGingerbread_01_A.material ===
+load_type=24 class=StandardMaterial3D
+=== res://models/Library/mesh-library.tres ===
+load_type=24 class=MeshLibrary
+item=0 mesh=decoration-empty_decoration-empty (res://models/Library/mesh-library.tres::ArrayMesh_1o1ic):<ArrayMesh#-9223372006236355106>
+  surface=0 material=colormap (res://models/Library/mesh-library.tres::StandardMaterial3D_qtfiq):<StandardMaterial3D#-9223372006269909553>
+    albedo_texture=(res://models/Textures/colormap.png):<CompressedTexture2D#-9223372006722894365>
+    resource_path=res://models/Library/mesh-library.tres::StandardMaterial3D_qtfiq
+item=1 mesh=decoration-forest_decoration-forest (res://models/Library/mesh-library.tres::ArrayMesh_rqnpg):<ArrayMesh#-9223372006135691819>
+  surface=0 material=colormap (res://models/Library/mesh-library.tres::StandardMaterial3D_d64s2):<StandardMaterial3D#-9223372006169246255>
+    albedo_texture=(res://models/Textures/colormap.png):<CompressedTexture2D#-9223372006722894365>
+    resource_path=res://models/Library/mesh-library.tres::StandardMaterial3D_d64s2
+item=2 mesh=decoration-tents_decoration-tents (res://models/Library/mesh-library.tres::ArrayMesh_koebs):<ArrayMesh#-9223372006035028534>
+  surface=0 material=colormap (res://models/Library/mesh-library.tres::StandardMaterial3D_fhydi):<StandardMaterial3D#-9223372006068582967>
+    albedo_texture=(res://models/Textures/colormap.png):<CompressedTexture2D#-9223372006722894365>
+    resource_path=res://models/Library/mesh-library.tres::StandardMaterial3D_fhydi
+item=3 mesh=track-corner_track-corner (res://models/Library/mesh-library.tres::ArrayMesh_0mf22):<ArrayMesh#-9223372005934365243>
+  surface=0 material=colormap (res://models/Library/mesh-library.tres::StandardMaterial3D_vqi4y):<StandardMaterial3D#-9223372005967919680>
+    albedo_texture=(res://models/Textures/colormap.png):<CompressedTexture2D#-9223372006722894365>
+    resource_path=res://models/Library/mesh-library.tres::StandardMaterial3D_vqi4y
+item=4 mesh=track-finish_track-finish (res://models/Library/mesh-library.tres::ArrayMesh_b87y1):<ArrayMesh#-9223372005816924717>
+  surface=0 material=colormap (res://models/Library/mesh-library.tres::StandardMaterial3D_s280y):<StandardMaterial3D#-9223372005850479144>
+    albedo_texture=(res://models/Textures/colormap.png):<CompressedTexture2D#-9223372006722894365>
+    resource_path=res://models/Library/mesh-library.tres::StandardMaterial3D_s280y
+item=5 mesh=track-ramp_track-ramp (res://models/Library/mesh-library.tres::ArrayMesh_60f5r):<ArrayMesh#-9223372005699484187>
+  surface=0 material=colormap (res://models/Library/mesh-library.tres::StandardMaterial3D_rvrsp):<StandardMaterial3D#-9223372005733038660>
+    albedo_texture=(res://models/Textures/colormap.png):<CompressedTexture2D#-9223372006722894365>
+    resource_path=res://models/Library/mesh-library.tres::StandardMaterial3D_rvrsp
+item=6 mesh=track-straight_track-straight (res://models/Library/mesh-library.tres::ArrayMesh_th6qu):<ArrayMesh#-9223372005598820885>
+  surface=0 material=colormap (res://models/Library/mesh-library.tres::StandardMaterial3D_h1jjd):<StandardMaterial3D#-9223372005632375319>
+    albedo_texture=(res://models/Textures/colormap.png):<CompressedTexture2D#-9223372006722894365>
+    resource_path=res://models/Library/mesh-library.tres::StandardMaterial3D_h1jjd
+
+=== Reading Racer Diagnostic Report ===
+
+ERROR: Class 'TrackGenerator' not found
+ERROR: Class 'TrackSegment' not found
+ERROR: Class 'StraightSegment' not found
+ERROR: Class 'CurveSegment' not found
+ERROR: Class 'ControlProfile' not found
+ERROR: Class 'LaneChangeController' not found
+ERROR: Class 'SmoothSteeringController' not found
+ERROR: Class 'ThrottleSteeringController' not found
+ERROR: Class 'ReadingPickupTrigger' not found
+ERROR: Class 'ReadingObstacleTrigger' not found
+ERROR: Class 'ReadingFinishGateTrigger' not found
+ERROR: Class 'ReadingContentLoader' not found
+ERROR: Class 'ReadingSettingsStore' not found
+ERROR: Class 'ReadingHUD' not found
+ERROR: Class 'PhonemePlayer' not found
+
+=== Diagnostic Results ===
+
+Γ£ù TrackGenerator
+Γ£ù TrackSegment
+Γ£ù StraightSegment
+Γ£ù CurveSegment
+Γ£ù ControlProfile
+Γ£ù LaneChangeController
+Γ£ù SmoothSteeringController
+Γ£ù ThrottleSteeringController
+Γ£ù ReadingPickupTrigger
+Γ£ù ReadingObstacleTrigger
+Γ£ù ReadingFinishGateTrigger
+Γ£ù ReadingContentLoader
+Γ£ù ReadingSettingsStore
+Γ£ù ReadingHUD
+Γ£ù PhonemePlayer
+Γ£ô res://scenes/reading_mode.tscn
+
+Passed: 1/16
+
+Γ£ù Some systems failed to load. See above for details.

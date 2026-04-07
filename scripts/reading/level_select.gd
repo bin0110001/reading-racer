@@ -4,7 +4,6 @@ extends Control
 const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
 const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
 const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
-const TrackGeneratorScript = preload("res://scripts/reading/track_generator/TrackGenerator.gd")
 const MapDisplayManagerScript = preload("res://scripts/reading/systems/MapDisplayManager.gd")
 const POLYGON_ICON_PREFABS_BASE := "res://Assets/PolygonIcons/Prefabs/"
 const ICON_PREFAB_PLAY := POLYGON_ICON_PREFABS_BASE + "SM_Icon_Play_01.prefab"
@@ -12,9 +11,10 @@ const ICON_PREFAB_SETTINGS := POLYGON_ICON_PREFABS_BASE + "SM_Icon_Settings_01.p
 const ICON_PREFAB_VEHICLE := POLYGON_ICON_PREFABS_BASE + "SM_Icon_Car_01.prefab"
 const ICON_SVG_LANE_SWITCH := "res://sprites/Swipe.svg"
 const ICON_SVG_SMOOTH_STEERING := "res://sprites/Tilt.svg"
+const GRADE_LABELS := ["0", "K", "1", "2", "3"]
 
-var settings_store := ReadingSettingsStoreScript.new()
-var content_loader := ReadingContentLoaderScript.new()
+var settings_store: ReadingSettingsStore = null
+var content_loader: ReadingContentLoader = null
 var map_preview_viewport: SubViewport = null
 var map_preview_root: Node3D = null
 var map_preview_camera: Camera3D = null
@@ -29,7 +29,16 @@ var map_preview_drift_speed: float = 0.45
 var map_preview_drift_radius: float = 2.0
 var selected_group: String = ""
 var level_buttons: Array[Button] = []
+var grade_buttons: Array[Button] = []
+var level_option_buttons: Array[Button] = []
 var selected_level_button: Button = null
+var selected_grade: int = 0
+var selected_level_option: Dictionary = {}
+var grade_scroll: ScrollContainer = null
+var grade_row: HBoxContainer = null
+var final_row: HBoxContainer = null
+var final_selection_label: Label = null
+var final_start_button: Button = null
 var vehicle_catalog: Array[Dictionary] = []
 var selected_vehicle_id: String = PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID
 var selected_vehicle_color: Color = PlayerVehicleLibraryScript.get_default_paint_color()
@@ -52,24 +61,36 @@ var selected_steering_type: String = ReadingSettingsStore.STEERING_TYPE_LANE_CHA
 @onready var carousel_scroll: ScrollContainer = null
 @onready var carousel_row: HBoxContainer = null
 @onready var config_button: Button = $Panel/VBoxContainer/ConfigButton
-@onready var config_page: Control = _find_node_by_name_token(self, "ConfigPage") as Control
-@onready var config_page_content: Control = (
-	_find_node_by_name_token(self, "ConfigPage#VBoxContainer") as Control
+@onready var config_page: Control = (
+	LevelSelectHelpers._find_node_by_name_token(self, "ConfigPage") as Control
 )
-@onready
-var steering_option: OptionButton = _find_node_by_name_token(self, "SteeringOption") as OptionButton
-@onready var map_option: OptionButton = _find_node_by_name_token(self, "MapOption") as OptionButton
+@onready var config_page_content: Control = (
+	LevelSelectHelpers._find_node_by_name_token(self, "ConfigPage#VBoxContainer") as Control
+)
+@onready var steering_option: OptionButton = (
+	LevelSelectHelpers._find_node_by_name_token(self, "SteeringOption") as OptionButton
+)
+@onready var map_option: OptionButton = (
+	LevelSelectHelpers._find_node_by_name_token(self, "MapOption") as OptionButton
+)
 @onready var holiday_mode_option: OptionButton = (
-	_find_node_by_name_token(self, "HolidayModeOption") as OptionButton
+	LevelSelectHelpers._find_node_by_name_token(self, "HolidayModeOption") as OptionButton
 )
 @onready var holiday_name_option: OptionButton = (
-	_find_node_by_name_token(self, "HolidayNameOption") as OptionButton
+	LevelSelectHelpers._find_node_by_name_token(self, "HolidayNameOption") as OptionButton
 )
-@onready var save_button: Button = _find_node_by_name_token(self, "SaveButton") as Button
-@onready var cancel_button: Button = _find_node_by_name_token(self, "CancelButton") as Button
+@onready
+var save_button: Button = LevelSelectHelpers._find_node_by_name_token(self, "SaveButton") as Button
+@onready var cancel_button: Button = (
+	LevelSelectHelpers._find_node_by_name_token(self, "CancelButton") as Button
+)
 
 
 func _ready() -> void:
+	if settings_store == null:
+		settings_store = ReadingSettingsStoreScript.new()
+	if content_loader == null:
+		content_loader = ReadingContentLoaderScript.new()
 	_ensure_base_layout()
 	_populate_level_grid()
 	_populate_options()
@@ -276,15 +297,15 @@ func _build_map_preview() -> void:
 
 func _update_map_preview() -> void:
 	if map_preview_manager == null:
-		map_preview_manager = MapDisplayManagerScript.new()
+		map_preview_manager = MapDisplayManager.new()
 		map_preview_manager.set_nodes(map_preview_root, map_preview_root)
-		# Show full generated preview regardless of dynamic follow.
-		map_preview_manager.stream_tiles_each_side = 64
-		map_preview_manager.stream_tiles_ahead = 64
-		map_preview_manager.stream_tiles_behind = 64
+		# Limit preview streaming to a small window to avoid spawning thousands of track tiles at startup.
+		map_preview_manager.stream_tiles_each_side = 8
+		map_preview_manager.stream_tiles_ahead = 10
+		map_preview_manager.stream_tiles_behind = 6
 
 	if map_preview_generator == null:
-		map_preview_generator = TrackGeneratorScript.new()
+		map_preview_generator = TrackGenerator.new()
 
 	# Choose a sample word group for proto layout
 	var group_name := ""
@@ -294,9 +315,7 @@ func _update_map_preview() -> void:
 
 	var word_entries := []
 	if not group_name.is_empty():
-		word_entries = content_loader.load_word_entries(group_name)
-		if word_entries.size() > 8:
-			word_entries = word_entries.slice(0, 8)
+		word_entries = _build_preview_word_entries(group_name)
 
 	if word_entries.size() == 0:
 		word_entries = [{"letters": ["a", "b", "c"]}]
@@ -410,24 +429,185 @@ func _apply_vehicle_settings(settings: Dictionary) -> void:
 
 
 func _populate_level_grid() -> void:
-	var groups = content_loader.list_word_groups()
-	for group in groups:
-		var button = Button.new()
-		button.text = _format_level_group_name(group)
-		button.tooltip_text = "Start " + button.text
-		button.custom_minimum_size = Vector2(340.0, 240.0)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		button.focus_mode = Control.FOCUS_NONE
-		button.set_meta("group_id", group)
-		_apply_level_button_style(button, false)
-		button.pressed.connect(_on_level_button_pressed.bind(group))
-		carousel_row.add_child(button)
-		level_buttons.append(button)
+	_populate_grade_buttons()
+	_refresh_level_options()
 
-	# Start with no pre-selected level. Pressing a level button now immediately starts that mode.
-	selected_group = ""
-	selected_level_button = null
+
+func _populate_grade_buttons() -> void:
+	var grade_labels := GRADE_LABELS.duplicate()
+	for grade_index in range(grade_labels.size()):
+		var button := Button.new()
+		button.text = grade_labels[grade_index]
+		button.tooltip_text = "Grade %s" % grade_labels[grade_index]
+		button.custom_minimum_size = Vector2(100.0, 100.0)
+		button.size_flags_horizontal = Control.SIZE_FILL
+		button.size_flags_vertical = Control.SIZE_FILL
+		button.focus_mode = Control.FOCUS_NONE
+		button.set_meta("grade", grade_index)
+		LevelSelectHelpers._apply_grade_button_style(button, grade_index == selected_grade)
+		button.pressed.connect(_on_grade_selected.bind(grade_index))
+		grade_row.add_child(button)
+		grade_buttons.append(button)
+
+	_on_grade_selected(selected_grade)
+
+
+func _refresh_level_options() -> void:
+	for child in carousel_row.get_children():
+		child.queue_free()
+	level_option_buttons.clear()
+	level_buttons.clear()
+
+	var selected_option_type := str(selected_level_option.get("type", ""))
+	var selected_option_value := selected_level_option
+
+	if selected_grade == 0:
+		var groups := content_loader.list_word_groups()
+		for group in groups:
+			var button := Button.new()
+			button.text = LevelSelectHelpers._format_level_group_name(group)
+			button.tooltip_text = "Choose " + button.text
+			button.custom_minimum_size = Vector2(260.0, 220.0)
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			button.focus_mode = Control.FOCUS_NONE
+			button.set_meta("option_type", "group")
+			button.set_meta("group", group)
+			var is_selected := (
+				selected_option_type == "group"
+				and group == str(selected_option_value.get("group", ""))
+			)
+			LevelSelectHelpers._apply_level_button_style(button, is_selected)
+			button.pressed.connect(_on_level_option_pressed.bind({"type": "group", "group": group}))
+			carousel_row.add_child(button)
+			level_option_buttons.append(button)
+			level_buttons.append(button)
+	elif selected_grade == 1:
+		for word in _select_random_words(8):
+			var button := Button.new()
+			button.text = word
+			button.tooltip_text = "Random word: %s" % word
+			button.custom_minimum_size = Vector2(240.0, 180.0)
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			button.focus_mode = Control.FOCUS_NONE
+			button.set_meta("option_type", "word")
+			button.set_meta("word", word)
+			var is_selected := (
+				selected_option_type == "word"
+				and word == str(selected_option_value.get("text", ""))
+			)
+			LevelSelectHelpers._apply_level_button_style(button, is_selected)
+			button.pressed.connect(
+				_on_level_option_pressed.bind({"type": "word", "text": word, "group": "can_cat"})
+			)
+			carousel_row.add_child(button)
+			level_option_buttons.append(button)
+			level_buttons.append(button)
+	else:
+		for sentence in _select_random_sentences(6):
+			var button := Button.new()
+			button.text = sentence
+			button.tooltip_text = "Random sentence"
+			button.custom_minimum_size = Vector2(320.0, 180.0)
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			button.focus_mode = Control.FOCUS_NONE
+			button.set_meta("option_type", "sentence")
+			button.set_meta("sentence", sentence)
+			var is_selected := (
+				selected_option_type == "sentence"
+				and sentence == str(selected_option_value.get("text", ""))
+			)
+			LevelSelectHelpers._apply_level_button_style(button, is_selected)
+			button.pressed.connect(
+				_on_level_option_pressed.bind(
+					{"type": "sentence", "text": sentence, "group": "can_cat"}
+				)
+			)
+			carousel_row.add_child(button)
+			level_option_buttons.append(button)
+			level_buttons.append(button)
+
+	_update_final_row()
+
+
+func _on_grade_selected(grade_index: int) -> void:
+	selected_grade = grade_index
+	for button in grade_buttons:
+		var button_grade := int(button.get_meta("grade", 0))
+		LevelSelectHelpers._apply_grade_button_style(button, button_grade == selected_grade)
+	_refresh_level_options()
+	selected_level_option = {}
+
+
+func _on_level_option_pressed(option_data: Dictionary) -> void:
+	selected_level_option = option_data.duplicate()
+	for button in level_option_buttons:
+		var button_type := str(button.get_meta("option_type", ""))
+		var is_selected := false
+		if button_type == str(option_data.get("type", "")):
+			match button_type:
+				"group":
+					is_selected = (
+						str(button.get_meta("group", "")) == str(option_data.get("group", ""))
+					)
+				"word":
+					is_selected = (
+						str(button.get_meta("word", "")) == str(option_data.get("text", ""))
+					)
+				"sentence":
+					is_selected = (
+						str(button.get_meta("sentence", "")) == str(option_data.get("text", ""))
+					)
+		LevelSelectHelpers._apply_level_button_style(button, is_selected)
+	_update_final_row()
+	_start_selected_level()
+
+
+func _update_final_row() -> void:
+	if final_selection_label == null or final_start_button == null:
+		return
+
+	if selected_level_option.is_empty():
+		final_selection_label.text = "Select a level button from the row above."
+		final_start_button.disabled = true
+		return
+
+	var option_type := str(selected_level_option.get("type", ""))
+	match option_type:
+		"group":
+			final_selection_label.text = (
+				"Selected group: %s" % selected_level_option.get("group", "")
+			)
+			final_start_button.disabled = false
+		"word":
+			final_selection_label.text = "Selected word: %s" % selected_level_option.get("text", "")
+			final_start_button.disabled = false
+		"sentence":
+			final_selection_label.text = (
+				"Selected sentence: %s" % selected_level_option.get("text", "")
+			)
+			final_start_button.disabled = false
+		_:
+			final_selection_label.text = "Select a level button from the row above."
+			final_start_button.disabled = true
+
+
+func _select_random_words(count: int) -> Array[String]:
+	var candidates: Array[String] = content_loader.list_word_texts()
+	candidates.shuffle()
+	if candidates.size() > count:
+		return candidates.slice(0, count)
+	return candidates
+
+
+func _select_random_sentences(count: int) -> Array[String]:
+	var candidates: Array[String] = content_loader.list_sentence_texts()
+	candidates.shuffle()
+	if candidates.size() > count:
+		return candidates.slice(0, count)
+	return candidates
 
 
 func _populate_options() -> void:
@@ -512,7 +692,12 @@ func _on_level_selected(group: String) -> void:
 		var is_selected := button_group == group
 		if is_selected:
 			selected_level_button = button
-		_apply_level_button_style(button, is_selected)
+		LevelSelectHelpers._apply_level_button_style(button, is_selected)
+
+	if selected_grade == 0:
+		selected_level_option = {"type": "group", "group": group}
+		_refresh_level_options()
+		_update_final_row()
 
 	if carousel_scroll and selected_level_button:
 		carousel_scroll.call_deferred("ensure_control_visible", selected_level_button)
@@ -535,7 +720,9 @@ func _build_steering_type_buttons() -> void:
 	lane_switch_button.button_group = steering_button_group
 	lane_switch_button.custom_minimum_size = Vector2(180.0, 180.0)
 	lane_switch_button.focus_mode = Control.FOCUS_NONE
-	_apply_menu_icon(lane_switch_button, _load_svg_icon_texture(ICON_SVG_LANE_SWITCH))
+	LevelSelectHelpers._apply_menu_icon(
+		lane_switch_button, LevelSelectHelpers._load_svg_icon_texture(ICON_SVG_LANE_SWITCH)
+	)
 	lane_switch_button.text = ""
 	lane_switch_button.tooltip_text = "Lane switch"
 	lane_switch_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -548,7 +735,9 @@ func _build_steering_type_buttons() -> void:
 	smooth_steering_button.button_group = steering_button_group
 	smooth_steering_button.custom_minimum_size = Vector2(180.0, 180.0)
 	smooth_steering_button.focus_mode = Control.FOCUS_NONE
-	_apply_menu_icon(smooth_steering_button, _load_svg_icon_texture(ICON_SVG_SMOOTH_STEERING))
+	LevelSelectHelpers._apply_menu_icon(
+		smooth_steering_button, LevelSelectHelpers._load_svg_icon_texture(ICON_SVG_SMOOTH_STEERING)
+	)
 	smooth_steering_button.text = ""
 	smooth_steering_button.tooltip_text = "Smooth / tilt"
 	smooth_steering_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -600,15 +789,27 @@ func _get_selected_steering_type() -> String:
 
 
 func _start_selected_level() -> void:
-	if selected_group.is_empty() and not level_buttons.is_empty():
+	if (
+		selected_level_option.is_empty()
+		and selected_group.is_empty()
+		and not level_buttons.is_empty()
+	):
 		var fallback_button := level_buttons[0]
 		selected_group = str(fallback_button.get_meta("group_id", ""))
 
-	if selected_group.is_empty():
+	var settings = settings_store.load_settings()
+	var selected_group_name := selected_group
+	if not selected_level_option.is_empty():
+		var option_type := str(selected_level_option.get("type", ""))
+		if option_type == "group":
+			selected_group_name = str(selected_level_option.get("group", selected_group_name))
+		else:
+			selected_group_name = str(selected_level_option.get("group", "can_cat"))
+
+	if selected_group_name.is_empty():
 		return
 
-	var settings = settings_store.load_settings()
-	settings["word_group"] = selected_group
+	settings["word_group"] = selected_group_name
 	settings["steering_type"] = _get_selected_steering_type()
 	if map_option and map_option.selected >= 0:
 		settings["map_style"] = ReadingSettingsStore.MAP_STYLES[map_option.selected]
@@ -690,17 +891,17 @@ func _apply_steering_button_state(button: Button, is_selected: bool) -> void:
 	var selected_color := Color(0.20, 0.28, 0.40, 0.98)
 	var border_color := Color(0.33, 0.39, 0.46, 1.0)
 	var selected_border_color := Color(0.96, 0.82, 0.22, 1.0)
-	var normal_style := _create_steering_button_stylebox(
+	var normal_style := LevelSelectHelpers._create_steering_button_stylebox(
 		selected_color if is_selected else base_color,
 		selected_border_color if is_selected else border_color,
 		is_selected
 	)
-	var hover_style := _create_steering_button_stylebox(
+	var hover_style := LevelSelectHelpers._create_steering_button_stylebox(
 		Color(0.26, 0.34, 0.48, 1.0) if is_selected else Color(0.19, 0.22, 0.28, 1.0),
 		selected_border_color if is_selected else Color(0.48, 0.54, 0.62, 1.0),
 		is_selected
 	)
-	var pressed_style := _create_steering_button_stylebox(
+	var pressed_style := LevelSelectHelpers._create_steering_button_stylebox(
 		Color(0.24, 0.30, 0.44, 1.0) if is_selected else Color(0.16, 0.18, 0.23, 1.0),
 		selected_border_color if is_selected else Color(0.40, 0.46, 0.52, 1.0),
 		is_selected
@@ -743,6 +944,29 @@ func _ensure_base_layout() -> void:
 			main_vbox.name = "VBoxContainer"
 			panel.add_child(main_vbox)
 
+	if grade_scroll == null:
+		grade_scroll = main_vbox.get_node_or_null("GradeLevelScroll") as ScrollContainer
+		if grade_scroll == null:
+			grade_scroll = ScrollContainer.new()
+			grade_scroll.name = "GradeLevelScroll"
+			grade_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			grade_scroll.size_flags_vertical = Control.SIZE_FILL
+			grade_scroll.custom_minimum_size = Vector2(760, 140)
+			grade_scroll.scroll_horizontal = ScrollContainer.SCROLL_MODE_AUTO
+			main_vbox.add_child(grade_scroll)
+			if carousel_scroll != null:
+				main_vbox.move_child(grade_scroll, carousel_scroll.get_index())
+
+	if grade_row == null:
+		grade_row = grade_scroll.get_node_or_null("GradeLevelRow") as HBoxContainer
+		if grade_row == null:
+			grade_row = HBoxContainer.new()
+			grade_row.name = "GradeLevelRow"
+			grade_row.alignment = BoxContainer.ALIGNMENT_CENTER
+			grade_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			grade_row.add_theme_constant_override("separation", 12)
+			grade_scroll.add_child(grade_row)
+
 	if carousel_scroll == null:
 		carousel_scroll = main_vbox.get_node_or_null("LevelCarouselScroll") as ScrollContainer
 		if carousel_scroll == null:
@@ -755,113 +979,85 @@ func _ensure_base_layout() -> void:
 		if carousel_row == null:
 			carousel_row = HBoxContainer.new()
 			carousel_row.name = "LevelCarouselRow"
+			carousel_row.alignment = BoxContainer.ALIGNMENT_CENTER
+			carousel_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			carousel_row.add_theme_constant_override("separation", 12)
 			carousel_scroll.add_child(carousel_row)
 
+	if final_row == null:
+		final_row = main_vbox.get_node_or_null("FinalSelectionRow") as HBoxContainer
+		if final_row == null:
+			final_row = HBoxContainer.new()
+			final_row.name = "FinalSelectionRow"
+			final_row.alignment = BoxContainer.ALIGNMENT_CENTER
+			final_row.add_theme_constant_override("separation", 16)
+			final_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			main_vbox.add_child(final_row)
+			if config_button != null and main_vbox.has_node("ConfigButton"):
+				main_vbox.move_child(final_row, config_button.get_index())
 
-func _format_level_group_name(group: String) -> String:
-	var parts := group.split("_", false)
-	if parts.is_empty():
-		return group.capitalize()
+	if final_selection_label == null and final_row != null:
+		final_selection_label = Label.new()
+		final_selection_label.text = "Select a level option to continue."
+		final_selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		final_selection_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		final_row.add_child(final_selection_label)
 
-	var display_name := ""
-	for part in parts:
-		if display_name.is_empty():
-			display_name = str(part).capitalize()
-		else:
-			display_name += " " + str(part).capitalize()
-	return display_name
-
-
-func _apply_level_button_style(button: Button, _is_selected: bool) -> void:
-	if button == null:
-		return
-
-	# No persistent selected highlighted state by default — levels are started immediately on press.
-	button.self_modulate = Color(1.0, 1.0, 1.0, 1.0)
-	button.add_theme_font_size_override("font_size", 28)
-	var normal_style := _create_level_button_stylebox(
-		Color(0.15, 0.18, 0.23, 0.98), Color(0.34, 0.40, 0.48, 1.0), false
-	)
-	var hover_style := _create_level_button_stylebox(
-		Color(0.20, 0.24, 0.30, 1.0), Color(0.48, 0.54, 0.62, 1.0), false
-	)
-	var pressed_style := _create_level_button_stylebox(
-		Color(0.18, 0.20, 0.26, 1.0), Color(0.42, 0.48, 0.56, 1.0), false
-	)
-	button.add_theme_stylebox_override("normal", normal_style)
-	button.add_theme_stylebox_override("hover", hover_style)
-	button.add_theme_stylebox_override("pressed", pressed_style)
-	button.add_theme_stylebox_override("focus", hover_style)
+	if final_start_button == null and final_row != null:
+		final_start_button = Button.new()
+		final_start_button.text = "Start Selected Level"
+		final_start_button.disabled = true
+		final_start_button.pressed.connect(_on_start_pressed)
+		final_row.add_child(final_start_button)
 
 
-func _create_level_button_stylebox(
-	background_color: Color, border_color: Color, is_selected: bool
-) -> StyleBoxFlat:
-	var stylebox := StyleBoxFlat.new()
-	stylebox.bg_color = background_color
-	stylebox.border_width_left = 4 if is_selected else 2
-	stylebox.border_width_top = 4 if is_selected else 2
-	stylebox.border_width_right = 4 if is_selected else 2
-	stylebox.border_width_bottom = 4 if is_selected else 2
-	stylebox.border_color = border_color
-	stylebox.corner_radius_top_left = 30
-	stylebox.corner_radius_top_right = 30
-	stylebox.corner_radius_bottom_right = 30
-	stylebox.corner_radius_bottom_left = 30
-	stylebox.content_margin_left = 24
-	stylebox.content_margin_top = 20
-	stylebox.content_margin_right = 24
-	stylebox.content_margin_bottom = 20
-	return stylebox
+func _build_preview_word_entries(group_name: String) -> Array[Dictionary]:
+	var texts: Array[String] = []
+	var csv_path := content_loader._find_group_csv_path(group_name)
+	if csv_path != "":
+		var file := FileAccess.open(csv_path, FileAccess.READ)
+		if file != null:
+			var raw_text := file.get_as_text()
+			file.close()
+			var lines := raw_text.split("\n")
+			var header_map: Dictionary = {}
+			var data_start_index := 0
+			if lines.size() > 0:
+				var header_columns: Array[String] = content_loader._parse_csv_line(
+					str(lines[0]).strip_edges()
+				)
+				if (
+					header_columns.size() > 0
+					and str(header_columns[0]).strip_edges().to_lower() == "word"
+				):
+					header_map = content_loader._build_csv_header_map(header_columns)
+					data_start_index = 1
 
+			for i in range(data_start_index, lines.size()):
+				var line := str(lines[i]).strip_edges()
+				if line.is_empty():
+					continue
+				var columns: Array[String] = content_loader._parse_csv_line(line)
+				if columns.size() < 1:
+					continue
+				var word_text := (
+					content_loader._get_csv_value(columns, header_map, ["word"], 0).strip_edges()
+				)
+				if word_text.is_empty():
+					continue
+				texts.append(word_text)
 
-func _create_steering_button_stylebox(
-	background_color: Color, border_color: Color, is_selected: bool
-) -> StyleBoxFlat:
-	var stylebox := StyleBoxFlat.new()
-	stylebox.bg_color = background_color
-	stylebox.border_width_left = 4 if is_selected else 2
-	stylebox.border_width_top = 4 if is_selected else 2
-	stylebox.border_width_right = 4 if is_selected else 2
-	stylebox.border_width_bottom = 4 if is_selected else 2
-	stylebox.border_color = border_color
-	stylebox.corner_radius_top_left = 18
-	stylebox.corner_radius_top_right = 18
-	stylebox.corner_radius_bottom_right = 18
-	stylebox.corner_radius_bottom_left = 18
-	stylebox.content_margin_left = 12
-	stylebox.content_margin_top = 12
-	stylebox.content_margin_right = 12
-	stylebox.content_margin_bottom = 12
-	return stylebox
+	if texts.size() == 0:
+		return []
 
+	texts.shuffle()
+	if texts.size() > 8:
+		texts = texts.slice(0, 8)
 
-func _apply_menu_icon(button: Button, icon_texture: Texture2D) -> void:
-	if button == null:
-		return
-	button.icon = icon_texture
-	button.custom_minimum_size = Vector2(120.0, 120.0)
-	button.expand_icon = true
-	button.focus_mode = Control.FOCUS_NONE
-	button.icon_alignment = 1  # center horizontally
-	button.vertical_icon_alignment = 1  # center vertically
-
-	button.text = ""
-
-
-func _load_svg_icon_texture(svg_path: String) -> Texture2D:
-	var image := Image.load_from_file(svg_path)
-	if image == null or image.is_empty():
-		return null
-	return ImageTexture.create_from_image(image)
-
-
-func _find_node_by_name_token(node: Node, token: String) -> Node:
-	if node.name.find(token) >= 0:
-		return node
-	for child in node.get_children():
-		if child is Node:
-			var found = _find_node_by_name_token(child, token)
-			if found != null:
-				return found
-	return null
+	var entries: Array[Dictionary] = []
+	for text in texts:
+		var letters: Array[String] = []
+		for character in str(text):
+			letters.append(str(character))
+		entries.append({"text": str(text), "letters": letters, "group": group_name})
+	return entries

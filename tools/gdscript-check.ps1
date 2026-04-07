@@ -227,6 +227,44 @@ function Invoke-ExternalProgram {
 }
 
 
+function Wait-ForDetachedGodotProcesses {
+    param(
+        [string]$ReportRoot,
+        [int]$TimeoutSeconds = 180
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $startupDeadline = (Get-Date).AddSeconds(60)
+    $detected = $false
+
+    while ((Get-Date) -lt $deadline) {
+        $matches = Get-CimInstance Win32_Process -Filter "Name = 'Godot_v4.6-stable_mono_win64.exe'" -ErrorAction SilentlyContinue | Where-Object {
+            $_.CommandLine -like "*$ReportRoot*"
+        }
+
+        if ($matches) {
+            $detected = $true
+        }
+
+        if ($detected) {
+            if (-not $matches) {
+                return $true
+            }
+        } else {
+            if ((Get-Date) -lt $startupDeadline) {
+                Start-Sleep -Seconds 1
+                continue
+            }
+            return $true
+        }
+
+        Start-Sleep -Seconds 1
+    }
+
+    return $false
+}
+
+
 function Invoke-PowerShellExternalCommand {
     param(
         [string]$FilePath,
@@ -1081,7 +1119,14 @@ function Invoke-GdScriptCheck {
         Write-Host "[gdscript-check] Executing GDUnit command: $gdUnitCommandLine"
         Write-Host "[gdscript-check] Expected GDUnit report root: $gdUnitReportRoot"
 
-        $gdUnitResult = Invoke-PowerShellExternalCommand -FilePath $godotExe -Arguments $gdUnitArguments
+        $gdUnitResult = Invoke-ExternalProgram -FilePath $godotExe -Arguments $gdUnitArguments -TimeoutSeconds $TimeoutSeconds
+
+        # In some Windows builds, the Godot executable may spawn a detached child process
+        # to run the actual editor/test engine. Wait for any leftover Godot instances that
+        # are still executing against the same report root before collecting results.
+        if (-not (Wait-ForDetachedGodotProcesses -ReportRoot $gdUnitReportRoot -TimeoutSeconds $TimeoutSeconds)) {
+            Write-Host "[gdscript-check] WARNING: timed out waiting for detached Godot processes for report root $gdUnitReportRoot." -ForegroundColor Yellow
+        }
 
         # GDUnit command returns 100 for test failures, 101 for success with warnings/orphans.
         # For this GDScript-only project, fallback to allow 1 if it is caused by known runtime warnings.

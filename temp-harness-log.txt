@@ -1,0 +1,20 @@
+[gdscript-check] Running in: C:\Projects\reading-racer
+[gdscript-check] Warning: gdtoolkit CLI scripts were not found on PATH. Falling back to python -m invocations.
+[gdscript-check] Found 60 .gd files
+[gdscript-check] gdparse (step 1/6, 17% complete, elapsed 00:00:00)
+[gdscript-check] Running gdparse on 60 file(s)
+[gdscript-check] gdlint (step 2/6, 33% complete, elapsed 00:00:01)
+[gdscript-check] Running gdlint on 60 file(s)
+[gdscript-check] gdformat (step 3/6, 50% complete, elapsed 00:00:03)
+[gdscript-check] Running formatter in check mode (use -Fix to apply changes)
+[gdscript-check] Check duplicate global class names (step 4/6, 67% complete, elapsed 00:00:05)
+[gdscript-check] Scanning for duplicate global class names...
+[gdscript-check] No duplicate global class names found.
+[gdscript-check] Godot compile project scripts (step 5/6, 83% complete, elapsed 00:00:05)
+[gdscript-check] Running Godot validation for project scripts
+[gdscript-check] Godot validation passed for project scripts.
+[gdscript-check] GDUnit CLI (step 6/6, 100% complete, elapsed 00:00:05)
+[gdscript-check] Running GDUnit CLI on target(s): res://test/scripts/scenes
+[gdscript-check] GDUnit report root: C:\Projects\reading-racer\reports\gdscript-check\run-1e174c852aee47e589a9615fcd0cdac4
+[gdscript-check] Executing GDUnit command: D:\Gadot\Godot_v4.6-stable_mono_win64\Godot_v4.6-stable_mono_win64\Godot_v4.6-stable_mono_win64.exe --path C:\Projects\reading-racer -s res://addons/gdUnit4/bin/GdUnitCmdTool.gd --verbose -a res://test/scripts/scenes -rd C:\Projects\reading-racer\reports\gdscript-check\run-1e174c852aee47e589a9615fcd0cdac4 -rc 1 --ignoreHeadlessMode --verbose
+[gdscript-check] Expected GDUnit report root: C:\Projects\reading-racer\reports\gdscript-check\run-1e174c852aee47e589a9615fcd0cdac4

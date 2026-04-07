@@ -6,10 +6,10 @@ uid="uid://clhphblmp8e4d"
 
 [deps]
 
-files=["res://audio/words/can_cat/Words.IPA.translation", "res://audio/words/can_cat/Words.Grapheme to Phoneme Breakdown.translation"]
+files=["res://audio/words/can_cat/Words.Reading Lists.translation", "res://audio/words/can_cat/Words.Phonics Stage.translation", "res://audio/words/can_cat/Words.Simple Pronunciation.translation", "res://audio/words/can_cat/Words.Strict Pronunciation.translation"]
 
 source_file="res://audio/words/can_cat/Words.csv"
-dest_files=["res://audio/words/can_cat/Words.IPA.translation", "res://audio/words/can_cat/Words.Grapheme to Phoneme Breakdown.translation"]
+dest_files=["res://audio/words/can_cat/Words.Reading Lists.translation", "res://audio/words/can_cat/Words.Phonics Stage.translation", "res://audio/words/can_cat/Words.Simple Pronunciation.translation", "res://audio/words/can_cat/Words.Strict Pronunciation.translation"]
 
 [params]
 

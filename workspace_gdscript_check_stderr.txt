@@ -1,0 +1,7 @@
+C:\Projects\reading-racer\tools\gdscript-check.ps1 : [gdscript-check] GDUnit 
+did not produce a results.xml; generated fallback report.
+    + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorExcep 
+   tion
+    + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorExceptio 
+   n,gdscript-check.ps1
+ 

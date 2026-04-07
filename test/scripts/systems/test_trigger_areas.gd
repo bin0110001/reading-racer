@@ -67,6 +67,20 @@ func test_obstacle_trigger_properties() -> void:
 	assert_that(trigger.obstacle_index).is_equal(0)
 
 
+func test_obstacle_trigger_collision_box_does_not_scale_with_holiday_visuals() -> void:
+	var controller = load("res://scripts/reading/systems/GameplayController.gd").new(
+		load("res://scripts/reading/content_loader.gd").new()
+	)
+	var trigger = ReadingObstacleTrigger.new()
+	trigger.trigger_width = 1.35
+	trigger.trigger_depth = 1.0
+
+	controller._apply_obstacle_scale(trigger, {"scale": 5.0})
+
+	assert_that(trigger.trigger_width).is_equal(1.35)
+	assert_that(trigger.trigger_depth).is_equal(1.0)
+
+
 func test_finish_gate_trigger_initialization() -> void:
 	var trigger = ReadingFinishGateTrigger.new()
 	assert_that(trigger).is_not_null()

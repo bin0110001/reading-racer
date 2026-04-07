@@ -7,6 +7,8 @@ const MovementSystem = preload("res://scripts/reading/systems/MovementSystem.gd"
 const MapDisplayManager = preload("res://scripts/reading/systems/MapDisplayManager.gd")
 const GameplayController = preload("res://scripts/reading/systems/GameplayController.gd")
 const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
+const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
+const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
 
 # Grid layout constants
 const GRID_WIDTH := 7  # Z-axis: 7 columns (decorations + 1 road + decorations)
@@ -64,8 +66,8 @@ var gameplay_controller: GameplayController = null
 
 # Member variables
 var track_generator: TrackGenerator
-var settings_store := ReadingSettingsStore.new()
-var content_loader: ReadingContentLoader = ReadingContentLoader.new()
+var settings_store: ReadingSettingsStore = null
+var content_loader: ReadingContentLoader = null
 var camera_controller = null  # CameraController3D instance
 
 var settings: Dictionary = {}
@@ -354,8 +356,10 @@ func _setup_simple_skybox() -> void:
 func _ready() -> void:
 	print("[ReadingMode._ready] Starting initialization...")
 	ReadingControlProfile.ensure_input_actions()
+	if settings_store == null:
+		settings_store = ReadingSettingsStoreScript.new()
 	if content_loader == null:
-		content_loader = ReadingContentLoader.new()
+		content_loader = ReadingContentLoaderScript.new()
 	settings = settings_store.load_settings()
 	var debug_draw_path = bool(settings.get("debug_draw_path", true))
 	random_word_order = bool(settings.get("random_word_order", false))

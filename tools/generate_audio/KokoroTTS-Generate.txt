@@ -1,0 +1,20 @@
+(
+  echo red > "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_red.txt"
+  kokoro-tts "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_red.txt" "C:\UnityProjects\Bubble Pop\Assets\Resources\Audio\VoicePacks\KokoroEnglish\red.wav" --voice af_heart --speed 1 --lang en-us
+  del "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_red.txt"
+)
+(
+  echo yellow > "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_yellow.txt"
+  kokoro-tts "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_yellow.txt" "C:\UnityProjects\Bubble Pop\Assets\Resources\Audio\VoicePacks\KokoroEnglish\yellow.wav" --voice af_heart --speed 1 --lang en-us
+  del "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_yellow.txt"
+)
+(
+  echo blue > "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_blue.txt"
+  kokoro-tts "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_blue.txt" "C:\UnityProjects\Bubble Pop\Assets\Resources\Audio\VoicePacks\KokoroEnglish\blue.wav" --voice af_heart --speed 1 --lang en-us
+  del "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_blue.txt"
+)
+(
+  echo green > "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_green.txt"
+  kokoro-tts "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_green.txt" "C:\UnityProjects\Bubble Pop\Assets\Resources\Audio\VoicePacks\KokoroEnglish\green.wav" --voice af_heart --speed 1 --lang en-us
+  del "C:\Users\bin01\AppData\Local\Temp\UnityKokoroTTS\kokoro_input_green.txt"
+)

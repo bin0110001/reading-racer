@@ -27,6 +27,48 @@ const PICKUP_OBSTACLE_DISTANCE_THRESHOLD := (PICKUP_RADIUS_X * 4.0) / 2.0 + OBST
 const LETTER_MODEL_PREFAB_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.prefab"
 const LETTER_MODEL_FBX_BASE := "res://Assets/PolygonIcons/Models/SM_Icon_Text_%s.fbx"
 const LETTER_MODEL_SCENE_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.tscn"
+const POLYGON_ICONS_MODEL_PREFIX := "res://Assets/PolygonIcons/Models/"
+const POLYGON_ICONS_PREFAB_PREFIX := "res://Assets/PolygonIcons/Prefabs/"
+const POLYGON_ICONS_MATERIAL_PATHS_BY_GUID := {
+	"e16ac172378295b4093bde7816670f73":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_01_A.mat",
+	"7a43395cd3706cb42aaac9090dd06c58":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_01_B.mat",
+	"b44401f408455dc449f1714dd03b5e43":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_01_C.mat",
+	"ff819c9d7f189b842bc9a6ef0e1974aa":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_01_D.mat",
+	"29eed07474159444594ff75f1cbcd174":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_02.mat",
+	"e42a10eddf0c1cc46b1f11d43639a5c9":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_03.mat",
+	"154f497799dddc540a3fd6002ff9218b":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_04.mat",
+	"14115f3d188a0ad4aa0d47acf40d0f2f":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_05.mat",
+	"113b726b484083d4587c9097ae836b3e":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_06.mat",
+	"fa3bb200bf28cea40b51b5e4d7dc0035":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_07.mat",
+	"d851d29fd3df4404d97a8b2e31ebc83c":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_08.mat",
+	"e5cc88a0553de0f4f929fef74886d758":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_09.mat",
+	"4a967b6dc8efab445b810553c2c3e7bc":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_10.mat",
+	"818453dde4905dd4097c3f0ab2f1a5ad":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_11.mat",
+	"adba580a63bdcfc48bed437cf8eaa53b":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_12.mat",
+	"9bc5a968920469e4e9683dad301cae0c":
+	"res://Assets/PolygonIcons/Materials/PolygonIcons_Mat_13.mat",
+}
+const EASTER_REPLACEMENT_MATERIAL_PATH := (
+	"res://Assets/Synty/PolygonEaster/Materials/" + "PolygonEaster_01.material"
+)
+const GINGERBREAD_REPLACEMENT_MATERIAL_PATH := (
+	"res://Assets/Synty/PolygonGingerBread/Materials/" + "PolygonGingerbread_01_A.material"
+)
 const ObstacleConfigClass = preload("res://scripts/reading/obstacle_config.gd")
 
 ## References to content
@@ -79,9 +121,10 @@ func _get_obstacle_scale(obstacle_data: Dictionary) -> float:
 func _apply_obstacle_scale(
 	obstacle_trigger: ReadingObstacleTrigger, obstacle_data: Dictionary
 ) -> void:
-	var obstacle_scale := _get_obstacle_scale(obstacle_data)
-	obstacle_trigger.trigger_width *= obstacle_scale
-	obstacle_trigger.trigger_depth *= obstacle_scale
+	# Holiday obstacle visuals may be scaled, but the trigger collision box should stay constant.
+	# This keeps obstacle hit detection independent of decorative model size.
+	# The visual scale is applied separately in _spawn_word_course_plan().
+	pass
 
 
 ## Load entry and prepare gameplay
@@ -179,7 +222,7 @@ func build_loop_course_plan(
 	var marker_cursor := 0
 	var word_count: int = min(word_entries.size(), word_anchors.size())
 	for word_index in range(word_count):
-		var word_plan := _build_word_course_plan(
+		var word_plan: Dictionary = _build_word_course_plan(
 			word_index,
 			word_entries[word_index] as Dictionary,
 			word_anchors[word_index] as Dictionary,
@@ -192,169 +235,6 @@ func build_loop_course_plan(
 		course_plans.append(word_plan)
 
 	return course_plans
-
-
-## Spawn all pickups and obstacles for current entry
-func spawn_course_pickups_and_obstacles(
-	word_anchor: Dictionary,
-	p_get_path_frame: Callable,
-	p_path_wrap: Callable,
-	clear_existing: bool = true,
-	level_group: String = "",
-	active_holiday: String = ""
-) -> int:
-	if word_anchor.is_empty():
-		return -1
-
-	# Always reset existing pickups and obstacles when making a new word course.
-	# This keeps current word logic aligned with finish-gate collection state.
-	pickup_triggers.clear()
-	obstacle_triggers.clear()
-
-	if clear_existing:
-		for child in spawn_root.get_children():
-			child.queue_free()
-
-	var start_index: int = int(word_anchor.get("start_index", 0))
-	var letters: Array = current_entry.get("letters", []) as Array
-	var proto_finish_index: int = p_path_wrap.call(int(word_anchor.get("end_index", 0)) + 1)
-	var last_letter_path_index: int = -1
-	var placement_markers: Array[int] = _collect_word_markers(
-		start_index,
-		letters.size() + 1,
-		p_get_path_frame,
-		p_path_wrap,
-	)
-
-	# Spawn pickups and obstacles from a precomputed list of safe road markers.
-	for letter_index_in_word in range(min(letters.size(), placement_markers.size())):
-		var path_index: int = placement_markers[letter_index_in_word]
-		var path_frame: Dictionary = p_get_path_frame.call(path_index)
-		var segment_pos: Vector3 = path_frame.get("center", Vector3.ZERO) as Vector3
-		var segment_heading := float(path_frame.get("heading", 0.0))
-		var path_right: Vector3 = path_frame.get("right", Vector3.RIGHT) as Vector3
-
-		var pickup_lane_index: int = _rng.randi_range(0, DEFAULT_LANE_COUNT - 1)
-		var pickup_offset: float = float(pickup_lane_index - 1) * 4.0
-
-		last_letter_path_index = path_index
-
-		# Create pickup trigger
-		var pickup_trigger: ReadingPickupTrigger = ReadingPickupTrigger.new()
-		pickup_trigger.position = segment_pos + path_right * pickup_offset + Vector3(0.0, 2.3, 0.0)
-		pickup_trigger.rotation.y = segment_heading
-		pickup_trigger.word_index = current_entry_index
-		pickup_trigger.letter_index = letter_index_in_word
-		pickup_trigger.letter = str(letters[letter_index_in_word])
-		pickup_trigger.phoneme_label = (
-			content_loader
-			. get_phoneme_label(
-				current_entry,
-				letter_index_in_word,
-			)
-		)
-		pickup_trigger.trigger_width = PICKUP_RADIUS_X * 4
-		pickup_trigger.trigger_depth = PICKUP_RADIUS_Z * 4
-		spawn_root.add_child(pickup_trigger)
-
-		# Add visual model to pickup; fallback to label if no matching 3D prefab found
-		var letter_model = _create_letter_model(
-			str(letters[letter_index_in_word]).to_upper(),
-		)
-		if letter_model != null:
-			letter_model.scale = Vector3(2.0, 2.0, 2.0)
-			letter_model.rotation = Vector3(0.0, -PI * 0.5, 0.0)
-			pickup_trigger.add_child(letter_model)
-		else:
-			var label_node = Label3D.new()
-			label_node.text = str(letters[letter_index_in_word]).to_upper()
-			label_node.font_size = 512
-			label_node.scale = Vector3(2.0, 2.0, 2.0)
-			label_node.rotation = Vector3(0.0, -PI * 0.5, 0.0)
-			label_node.modulate = Color(1.0, 0.75, 0.0)
-			pickup_trigger.add_child(label_node)
-
-		var light = OmniLight3D.new()
-		light.omni_range = 8.0
-		light.light_energy = 1.5
-		pickup_trigger.add_child(light)
-
-		pickup_trigger.pickup_triggered.connect(_on_pickup_triggered.bindv([pickup_trigger]))
-		pickup_triggers.append(pickup_trigger)
-
-		# Record generic placement grid entry for headless validation/testing.
-		set_placement_object(
-			path_index,
-			pickup_lane_index,
-			"pickup",
-			{"letter": pickup_trigger.letter, "phoneme_label": pickup_trigger.phoneme_label},
-		)
-
-		# Spawn obstacle(s) in all lanes except pickup lane
-		for lane_index in range(DEFAULT_LANE_COUNT):
-			if lane_index == pickup_lane_index:
-				continue
-			var obstacle_trigger: ReadingObstacleTrigger = ReadingObstacleTrigger.new()
-			var lane_offset: float = float(lane_index - 1) * 4.0 + _rng.randf_range(-1.0, 1.0)
-			obstacle_trigger.position = (
-				segment_pos + path_right * lane_offset + Vector3(0.0, 0.6, 0.0)
-			)
-			obstacle_trigger.rotation.y = segment_heading
-			obstacle_trigger.word_index = current_entry_index
-			obstacle_trigger.obstacle_index = letter_index_in_word * 2 + lane_index
-
-			var obstacle_data = obstacle_config.choose_random_obstacle(
-				level_group, active_holiday, _rng
-			)
-			var obstacle_model_path = str(obstacle_data.get("model_path", OBSTACLE_MODEL_PATH))
-			var hit_sounds = obstacle_data.get("sound_paths", ["res://audio/skid.ogg"]) as Array
-			obstacle_trigger.hit_sound_paths = hit_sounds
-			_apply_obstacle_scale(obstacle_trigger, obstacle_data)
-
-			spawn_root.add_child(obstacle_trigger)
-
-			# Add visual model
-			var obstacle_visual := _instantiate_scene(obstacle_model_path)
-			if obstacle_visual != null:
-				obstacle_visual.scale = Vector3.ONE * _get_obstacle_scale(obstacle_data)
-				obstacle_trigger.add_child(obstacle_visual)
-
-			obstacle_trigger.obstacle_hit.connect(_on_obstacle_hit.bindv([obstacle_trigger]))
-			obstacle_triggers.append(obstacle_trigger)
-
-			# Record generic obstacle placement.
-			var lane_idx = lane_index
-			set_placement_object(
-				path_index,
-				lane_idx,
-				"obstacle",
-				{"obstacle_index": obstacle_trigger.obstacle_index, "lane": lane_idx},
-			)
-
-	# Decide finish position based on where the last letter was placed
-	var finish_index: int = proto_finish_index
-	if placement_markers.size() > letters.size():
-		finish_index = placement_markers[letters.size()]
-	elif last_letter_path_index >= 0:
-		finish_index = p_path_wrap.call(last_letter_path_index + 1)
-
-	# Create finish gate
-	if finish_gate_trigger:
-		finish_gate_trigger.queue_free()
-	finish_gate_trigger = ReadingFinishGateTrigger.new() as ReadingFinishGateTrigger
-	var finish_frame: Dictionary = p_get_path_frame.call(finish_index)
-	finish_gate_trigger.position = finish_frame.get("center", Vector3.ZERO) as Vector3
-	finish_gate_trigger.rotation.y = float(finish_frame.get("heading", 0.0))
-	finish_gate_trigger.word_index = current_entry_index
-	finish_gate_trigger.trigger_width = SEGMENT_SPACING
-	finish_gate_trigger.trigger_depth = 8.0
-	spawn_root.add_child(finish_gate_trigger)
-	finish_gate_trigger.finish_gate_reached.connect(_on_finish_reached.bindv([finish_gate_trigger]))
-
-	# Record finish line placement item.
-	set_placement_object(finish_index, 1, "finish", {})
-
-	return finish_index
 
 
 func get_word_finish_index(word_index: int) -> int:
@@ -643,19 +523,6 @@ func _spawn_word_course_plan(
 		"finish_gate": finish_gate,
 	}
 
-	finish_gate.word_index = word_index
-	finish_gate.trigger_width = SEGMENT_SPACING
-	finish_gate.trigger_depth = 8.0
-	spawn_root.add_child(finish_gate)
-	finish_gate.finish_gate_reached.connect(_on_finish_reached.bindv([finish_gate]))
-	set_placement_object(finish_index, 1, "finish", {})
-
-	return {
-		"pickups": spawned_pickups,
-		"obstacles": spawned_obstacles,
-		"finish_gate": finish_gate,
-	}
-
 
 func _compute_word_seed(word_index: int, entry: Dictionary) -> int:
 	var seed_value := 17 + word_index * 101
@@ -719,8 +586,8 @@ func _create_letter_model(letter: String) -> Node3D:
 
 	var candidate_paths := [
 		LETTER_MODEL_SCENE_BASE % normalized,
-		LETTER_MODEL_FBX_BASE % normalized,
 		LETTER_MODEL_PREFAB_BASE % normalized,
+		LETTER_MODEL_FBX_BASE % normalized,
 	]
 
 	for path in candidate_paths:
@@ -892,7 +759,160 @@ func _on_finish_reached(trigger: ReadingFinishGateTrigger) -> void:
 func _instantiate_scene(resource_path: String) -> Node3D:
 	if not ResourceLoader.exists(resource_path):
 		return null
-	var packed_scene := load(resource_path) as PackedScene
-	if packed_scene == null:
+	var preferred_resource_path := _resolve_polygon_icons_scene_path(resource_path)
+	for candidate_path in [preferred_resource_path, resource_path]:
+		if not ResourceLoader.exists(candidate_path):
+			continue
+		var packed_scene := load(candidate_path) as PackedScene
+		if packed_scene == null:
+			continue
+		var scene := packed_scene.instantiate() as Node3D
+		if scene != null:
+			_apply_polygon_icons_material_replacements(scene, resource_path)
+			_apply_holiday_material_replacements(scene, candidate_path)
+			return scene
+	return null
+
+
+func _resolve_polygon_icons_scene_path(resource_path: String) -> String:
+	if not resource_path.begins_with(POLYGON_ICONS_MODEL_PREFIX):
+		return resource_path
+
+	var prefab_path := (
+		POLYGON_ICONS_PREFAB_PREFIX + resource_path.get_file().get_basename() + ".prefab"
+	)
+	if FileAccess.file_exists(prefab_path):
+		return prefab_path
+
+	return resource_path
+
+
+func _apply_polygon_icons_material_replacements(root: Node, resource_path: String) -> void:
+	if not resource_path.begins_with(POLYGON_ICONS_MODEL_PREFIX):
+		return
+
+	var material := _load_polygon_icons_prefab_material(resource_path)
+	var debug_file := FileAccess.open(
+		"C:/Projects/reading-racer/polygonicons_debug_outer.log", FileAccess.WRITE
+	)
+	if debug_file != null:
+		debug_file.store_line(resource_path + " => " + str(material))
+		debug_file.close()
+	if material == null:
+		return
+
+	_apply_material_to_mesh_instances(root, material)
+
+
+func _load_polygon_icons_prefab_material(resource_path: String) -> Material:
+	var prefab_path := _resolve_polygon_icons_prefab_source_path(resource_path)
+	var debug_file := FileAccess.open(
+		"C:/Projects/reading-racer/polygonicons_debug_prefab.log", FileAccess.WRITE
+	)
+	if debug_file != null:
+		debug_file.store_line(prefab_path)
+		debug_file.close()
+	if prefab_path == "" or not FileAccess.file_exists(prefab_path):
 		return null
-	return packed_scene.instantiate() as Node3D
+
+	var prefab_text := FileAccess.get_file_as_string(prefab_path)
+	var materials_index := prefab_text.find("m_Materials:")
+	if materials_index == -1:
+		return null
+
+	var guid_index := prefab_text.find("guid:", materials_index)
+	if guid_index == -1:
+		return null
+
+	var guid_start := guid_index + 5
+	var guid_end := guid_start
+	while guid_end < prefab_text.length():
+		var character := prefab_text[guid_end]
+		if character == "\n" or character == "\r":
+			break
+		guid_end += 1
+
+	var material_guid := prefab_text.substr(guid_start, guid_end - guid_start).strip_edges()
+	debug_file = FileAccess.open(
+		"C:/Projects/reading-racer/polygonicons_debug_guid.log", FileAccess.WRITE
+	)
+	if debug_file != null:
+		debug_file.store_line(material_guid)
+		debug_file.close()
+	if material_guid == "":
+		return null
+
+	var material_path := _resolve_polygon_icons_material_path(material_guid)
+	debug_file = FileAccess.open(
+		"C:/Projects/reading-racer/polygonicons_debug_material.log", FileAccess.WRITE
+	)
+	if debug_file != null:
+		debug_file.store_line(material_path)
+		debug_file.close()
+	if material_path == "":
+		return null
+
+	return load(material_path) as Material
+
+
+func _resolve_polygon_icons_prefab_source_path(resource_path: String) -> String:
+	if not resource_path.begins_with(POLYGON_ICONS_MODEL_PREFIX):
+		return ""
+
+	return POLYGON_ICONS_PREFAB_PREFIX + resource_path.get_file().get_basename() + ".prefab"
+
+
+func _resolve_polygon_icons_material_path(material_guid: String) -> String:
+	return str(POLYGON_ICONS_MATERIAL_PATHS_BY_GUID.get(material_guid, ""))
+
+
+func _apply_material_to_mesh_instances(node: Node, material: Material) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh is Mesh:
+			var mesh := mesh_instance.mesh as Mesh
+			for surface_index in range(mesh.get_surface_count()):
+				mesh_instance.set_surface_override_material(surface_index, material)
+
+	for child in node.get_children():
+		_apply_material_to_mesh_instances(child, material)
+
+
+func _apply_holiday_material_replacements(root: Node, resource_path: String) -> void:
+	var material_path := ""
+	if resource_path.begins_with("res://Assets/Synty/PolygonEaster/"):
+		material_path = EASTER_REPLACEMENT_MATERIAL_PATH
+	elif resource_path.begins_with("res://Assets/Synty/PolygonGingerBread/"):
+		material_path = GINGERBREAD_REPLACEMENT_MATERIAL_PATH
+	else:
+		return
+	var replacement_material := load(material_path) as Material
+	if replacement_material == null:
+		return
+	_apply_holiday_material_replacements_recursive(root, replacement_material)
+
+
+func _apply_holiday_material_replacements_recursive(
+	node: Node, replacement_material: Material
+) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh is ArrayMesh:
+			var array_mesh := mesh_instance.mesh as ArrayMesh
+			for surface_index in range(array_mesh.get_surface_count()):
+				var surface_material := mesh_instance.get_surface_override_material(surface_index)
+				if surface_material == null:
+					surface_material = array_mesh.surface_get_material(surface_index)
+				if _should_replace_holiday_material(surface_material):
+					mesh_instance.set_surface_override_material(surface_index, replacement_material)
+
+	for child in node.get_children():
+		_apply_holiday_material_replacements_recursive(child, replacement_material)
+
+
+func _should_replace_holiday_material(material: Material) -> bool:
+	if material == null:
+		return true
+	if material is StandardMaterial3D:
+		return (material as StandardMaterial3D).albedo_texture == null
+	return false

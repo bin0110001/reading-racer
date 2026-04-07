@@ -4,3 +4,6 @@
 /reports/
 /addons/
 /Assets/
+*.onnx
+*.bin
+/audio/words/

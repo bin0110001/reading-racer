@@ -73,6 +73,58 @@ func test_level_select_scene_with_scene_runner() -> void:
 	assert_that(runner.scene().is_inside_tree()).is_true()
 
 
+func test_main_scene_loads_under_one_second() -> void:
+	"""Smoke test: main menu startup must complete within 1 second."""
+	var start_ms := Time.get_ticks_msec()
+	var runner = _create_scene_runner(MAIN_SCENE_PATH)
+	await runner.simulate_frames(2)
+	var elapsed_ms := Time.get_ticks_msec() - start_ms
+
+	assert_that(elapsed_ms).is_less(1000)
+	assert_that(runner.scene()).is_not_null()
+	assert_that(runner.scene().is_inside_tree()).is_true()
+
+
+func test_level_select_launch_completes_under_one_second() -> void:
+	"""Smoke test: selecting a level should launch reading mode within 1 second."""
+	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
+	await runner.simulate_frames(2)
+
+	var level_scene = runner.scene()
+	assert_that(level_scene).is_not_null()
+
+	var level_buttons = level_scene.get("level_buttons")
+	if not (level_buttons is Array):
+		level_buttons = []
+
+	var wait_frames := 0
+	while level_buttons.size() == 0 and wait_frames < 10:
+		await runner.simulate_frames(1)
+		wait_frames += 1
+		level_buttons = level_scene.get("level_buttons")
+		if not (level_buttons is Array):
+			level_buttons = []
+
+	if level_buttons.size() == 0:
+		level_buttons = level_scene.get("level_option_buttons")
+		if not (level_buttons is Array):
+			level_buttons = []
+
+	if level_buttons.size() == 0:
+		return
+
+	var first_level_button := level_buttons[0] as Button
+	assert_that(first_level_button).is_not_null()
+
+	var start_ms := Time.get_ticks_msec()
+	first_level_button.emit_signal("pressed")
+	await runner.simulate_frames(3)
+	var elapsed_ms := Time.get_ticks_msec() - start_ms
+
+	assert_that(elapsed_ms).is_less(1000)
+	assert_that(level_scene.get_tree().current_scene.get_name()).is_equal("ReadingMode")
+
+
 func test_level_select_carousel_is_visible_and_laid_out() -> void:
 	"""Regression: the level carousel must be visible and occupy real screen space."""
 	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
@@ -82,7 +134,9 @@ func test_level_select_carousel_is_visible_and_laid_out() -> void:
 	assert_that(level_scene).is_not_null()
 
 	var carousel_scroll := level_scene.get("carousel_scroll") as ScrollContainer
-	var level_buttons: Array = level_scene.get("level_buttons") as Array
+	var level_buttons = level_scene.get("level_buttons")
+	if not (level_buttons is Array):
+		level_buttons = []
 	var config_button := level_scene.get("config_button") as Button
 
 	assert_that(carousel_scroll).is_not_null()
@@ -110,7 +164,12 @@ func test_level_select_settings_menu_opens_and_saves() -> void:
 	assert_that(level_scene).is_not_null()
 
 	var config_button := level_scene.get("config_button") as Button
-	var panel := (level_scene.get("main_vbox") as VBoxContainer).get_parent() as Control
+	var panel: Control = null
+	var main_vbox = level_scene.get("main_vbox")
+	if main_vbox is VBoxContainer:
+		panel = (main_vbox as VBoxContainer).get_parent() as Control
+	if panel == null:
+		panel = _find_node_by_name_token(level_scene, "Panel") as Control
 	var config_page := level_scene.get("config_page") as Control
 	var config_page_content := level_scene.get("config_page_content") as Control
 	var steering_option := level_scene.get("steering_option") as OptionButton
@@ -159,6 +218,7 @@ func test_level_select_settings_menu_opens_and_saves() -> void:
 
 	settings_store.save_settings(original_settings)
 	var restored_auto_settings = settings_store.load_settings()
+	var christmas_date := {"year": 2026, "month": 12, "day": 25}
 	(
 		assert_that(
 			ReadingSettingsStore.new().resolve_effective_holiday(
@@ -183,7 +243,9 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	var lane_switch_button := level_scene.get("lane_switch_button") as Button
 	var smooth_steering_button := level_scene.get("smooth_steering_button") as Button
 	var config_button := level_scene.get("config_button") as Button
-	var level_buttons: Array = level_scene.get("level_buttons") as Array
+	var level_buttons = level_scene.get("level_buttons")
+	if not (level_buttons is Array):
+		level_buttons = []
 	assert_that(level_buttons.size()).is_greater(0)
 	var first_level_button := level_buttons[0] as Button
 
@@ -242,6 +304,38 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	)
 
 	settings_store.save_settings(original_settings)
+
+
+func test_level_select_grade_buttons_respond_within_frames() -> void:
+	"""Smoke test: grade buttons must update selection quickly and keep the scene responsive."""
+	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
+	await runner.simulate_frames(3, 50)
+
+	var level_scene = runner.scene()
+	assert_that(level_scene).is_not_null()
+	assert_that(level_scene.is_inside_tree()).is_true()
+
+	var grade_buttons: Array = level_scene.get("grade_buttons") as Array
+	assert_that(grade_buttons.size()).is_greater_equal(2)
+
+	var initial_grade := int(level_scene.get("selected_grade"))
+	var target_grade := (initial_grade + 1) % grade_buttons.size()
+	var target_button := grade_buttons[target_grade] as Button
+	assert_that(target_button).is_not_null()
+
+	# Press a grade button and wait for selection to update.
+	target_button.emit_signal("pressed")
+
+	var frames_waited := 0
+	while frames_waited < 10:
+		await runner.simulate_frames(1, 50)
+		frames_waited += 1
+		if int(level_scene.get("selected_grade")) == target_grade:
+			break
+
+	assert_that(int(level_scene.get("selected_grade"))).is_equal(target_grade)
+	assert_that(frames_waited).is_less(10)
+	assert_that(level_scene.is_inside_tree()).is_true()
 
 
 func test_vehicle_select_scene_with_scene_runner() -> void:

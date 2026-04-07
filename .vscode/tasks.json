@@ -1,0 +1,50 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "repair-polygon-icons-materials",
+			"type": "shell",
+			"command": "\"D:\\Gadot\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64.exe\"",
+			"args": [
+				"--headless",
+				"--path",
+				"C:\\Projects\\reading-racer",
+				"-s",
+				"res://tools/rebuild_polygon_icons_materials.gd"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "repair-polygon-icons-materials",
+			"type": "shell",
+			"command": "\"D:\\Gadot\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64.exe\"",
+			"args": [
+				"--headless",
+				"--path",
+				"C:\\Projects\\reading-racer",
+				"-s",
+				"res://tools/rebuild_polygon_icons_materials.gd"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "repair-polygon-icons-materials",
+			"type": "shell",
+			"command": "\"D:\\Gadot\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64.exe\"",
+			"args": [
+				"--headless",
+				"--path",
+				"C:\\Projects\\reading-racer",
+				"-s",
+				"res://tools/rebuild_polygon_icons_materials.gd"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

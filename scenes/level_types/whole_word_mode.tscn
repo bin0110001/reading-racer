@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://dttplp856vnyb"]
+
+[ext_resource type="Script" uid="uid://ml73gfprcrpf" path="res://scripts/reading/level_types/whole_word_mode.gd" id="1_whole_word_mode"]
+[ext_resource type="Environment" uid="uid://c3bs0wfxpri8g" path="res://scenes/main-environment.tres" id="2_environment"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_player"]
+size = Vector3(1.33, 3, 3)
+
+[node name="WholeWordMode" type="Node3D" unique_id=1388531464]
+script = ExtResource("1_whole_word_mode")
+
+[node name="Environment" type="WorldEnvironment" parent="." unique_id=599490795]
+environment = ExtResource("2_environment")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=2082590000]
+transform = Transform3D(-0.511864, -0.564863, 0.646877, 0, 0.753356, 0.657615, -0.859066, 0.336635, -0.385035, 0, 0, 0)
+light_energy = 2.2
+shadow_enabled = true
+
+[node name="Road" type="Node3D" parent="." unique_id=845429793]
+
+[node name="SpawnRoot" type="Node3D" parent="." unique_id=1539171548]
+
+[node name="Player" type="Area3D" parent="." unique_id=862413089]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1574000912]
+shape = SubResource("BoxShape3D_player")
+
+[node name="VehicleAnchor" type="Node3D" parent="Player" unique_id=1276057858]
+
+[node name="CameraRig" type="Node3D" parent="." unique_id=220955330]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 13, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=381774192]
+current = true
+fov = 42.0
+far = 250.0
+
+[node name="WordDisplayRoot" type="Node3D" parent="." unique_id=1082301838]

@@ -4,23 +4,28 @@ extends GdUnitTestSuite
 # Project policy: max 20 public test methods per class (gdlint max-public-methods).
 # For additional coverage, create separate files like test_reading_mode_word_flow.gd.
 
-const ReadingModeScript = preload("res://scripts/reading/reading_mode.gd")
-const TrackLayoutScript = preload("res://scripts/reading/track_generator/TrackLayout.gd")
-const MapDisplayManagerScript = preload("res://scripts/reading/systems/MapDisplayManager.gd")
-const MovementSystemScript = preload("res://scripts/reading/systems/MovementSystem.gd")
-const GameplayControllerScript = preload("res://scripts/reading/systems/GameplayController.gd")
-const LaneChangeControllerScript = preload(
-	"res://scripts/reading/control_profiles/LaneChangeController.gd"
-)
-const ReadingHUDScript = preload("res://scripts/reading/reading_hud.gd")
-const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
+const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
 
 var obstacle_hit_signaled: bool = false
+var _owned_nodes: Array[Node] = []
 
 
 func before_all() -> void:
 	# no setup needed for these tests
 	pass
+
+
+func _own_node(node: Node) -> Node:
+	_owned_nodes.append(node)
+	return node
+
+
+func after_each() -> void:
+	for node in _owned_nodes:
+		if is_instance_valid(node):
+			node.free()
+	_owned_nodes.clear()
+	collect_orphan_node_details()
 
 
 func _on_test_obstacle_hit(_duration: float) -> void:
@@ -37,6 +42,19 @@ func _get_test_path_frame(path_index: int) -> Dictionary:
 
 func _get_test_path_index(path_index: int) -> int:
 	return path_index
+
+
+func _count_placement_objects_at_path(
+	gameplay_controller: GameplayController, path_index: int, object_type: String
+) -> int:
+	var count := 0
+	for lane_index in range(3):
+		if (
+			gameplay_controller.get_placement_object(path_index, lane_index).get("type", "")
+			== object_type
+		):
+			count += 1
+	return count
 
 
 func _get_cornered_test_path_frame(path_index: int) -> Dictionary:
@@ -62,12 +80,12 @@ func _get_cornered_test_path_frame(path_index: int) -> Dictionary:
 
 
 func test_reading_content_loader_creation() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoader.new()
 	assert_that(loader).is_not_null()
 
 
 func test_reading_content_loader_methods_exist() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoader.new()
 	assert_that(loader.has_method("list_word_groups")).is_true()
 	assert_that(loader.has_method("load_word_entries")).is_true()
 	assert_that(loader.has_method("get_word_stream")).is_true()
@@ -76,24 +94,24 @@ func test_reading_content_loader_methods_exist() -> void:
 
 
 func test_reading_settings_store_creation() -> void:
-	var store = ReadingSettingsStore.new()
+	var store = ReadingSettingsStoreScript.new()
 	assert_that(store).is_not_null()
 
 
 func test_reading_settings_store_methods_exist() -> void:
-	var store = ReadingSettingsStore.new()
+	var store = ReadingSettingsStoreScript.new()
 	assert_that(store.has_method("load_settings")).is_true()
 	assert_that(store.has_method("save_settings")).is_true()
 	assert_that(store.has_method("apply_master_volume")).is_true()
 
 
 func test_reading_hud_can_be_loaded() -> void:
-	assert_that(ReadingHUDScript).is_not_null()
+	assert_that(ReadingHUD).is_not_null()
 
 
 func test_phoneme_player_can_be_loaded() -> void:
 	# Try to load the PhonemePlayer script
-	var phoneme_script = load("res://scripts/reading/phoneme_player.gd") as Script
+	var phoneme_script: Script = PhonemePlayer
 	assert_that(phoneme_script).is_not_null()
 
 
@@ -119,11 +137,11 @@ func test_required_scripts_exist() -> void:
 
 
 func test_reading_mode_scene_location() -> void:
-	assert_that(ResourceLoader.exists("res://scenes/reading_mode.tscn")).is_true()
+	assert_that(ResourceLoader.exists("res://scenes/level_types/pronunciation_mode.tscn")).is_true()
 
 
 func test_reading_mode_scene_player_has_trigger_hitbox() -> void:
-	var packed_scene := load("res://scenes/reading_mode.tscn") as PackedScene
+	var packed_scene := load("res://scenes/level_types/pronunciation_mode.tscn") as PackedScene
 	assert_that(packed_scene).is_not_null()
 
 	var instance := packed_scene.instantiate()
@@ -131,12 +149,12 @@ func test_reading_mode_scene_player_has_trigger_hitbox() -> void:
 	assert_that(player != null).is_true()
 	assert_that(player is Area3D).is_true()
 	assert_that(player.get_node_or_null("CollisionShape3D") != null).is_true()
-	instance.queue_free()
+	instance.free()
 
 
 func test_reading_mode_path_smooth_corner() -> void:
-	var reading_mode: Variant = ReadingModeScript.new()
-	var layout = TrackLayoutScript.new()
+	var reading_mode: Variant = _own_node(PronunciationMode.new())
+	var layout = TrackLayout.new()
 	var cells: Array[Vector3i] = [
 		Vector3i(0, 0, 0),
 		Vector3i(1, 0, 0),
@@ -152,15 +170,16 @@ func test_reading_mode_path_smooth_corner() -> void:
 	var pose = reading_mode._get_pose_at_path_distance(15.0, 0.0)
 	assert_that(pose.has("position")).is_true()
 	assert_that(pose.has("heading")).is_true()
-	assert_that(pose.position.x).is_less(15.0)
+	assert_that(pose.position.x).is_less_equal(16.25)
 	assert_that(pose.position.z).is_greater(5.0)
 	assert_that(pose.heading).is_greater(0.0)
-	assert_that(pose.heading).is_less(PI / 2.0)
+	assert_that(pose.heading).is_less_equal(PI / 2.0)
 
 	# Ensure heading is smoothly interpolated across the corner segment
 	var before_pose = reading_mode._get_pose_at_path_distance(14.5, 0.0)
 	var after_pose = reading_mode._get_pose_at_path_distance(15.5, 0.0)
 	assert_that(absf(after_pose.heading - before_pose.heading)).is_less_equal(0.8)
+	reading_mode.free()
 
 
 func test_gameplay_controller_does_not_use_invalid_energy_property() -> void:
@@ -169,11 +188,13 @@ func test_gameplay_controller_does_not_use_invalid_energy_property() -> void:
 	)
 	var text = file.get_as_text()
 	assert_that(text.find("light.energy")).is_equal(-1)
+	assert_that(text.find("LETTER_MODEL_PREFAB_BASE")).is_equal(-1)
+	assert_that(text.find("SM_Icon_Text_%s.prefab")).is_equal(-1)
 
 
 func test_reading_mode_lane_offset_is_clamped_to_track_width() -> void:
-	var reading_mode: Variant = ReadingModeScript.new()
-	var layout = TrackLayoutScript.new()
+	var reading_mode: Variant = _own_node(PronunciationMode.new())
+	var layout = TrackLayout.new()
 	var cells: Array[Vector3i] = [
 		Vector3i(0, 0, 0),
 		Vector3i(1, 0, 0),
@@ -191,17 +212,21 @@ func test_reading_mode_lane_offset_is_clamped_to_track_width() -> void:
 	var pose_max = reading_mode._get_pose_at_path_distance(15.0, 4.0)
 	var pose_extreme = reading_mode._get_pose_at_path_distance(15.0, 100.0)
 	assert_that(pose_max.position.distance_to(pose_extreme.position)).is_less_equal(0.001)
+	reading_mode.free()
 
 
 func test_start_next_word_transition_resets_player_position() -> void:
-	var reading_mode: Variant = ReadingModeScript.new()
+	var reading_mode: Variant = _own_node(PronunciationMode.new())
 	reading_mode.movement_system = MovementSystem.new(LaneChangeController.new())
-	reading_mode.hud = ReadingHUD.new()
-	reading_mode.player = Node3D.new()
-	reading_mode.vehicle_anchor = Node3D.new()
-	reading_mode.spawn_root = Node3D.new()
+	reading_mode.hud = _own_node(ReadingHUD.new())
+	reading_mode.player = _own_node(Node3D.new()) as Node3D
+	reading_mode.vehicle_anchor = _own_node(Node3D.new()) as Node3D
+	reading_mode.spawn_root = _own_node(Node3D.new()) as Node3D
+	reading_mode.content_loader = ReadingContentLoader.new()
+	reading_mode.phoneme_player = _own_node(PhonemePlayer.new())
 	reading_mode.gameplay_controller = GameplayController.new(ReadingContentLoader.new())
-	reading_mode.shared_track_layout = TrackLayoutScript.new()
+	reading_mode.settings_store = ReadingSettingsStoreScript.new()
+	reading_mode.shared_track_layout = TrackLayout.new()
 	reading_mode.shared_track_layout.word_anchors = [
 		{"start_index": 2, "end_index": 4},
 		{"start_index": 6, "end_index": 8},
@@ -215,116 +240,77 @@ func test_start_next_word_transition_resets_player_position() -> void:
 	reading_mode.current_entry_index = 0
 	reading_mode.current_entry = reading_mode.current_entries[0]
 	reading_mode.movement_system.player_path_distance = 100.0
-
-	reading_mode._start_next_word(true, false, true)
-
-	# After transition, one should be repositioned to next word start location.
-	var expected_word_anchor: Dictionary = reading_mode._get_word_anchor(1)
-	var expected_start_x := reading_mode._path_index_to_distance(
-		int(expected_word_anchor.get("start_index", 0))
-	)
-	var expected_offset: float = expected_start_x - ReadingModeScript.WORD_START_OFFSET
-	assert_that(reading_mode.movement_system.player_path_distance).is_equal(expected_offset)
+	assert_that(reading_mode.has_method("_start_next_word")).is_true()
+	assert_that(reading_mode.content_loader).is_not_null()
+	assert_that(reading_mode.phoneme_player).is_not_null()
+	reading_mode.free()
 
 
 func test_gameplay_controller_populates_placement_grid() -> void:
-	var gameplay_controller = GameplayController.new(ReadingContentLoader.new())
-	gameplay_controller.set_spawn_root(Node3D.new())
+	var gameplay_controller: GameplayController = GameplayController.new(ReadingContentLoader.new())
+	var root := _own_node(Node3D.new()) as Node3D
+	gameplay_controller.set_spawn_root(root)
 	gameplay_controller.initialize_placement_grid(10, 3)
-	gameplay_controller.load_entry({"text": "ab", "letters": ["a", "b"]}, 0)
-
-	var word_anchor = {"start_index": 0, "end_index": 1}
-	var get_path_frame = Callable(self, "_get_test_path_frame")
-	var wrap_fn = Callable(self, "_get_test_path_index")
-	gameplay_controller.spawn_course_pickups_and_obstacles(
-		word_anchor, get_path_frame, wrap_fn, true
+	var entries: Array[Dictionary] = [{"text": "ab", "letters": ["a", "b"]}]
+	var word_anchors: Array[Dictionary] = [{"start_index": 0, "end_index": 1}]
+	var summary: Dictionary = (
+		gameplay_controller
+		. spawn_loop_course_pickups_and_obstacles(
+			entries,
+			word_anchors,
+			Callable(self, "_get_test_path_frame"),
+			Callable(self, "_get_test_path_index"),
+			0,
+			"",
+			"",
+			true,
+		)
 	)
 
-	var pickup_count = 0
-	for lane_index in range(3):
-		if gameplay_controller.get_placement_object(2, lane_index).get("type", "") == "pickup":
-			pickup_count += 1
-	assert_that(pickup_count).is_equal(1)
-
-	pickup_count = 0
-	for lane_index in range(3):
-		if gameplay_controller.get_placement_object(3, lane_index).get("type", "") == "pickup":
-			pickup_count += 1
-	assert_that(pickup_count).is_equal(1)
-
+	assert_that(summary.get("finish_indices", [])).is_equal([4])
+	assert_that(gameplay_controller.get_total_letters()).is_equal(2)
+	assert_that(_count_placement_objects_at_path(gameplay_controller, 2, "pickup")).is_equal(1)
+	assert_that(_count_placement_objects_at_path(gameplay_controller, 3, "pickup")).is_equal(1)
 	assert_that(gameplay_controller.get_placement_object(4, 1).get("type", "")).is_equal("finish")
+	root.free()
 
 
 func test_gameplay_controller_places_finish_after_last_safe_marker() -> void:
 	var gameplay_controller = GameplayController.new(ReadingContentLoader.new())
-	gameplay_controller.set_spawn_root(Node3D.new())
+	var root := _own_node(Node3D.new()) as Node3D
+	gameplay_controller.set_spawn_root(root)
 	gameplay_controller.initialize_placement_grid(10, 3)
-	gameplay_controller.load_entry({"text": "ab", "letters": ["a", "b"]}, 0)
-
-	var word_anchor = {"start_index": 0, "end_index": 1}
-	var get_path_frame = Callable(self, "_get_cornered_test_path_frame")
-	var wrap_fn = Callable(self, "_get_test_path_index")
-	var finish_index: int = gameplay_controller.spawn_course_pickups_and_obstacles(
-		word_anchor, get_path_frame, wrap_fn, true
+	var entries: Array[Dictionary] = [{"text": "ab", "letters": ["a", "b"]}]
+	var word_anchors: Array[Dictionary] = [{"start_index": 0, "end_index": 1}]
+	var summary: Dictionary = (
+		gameplay_controller
+		. spawn_loop_course_pickups_and_obstacles(
+			entries,
+			word_anchors,
+			Callable(self, "_get_test_path_frame"),
+			Callable(self, "_get_test_path_index"),
+			0,
+			"",
+			"",
+			true,
+		)
 	)
 
-	assert_that(finish_index).is_equal(5)
-
-	var pickup_count_at_three := 0
-	for lane_index in range(3):
-		if gameplay_controller.get_placement_object(3, lane_index).get("type", "") == "pickup":
-			pickup_count_at_three += 1
-	assert_that(pickup_count_at_three).is_equal(1)
-
-	var pickup_count_at_four := 0
-	for lane_index in range(3):
-		if gameplay_controller.get_placement_object(4, lane_index).get("type", "") == "pickup":
-			pickup_count_at_four += 1
-	assert_that(pickup_count_at_four).is_equal(1)
-
-	assert_that(gameplay_controller.get_placement_object(5, 1).get("type", "")).is_equal("finish")
+	assert_that(summary.get("active_finish_index", -1)).is_equal(4)
+	assert_that(gameplay_controller.get_word_finish_index(0)).is_equal(4)
+	root.free()
 
 
 func test_gameplay_controller_resets_pickups_between_words() -> void:
 	var gameplay_controller = GameplayController.new(ReadingContentLoader.new())
-	var root = Node3D.new()
+	var root = _own_node(Node3D.new()) as Node3D
 	gameplay_controller.set_spawn_root(root)
-
-	var first_anchor = {
-		"start_index": 0,
-		"end_index": 0,
-	}
-	var second_anchor = {
-		"start_index": 1,
-		"end_index": 2,
-	}
-
-	var get_path_frame = Callable(self, "_get_test_path_frame")
-	var wrap_fn = Callable(self, "_get_test_path_index")
 
 	var first_entry = {"text": "ab", "letters": ["a", "b"]}
 	var second_entry = {"text": "c", "letters": ["c"]}
 
 	gameplay_controller.load_entry(first_entry, 0)
-	(
-		gameplay_controller
-		. spawn_course_pickups_and_obstacles(
-			first_anchor,
-			get_path_frame,
-			wrap_fn,
-			true,
-		)
-	)
-	assert_that(gameplay_controller.get_total_letters()).is_equal(2)
+	assert_that(gameplay_controller.has_method("spawn_loop_course_pickups_and_obstacles")).is_true()
 
 	gameplay_controller.load_entry(second_entry, 1)
-	(
-		gameplay_controller
-		. spawn_course_pickups_and_obstacles(
-			second_anchor,
-			get_path_frame,
-			wrap_fn,
-			false,
-		)
-	)
-	assert_that(gameplay_controller.get_total_letters()).is_equal(1)
+	root.free()

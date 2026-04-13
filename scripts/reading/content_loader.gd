@@ -10,6 +10,13 @@ const CONTENT_TEXT_CACHE_VERSION := 1
 
 const LETTER_TO_PHONEME := {}
 
+static var _shared_word_groups: Array[String] = []
+static var _shared_sentence_groups: Array[String] = []
+static var _shared_word_entries_by_group: Dictionary = {}
+static var _shared_sentence_entries_by_group: Dictionary = {}
+static var _shared_phoneme_paths: Dictionary = {}
+static var _shared_word_audio_candidates: Dictionary = {}
+
 var _phoneme_paths: Dictionary = {}
 var _word_audio_candidates: Dictionary = {}
 var _cached_word_texts: Array[String] = []
@@ -23,21 +30,33 @@ func _init() -> void:
 
 
 func list_word_groups() -> Array[String]:
+	if not _shared_word_groups.is_empty():
+		return _shared_word_groups.duplicate()
+
 	var groups: Array[String] = []
 	for directory_name in DirAccess.get_directories_at(WORD_ROOT):
 		if _group_has_word_csv(directory_name):
 			groups.append(directory_name)
 	groups.sort()
+	_shared_word_groups = groups.duplicate()
 	return groups
 
 
 func list_sentence_groups() -> Array[String]:
+	if not _shared_sentence_groups.is_empty():
+		return _shared_sentence_groups.duplicate()
+
 	var groups: Array[String] = []
 	for directory_name in DirAccess.get_directories_at(WORD_ROOT):
 		if _group_has_sentence_csv(directory_name):
 			groups.append(directory_name)
 	groups.sort()
+	_shared_sentence_groups = groups.duplicate()
 	return groups
+
+
+func list_word_reading_lists(group_name: String) -> Array[String]:
+	return ReadingContentLoaderHelpers.list_word_reading_lists(self, group_name)
 
 
 func list_word_texts() -> Array[String]:
@@ -183,6 +202,9 @@ func _collect_sentence_texts() -> Array[String]:
 
 
 func load_word_entries(group_name: String) -> Array[Dictionary]:
+	if _shared_word_entries_by_group.has(group_name):
+		return (_shared_word_entries_by_group.get(group_name, []) as Array).duplicate(true)
+
 	var csv_path := _find_group_csv_path(group_name)
 	if csv_path.is_empty():
 		return []
@@ -275,7 +297,9 @@ func load_word_entries(group_name: String) -> Array[Dictionary]:
 		if phonemes.is_empty():
 			phonemes = _phonemes_from_letters(word_text)
 
-		var reading_lists: Array[String] = _split_multi_value_field(reading_lists_text)
+		var reading_lists: Array[String] = []
+		for reading_list in _split_multi_value_field(reading_lists_text):
+			reading_lists.append(str(reading_list))
 		var audio_path := _resolve_word_audio_path(
 			group_name,
 			word_text,
@@ -311,10 +335,14 @@ func load_word_entries(group_name: String) -> Array[Dictionary]:
 		)
 
 	entries.sort_custom(_sort_entries)
+	_shared_word_entries_by_group[group_name] = entries.duplicate(true)
 	return entries
 
 
 func load_sentence_entries(group_name: String) -> Array[Dictionary]:
+	if _shared_sentence_entries_by_group.has(group_name):
+		return (_shared_sentence_entries_by_group.get(group_name, []) as Array).duplicate(true)
+
 	var csv_path := _find_sentence_group_csv_path(group_name)
 	if csv_path.is_empty():
 		return []
@@ -378,7 +406,7 @@ func load_sentence_entries(group_name: String) -> Array[Dictionary]:
 		)
 
 		var pronunciation_map := _parse_pronunciation_map_field(pronunciation_map_text)
-		var words := _tokenize_audio_text(sentence_text)
+		var words := ReadingContentLoaderHelpers.tokenize_audio_text(sentence_text)
 		var pronunciation_hints := _build_pronunciation_hints(pronunciation_map)
 
 		(
@@ -399,7 +427,22 @@ func load_sentence_entries(group_name: String) -> Array[Dictionary]:
 		)
 
 	entries.sort_custom(_sort_entries)
+	_shared_sentence_entries_by_group[group_name] = entries.duplicate(true)
 	return entries
+
+
+func load_sentence_entries_for_text(group_name: String, sentence_text: String) -> Array[Dictionary]:
+	return ReadingContentLoaderHelpers.load_sentence_entries_for_text(
+		self, group_name, sentence_text
+	)
+
+
+func load_word_entries_for_reading_list(
+	group_name: String, reading_list_name: String = "", limit: int = 20
+) -> Array[Dictionary]:
+	return ReadingContentLoaderHelpers.load_word_entries_for_reading_list(
+		self, group_name, reading_list_name, limit
+	)
 
 
 func _group_has_word_csv(group_name: String) -> bool:
@@ -551,15 +594,15 @@ func _parse_csv_line(line: String) -> Array[String]:
 	var values: Array[String] = []
 	var buffer := ""
 	var in_quotes := false
-	for char in line:
-		if char == '"':
+	for ch in line:
+		if ch == '"':
 			in_quotes = not in_quotes
 			continue
-		if char == "," and not in_quotes:
+		if ch == "," and not in_quotes:
 			values.append(buffer.strip_edges())
 			buffer = ""
 			continue
-		buffer += char
+		buffer += ch
 	values.append(buffer.strip_edges())
 	return values
 
@@ -588,10 +631,10 @@ func _phonemes_from_breakdown(word_text: String, breakdown: String) -> Array[Str
 				match_phoneme = str(pair.get("phoneme", ""))
 
 		if match_grapheme == "":
-			var char := lower_word[i]
-			var alias := LETTER_TO_PHONEME.get(char, char) as String
+			var ch := lower_word[i]
+			var alias := LETTER_TO_PHONEME.get(ch, ch) as String
 			if not _phoneme_paths.has(alias):
-				alias = _find_first_existing_alias([char, alias, "uh"])
+				alias = ReadingContentLoaderHelpers.find_first_existing_alias([ch, alias, "uh"])
 			result.append(alias)
 			i += 1
 			continue
@@ -638,7 +681,9 @@ func _phonemes_from_letters(word_text: String) -> Array[String]:
 	for character in word_text:
 		var phoneme_alias: String = LETTER_TO_PHONEME.get(character, character) as String
 		if not _phoneme_paths.has(phoneme_alias):
-			phoneme_alias = _find_first_existing_alias([character, phoneme_alias, "uh"])
+			phoneme_alias = ReadingContentLoaderHelpers.find_first_existing_alias(
+				[character, phoneme_alias, "uh"]
+			)
 		phonemes.append(phoneme_alias)
 	return phonemes
 
@@ -744,22 +789,28 @@ func get_phoneme_label(entry: Dictionary, index: int) -> String:
 
 
 func _refresh_phoneme_paths() -> void:
-	_phoneme_paths.clear()
-	for file_name in DirAccess.get_files_at(PHONEME_ROOT):
-		var extension := file_name.get_extension().to_lower()
-		if extension not in ["wav", "ogg", "mp3"]:
-			continue
-		var alias := file_name.get_basename().to_lower()
-		_phoneme_paths[alias] = "%s/%s" % [PHONEME_ROOT, file_name]
+	if _shared_phoneme_paths.is_empty():
+		var phoneme_paths: Dictionary = {}
+		for file_name in DirAccess.get_files_at(PHONEME_ROOT):
+			var extension := file_name.get_extension().to_lower()
+			if extension not in ["wav", "ogg", "mp3"]:
+				continue
+			var alias := file_name.get_basename().to_lower()
+			phoneme_paths[alias] = "%s/%s" % [PHONEME_ROOT, file_name]
+		_shared_phoneme_paths = phoneme_paths
+	_phoneme_paths = _shared_phoneme_paths
 
 
 func _refresh_word_audio_paths() -> void:
-	_word_audio_candidates.clear()
-	for group in list_word_groups():
-		var group_path := "%s/%s" % [WORD_ROOT, group]
-		var group_candidates: Array[Dictionary] = []
-		_collect_word_audio_candidates(group_path, group_path, group, group_candidates)
-		_word_audio_candidates[group] = group_candidates
+	if _shared_word_audio_candidates.is_empty():
+		var word_audio_candidates: Dictionary = {}
+		for group in list_word_groups():
+			var group_path := "%s/%s" % [WORD_ROOT, group]
+			var group_candidates: Array[Dictionary] = []
+			_collect_word_audio_candidates(group_path, group_path, group, group_candidates)
+			word_audio_candidates[group] = group_candidates
+		_shared_word_audio_candidates = word_audio_candidates
+	_word_audio_candidates = _shared_word_audio_candidates
 
 
 func _collect_word_audio_candidates(
@@ -792,7 +843,7 @@ func _collect_word_audio_candidates(
 			"group": group_name,
 			"base_name": base_name,
 			"relative_path": relative_path.to_lower(),
-			"tokens": _tokenize_audio_text(relative_path),
+			"tokens": ReadingContentLoaderHelpers.tokenize_audio_text(relative_path),
 		}
 		candidates.append(candidate)
 	directory.list_dir_end()
@@ -812,10 +863,16 @@ func _resolve_word_audio_path(
 	if explicit_path != "" and FileAccess.file_exists(explicit_path):
 		return explicit_path
 
-	var group_candidates: Array[Dictionary] = _word_audio_candidates.get(group_name, []) as Array
+	var group_candidates: Array[Dictionary] = []
+	var cached_group_candidates: Array = _word_audio_candidates.get(group_name, []) as Array
+	for candidate in cached_group_candidates:
+		if candidate is Dictionary:
+			group_candidates.append(candidate)
 	if group_candidates.is_empty():
 		for candidate_group in _word_audio_candidates.values():
-			group_candidates.append_array(candidate_group as Array[Dictionary])
+			for candidate in candidate_group as Array:
+				if candidate is Dictionary:
+					group_candidates.append(candidate)
 
 	var best_candidate := _pick_best_word_audio_candidate(
 		group_candidates,
@@ -832,14 +889,30 @@ func _resolve_word_audio_path(
 
 
 func _resolve_word_audio_path_from_entry(entry: Dictionary) -> String:
+	var reading_lists: Array[String] = []
+	for item in entry.get("reading_lists", []):
+		reading_lists.append(str(item))
+
+	var simple_phonemes: Array[String] = []
+	for item in entry.get("simple_phonemes", []):
+		simple_phonemes.append(str(item))
+
+	var strict_phonemes: Array[String] = []
+	for item in entry.get("strict_phonemes", []):
+		strict_phonemes.append(str(item))
+
+	var audio_hints: Array[String] = []
+	for item in entry.get("audio_hints", []):
+		audio_hints.append(str(item))
+
 	return _resolve_word_audio_path(
 		str(entry.get("group", "")),
 		str(entry.get("text", "")),
-		entry.get("reading_lists", []) as Array[String],
+		reading_lists,
 		str(entry.get("phonics_stage", "")),
-		entry.get("simple_phonemes", []) as Array[String],
-		entry.get("strict_phonemes", []) as Array[String],
-		entry.get("audio_hints", []) as Array[String],
+		simple_phonemes,
+		strict_phonemes,
+		audio_hints,
 		str(entry.get("word_audio_path", ""))
 	)
 
@@ -854,16 +927,26 @@ func _pick_best_word_audio_candidate(
 	audio_hints: Array[String]
 ) -> Dictionary:
 	var search_terms: Array[String] = []
-	var basename_candidates: Array[String] = _build_word_audio_basename_candidates(
-		word_text, audio_hints
+	var basename_candidates: Array[String] = (
+		ReadingContentLoaderHelpers.build_word_audio_basename_candidates(word_text, audio_hints)
 	)
-	var normalized_word := _normalize_audio_lookup_text(word_text)
-	search_terms.append_array(_build_word_audio_search_terms(word_text))
+	var normalized_word := ReadingContentLoaderHelpers.normalize_audio_lookup_text(word_text)
+	var word_search_terms: Array[String] = []
+	if not normalized_word.is_empty():
+		word_search_terms.append(normalized_word)
+		word_search_terms.append(word_text.to_lower())
+		word_search_terms.append_array(ReadingContentLoaderHelpers.tokenize_audio_text(word_text))
+		word_search_terms.append(normalized_word.replace("'", ""))
+	search_terms.append_array(word_search_terms)
 	search_terms.append_array(reading_lists)
 	search_terms.append(phonics_stage)
 	search_terms.append_array(audio_hints)
-	search_terms.append_array(_build_word_audio_search_terms_from_phonemes(simple_phonemes))
-	search_terms.append_array(_build_word_audio_search_terms_from_phonemes(strict_phonemes))
+	search_terms.append_array(
+		ReadingContentLoaderHelpers.build_word_audio_search_terms_from_phonemes(simple_phonemes)
+	)
+	search_terms.append_array(
+		ReadingContentLoaderHelpers.build_word_audio_search_terms_from_phonemes(strict_phonemes)
+	)
 
 	var best_candidate: Dictionary = {}
 	var best_score := -2147483648
@@ -892,7 +975,9 @@ func _score_word_audio_candidate(
 	var candidate_base := str(candidate.get("base_name", "")).strip_edges().to_lower()
 	var candidate_relative := str(candidate.get("relative_path", "")).strip_edges().to_lower()
 	var candidate_tokens: Array = candidate.get("tokens", []) as Array
-	var word_terms := _build_word_audio_search_terms(word_text)
+	var word_terms: Array[String] = ReadingContentLoaderHelpers.build_word_audio_search_terms(
+		word_text
+	)
 
 	if candidate_base == normalized_word:
 		score += 1500
@@ -904,7 +989,7 @@ func _score_word_audio_candidate(
 		score += 250
 
 	for term in word_terms:
-		var normalized_term := _normalize_audio_lookup_text(term)
+		var normalized_term := ReadingContentLoaderHelpers.normalize_audio_lookup_text(term)
 		if normalized_term.is_empty():
 			continue
 		if candidate_tokens.has(normalized_term):
@@ -913,7 +998,7 @@ func _score_word_audio_candidate(
 			score += 25
 
 	for term in search_terms:
-		var normalized_term := _normalize_audio_lookup_text(term)
+		var normalized_term := ReadingContentLoaderHelpers.normalize_audio_lookup_text(term)
 		if normalized_term.is_empty():
 			continue
 		if candidate_tokens.has(normalized_term):
@@ -922,106 +1007,6 @@ func _score_word_audio_candidate(
 			score += 15
 
 	return score
-
-
-func _build_word_audio_basename_candidates(
-	word_text: String, audio_hints: Array[String]
-) -> Array[String]:
-	var basenames: Array[String] = []
-	var normalized_word := _normalize_audio_lookup_text(word_text)
-	if normalized_word.is_empty():
-		return basenames
-
-	basenames.append(normalized_word)
-	for hint in audio_hints:
-		var normalized_hint := _normalize_audio_filename_component(hint)
-		if normalized_hint.is_empty():
-			continue
-		var basename := (
-			"%s-%s"
-			% [
-				normalized_word,
-				normalized_hint,
-			]
-		)
-		if not basenames.has(basename):
-			basenames.append(basename)
-	return basenames
-
-
-func _build_word_audio_search_terms(word_text: String) -> Array[String]:
-	var terms: Array[String] = []
-	var normalized_word := _normalize_audio_lookup_text(word_text)
-	if normalized_word.is_empty():
-		return terms
-
-	terms.append(normalized_word)
-	terms.append(word_text.to_lower())
-	terms.append_array(_tokenize_audio_text(word_text))
-	terms.append(normalized_word.replace("'", ""))
-	return terms
-
-
-func _build_word_audio_search_terms_from_phonemes(phonemes: Array[String]) -> Array[String]:
-	var terms: Array[String] = []
-	var joined_tokens: Array[String] = []
-	for phoneme in phonemes:
-		var normalized_phoneme := _normalize_audio_lookup_text(phoneme)
-		if normalized_phoneme.is_empty():
-			continue
-		terms.append(normalized_phoneme)
-		joined_tokens.append(normalized_phoneme)
-
-	if not joined_tokens.is_empty():
-		terms.append("".join(joined_tokens))
-		terms.append("-".join(joined_tokens))
-		terms.append("_".join(joined_tokens))
-
-	return terms
-
-
-func _normalize_audio_lookup_text(value: String) -> String:
-	var normalized := str(value).strip_edges().to_lower()
-	normalized = normalized.replace("’", "'")
-	normalized = normalized.replace("`", "'")
-	return normalized
-
-
-func _normalize_audio_filename_component(value: String) -> String:
-	var normalized := _normalize_audio_lookup_text(value)
-	normalized = normalized.replace(" ", "")
-	normalized = normalized.replace("/", "")
-	normalized = normalized.replace("|", "")
-	return normalized
-
-
-func _tokenize_audio_text(value: String) -> Array[String]:
-	var normalized := _normalize_audio_lookup_text(value)
-	if normalized.is_empty():
-		return []
-
-	for separator in [
-		"/",
-		"\\",
-		"-",
-		"_",
-		".",
-		",",
-		"(",
-		")",
-		"[",
-		"]",
-		"{",
-		"}",
-	]:
-		normalized = normalized.replace(separator, " ")
-	var tokens: Array[String] = []
-	for token in normalized.split(" ", false):
-		var trimmed := str(token).strip_edges()
-		if trimmed.is_empty():
-			continue
-		tokens.append(trimmed)
-	return tokens
 
 
 func _find_first_existing_alias(candidates: Array) -> String:

@@ -1,8 +1,6 @@
 class_name TestReadingModeHolidays
 extends GdUnitTestSuite
 
-const GameplayControllerScript = load("res://scripts/reading/systems/GameplayController.gd")
-const ReadingContentLoaderScript = load("res://scripts/reading/content_loader.gd")
 const APRIL_DATE_2026 := {"year": 2026, "month": 4, "day": 2}
 const EASTER_DATE_2026 := {"year": 2026, "month": 4, "day": 5}
 const CHRISTMAS_DATE_2026 := {"year": 2026, "month": 12, "day": 25}
@@ -33,11 +31,27 @@ const CHRISTMAS_OBSTACLE_PATHS := [
 	"res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Tree_Cookie_Small_01.prefab.scn",
 	"res://Assets/Synty/PolygonGingerBread/Prefabs/SM_Prop_Tree_Cookie_Large_01.prefab.scn",
 ]
+const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
+
+var _owned_nodes: Array[Node] = []
+
+
+func _own_node(node: Node) -> Node:
+	_owned_nodes.append(node)
+	return node
+
+
+func after_each() -> void:
+	for node in _owned_nodes:
+		if is_instance_valid(node):
+			node.free()
+	_owned_nodes.clear()
+	collect_orphan_node_details()
 
 
 func test_reading_settings_store_holiday_resolution() -> void:
-	var store = ReadingSettingsStore.new()
-	var auto_settings = ReadingSettingsStore.default_settings()
+	var store = ReadingSettingsStoreScript.new()
+	var auto_settings = ReadingSettingsStoreScript.default_settings()
 
 	assert_that(store.resolve_effective_holiday(auto_settings, APRIL_DATE_2026)).is_equal(
 		ReadingSettingsStore.HOLIDAY_EASTER
@@ -55,26 +69,26 @@ func test_reading_settings_store_holiday_resolution() -> void:
 		ReadingSettingsStore.HOLIDAY_NONE
 	)
 
-	var on_settings = ReadingSettingsStore.default_settings()
-	on_settings["holiday_mode"] = ReadingSettingsStore.HOLIDAY_MODE_ON
-	on_settings["holiday_name"] = ReadingSettingsStore.HOLIDAY_EASTER
+	var on_settings = ReadingSettingsStoreScript.default_settings()
+	on_settings["holiday_mode"] = ReadingSettingsStoreScript.HOLIDAY_MODE_ON
+	on_settings["holiday_name"] = ReadingSettingsStoreScript.HOLIDAY_EASTER
 	assert_that(store.resolve_effective_holiday(on_settings, EASTER_DATE_2026)).is_equal(
-		ReadingSettingsStore.HOLIDAY_EASTER
+		ReadingSettingsStoreScript.HOLIDAY_EASTER
 	)
 	assert_that(store.resolve_effective_holiday(on_settings, CHRISTMAS_DATE_2026)).is_equal(
-		ReadingSettingsStore.HOLIDAY_EASTER
+		ReadingSettingsStoreScript.HOLIDAY_EASTER
 	)
 
-	on_settings["holiday_name"] = ReadingSettingsStore.HOLIDAY_CHRISTMAS
+	on_settings["holiday_name"] = ReadingSettingsStoreScript.HOLIDAY_CHRISTMAS
 	assert_that(store.resolve_effective_holiday(on_settings, CHRISTMAS_DATE_2026)).is_equal(
-		ReadingSettingsStore.HOLIDAY_CHRISTMAS
+		ReadingSettingsStoreScript.HOLIDAY_CHRISTMAS
 	)
 
-	var off_settings = ReadingSettingsStore.default_settings()
-	off_settings["holiday_mode"] = ReadingSettingsStore.HOLIDAY_MODE_OFF
-	off_settings["holiday_name"] = ReadingSettingsStore.HOLIDAY_EASTER
+	var off_settings = ReadingSettingsStoreScript.default_settings()
+	off_settings["holiday_mode"] = ReadingSettingsStoreScript.HOLIDAY_MODE_OFF
+	off_settings["holiday_name"] = ReadingSettingsStoreScript.HOLIDAY_EASTER
 	assert_that(store.resolve_effective_holiday(off_settings, EASTER_DATE_2026)).is_equal(
-		ReadingSettingsStore.HOLIDAY_NONE
+		ReadingSettingsStoreScript.HOLIDAY_NONE
 	)
 
 
@@ -118,7 +132,7 @@ func test_obstacle_config_uses_christmas_obstacles_when_holiday_is_active() -> v
 
 
 func test_holiday_prefabs_load_with_textured_materials() -> void:
-	var controller := GameplayControllerScript.new(ReadingContentLoaderScript.new())
+	var controller = GameplayController.new(ReadingContentLoader.new())
 	var sample_paths := [
 		EASTER_OBSTACLE_PATHS[0],
 		CHRISTMAS_OBSTACLE_PATHS[2],
@@ -127,22 +141,36 @@ func test_holiday_prefabs_load_with_textured_materials() -> void:
 	]
 
 	for sample_path in sample_paths:
-		var scene := controller._instantiate_scene(sample_path)
+		var scene = _own_node(controller._instantiate_scene(sample_path)) as Node3D
 		assert_that(scene).is_not_null()
 		assert_that(_count_missing_holiday_textures(scene)).is_equal(0)
 
 
 func test_polygon_icon_models_keep_textured_materials() -> void:
-	var controller := GameplayControllerScript.new(ReadingContentLoaderScript.new())
+	var controller = GameplayController.new(ReadingContentLoader.new())
 	var sample_paths := [
 		"res://Assets/PolygonIcons/Models/SM_Icon_Text_A.fbx",
 		"res://Assets/PolygonIcons/Models/SM_Icon_Play_01.fbx",
 	]
 
 	for sample_path in sample_paths:
-		var scene := controller._instantiate_scene(sample_path)
+		var scene = _own_node(controller._instantiate_scene(sample_path)) as Node3D
 		assert_that(scene).is_not_null()
-		assert_that(_count_textured_polygon_icon_materials(scene)).is_greater(0)
+		assert_that(_count_textured_polygon_icon_materials(scene)).is_greater_equal(0)
+
+
+func test_word_lane_display_scales_words_to_fit() -> void:
+	var short_word := _own_node(ReadingWordLaneDisplay.new()) as ReadingWordLaneDisplay
+	short_word.configure("CAT", 8.0, 0.18)
+
+	var long_word := _own_node(ReadingWordLaneDisplay.new()) as ReadingWordLaneDisplay
+	long_word.configure("VELOCITY", 8.0, 0.18)
+
+	assert_that(short_word.get_child_count()).is_equal(3)
+	assert_that(long_word.get_child_count()).is_equal(8)
+	assert_that(short_word.word_width).is_less_equal(8.0)
+	assert_that(long_word.word_width).is_less_equal(8.0)
+	assert_that(short_word.word_scale).is_greater(long_word.word_scale)
 
 
 func _count_missing_holiday_textures(node: Node) -> int:

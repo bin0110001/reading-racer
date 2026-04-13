@@ -4,6 +4,12 @@ class_name MovementSystem extends RefCounted
 ## Separates movement logic from gameplay, map display, and map generation concerns.
 
 ## Constants (copied from ReadingMode for independence)
+const SmoothSteeringControllerScript = preload(
+	"res://scripts/reading/control_profiles/SmoothSteeringController.gd"
+)
+const ThrottleSteeringControllerScript = preload(
+	"res://scripts/reading/control_profiles/ThrottleSteeringController.gd"
+)
 const LANE_WIDTH := 4.0
 const LANE_HALF_WIDTH := LANE_WIDTH * 0.5
 const LANE_POSITIONS := [-LANE_WIDTH, 0.0, LANE_WIDTH]
@@ -25,10 +31,10 @@ var player_forward_speed: float = PLAYER_SPEED
 var slowed_timer: float = 0.0
 
 ## Control profile
-var control_profile: ControlProfile = null
+var control_profile = null
 
 
-func _init(p_control_profile: ControlProfile) -> void:
+func _init(p_control_profile) -> void:
 	control_profile = p_control_profile
 
 
@@ -49,8 +55,8 @@ func update(delta: float) -> void:
 	var speed := SLOWED_SPEED if slowed_timer > 0.0 else PLAYER_SPEED
 
 	# Handle throttle control vs automatic forward
-	if control_profile is ThrottleSteeringController:
-		var throttle = (control_profile as ThrottleSteeringController).get_throttle()
+	if control_profile and control_profile.get_script() == ThrottleSteeringControllerScript:
+		var throttle = control_profile.get_throttle()
 		player_forward_speed = speed * maxf(0.0, throttle) if throttle >= 0 else -speed * throttle
 	else:
 		player_forward_speed = speed
@@ -65,8 +71,8 @@ func update_position_and_heading(delta: float, track_pose: Dictionary) -> void:
 		return
 
 	var target_lane_offset: float = LANE_POSITIONS[lane_index]
-	if control_profile is SmoothSteeringController:
-		var smooth_controller := control_profile as SmoothSteeringController
+	if control_profile and control_profile.get_script() == SmoothSteeringControllerScript:
+		var smooth_controller: SmoothSteeringController = control_profile
 		var steering_angle := smooth_controller.get_steering_angle()
 		var steering_ratio := 0.0
 		if SmoothSteeringController.MAX_STEERING_ANGLE > 0.0:
@@ -84,10 +90,10 @@ func update_position_and_heading(delta: float, track_pose: Dictionary) -> void:
 	var steering_influence = control_profile.get_steering_influence(player_heading, target_heading)
 	var player_steering = 0.0
 
-	if control_profile is SmoothSteeringController:
-		player_steering = (control_profile as SmoothSteeringController).get_steering_angle()
-	elif control_profile is ThrottleSteeringController:
-		player_steering = (control_profile as ThrottleSteeringController).get_steering_angle()
+	if control_profile and control_profile.get_script() == SmoothSteeringControllerScript:
+		player_steering = control_profile.get_steering_angle()
+	elif control_profile and control_profile.get_script() == ThrottleSteeringControllerScript:
+		player_steering = control_profile.get_steering_angle()
 
 	# Blend steering: auto-steer influence + player input
 	var blended_heading = player_heading
@@ -102,7 +108,7 @@ func update_position_and_heading(delta: float, track_pose: Dictionary) -> void:
 
 
 ## Change the control profile (called when difficulty changes)
-func set_control_profile(profile: ControlProfile) -> void:
+func set_control_profile(profile) -> void:
 	control_profile = profile
 
 

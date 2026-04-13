@@ -29,6 +29,7 @@ enabled=PackedStringArray("res://addons/Godot-MToon-Shader/plugin.cfg", "res://a
 
 [gdunit4]
 
+settings/test/test_timeout_seconds=1
 settings/test/test_discovery=true
 
 [physics]

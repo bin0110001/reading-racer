@@ -7,6 +7,7 @@ class_name GameplayController extends RefCounted
 signal pickup_collected(letter: String, phoneme_label: String)
 signal obstacle_hit(duration: float)
 signal word_completed
+signal word_choice_selected(choice_text: String, correct: bool, word_index: int)
 
 ## Constants
 const PICKUP_RADIUS_X := 4.0
@@ -24,9 +25,9 @@ const DEFAULT_LANE_COUNT := 3
 const PICKUP_OBSTACLE_SUPPRESSION_WINDOW_MS := 250
 const PICKUP_OBSTACLE_DISTANCE_THRESHOLD := (PICKUP_RADIUS_X * 4.0) / 2.0 + OBSTACLE_RADIUS_X + 0.5
 
-const LETTER_MODEL_PREFAB_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.prefab"
 const LETTER_MODEL_FBX_BASE := "res://Assets/PolygonIcons/Models/SM_Icon_Text_%s.fbx"
 const LETTER_MODEL_SCENE_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.tscn"
+const ReadingWordLaneDisplayScript = preload("res://scripts/reading/word_lane_display.gd")
 const POLYGON_ICONS_MODEL_PREFIX := "res://Assets/PolygonIcons/Models/"
 const POLYGON_ICONS_PREFAB_PREFIX := "res://Assets/PolygonIcons/Prefabs/"
 const POLYGON_ICONS_MATERIAL_PATHS_BY_GUID := {
@@ -70,9 +71,13 @@ const GINGERBREAD_REPLACEMENT_MATERIAL_PATH := (
 	"res://Assets/Synty/PolygonGingerBread/Materials/" + "PolygonGingerbread_01_A.material"
 )
 const ObstacleConfigClass = preload("res://scripts/reading/obstacle_config.gd")
+const WordChoiceTriggerScript = preload(
+	"res://scripts/reading/triggers/ReadingWordChoiceTrigger.gd"
+)
+const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
 
 ## References to content
-var content_loader: ReadingContentLoader = null
+var content_loader = null
 var player: Area3D = null
 var obstacle_config: ObstacleConfig = null
 
@@ -82,24 +87,27 @@ var current_entry_index: int = -1
 var next_target_index: int = 0
 var pickup_triggers: Array[ReadingPickupTrigger] = []
 var obstacle_triggers: Array[ReadingObstacleTrigger] = []
-var finish_gate_trigger: ReadingFinishGateTrigger = null
+var word_choice_triggers: Array[ReadingWordChoiceTrigger] = []
+var finish_gate_trigger = null
 var spawn_root: Node3D = null
 var word_course_plans: Array[Dictionary] = []
 var word_pickup_registry: Dictionary = {}
 var word_obstacle_registry: Dictionary = {}
+var word_choice_registry: Dictionary = {}
 var word_finish_registry: Dictionary = {}
 
 # Placement grid for testable map workflow (path_index x lane_index)
 var placement_grid: Array = []
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _letter_model_path_cache: Dictionary = {}
 
 # Tracking purpose-built pickup-versus-obstacle suppression.
 var _last_pickup_letter_index: int = -1
 var _last_pickup_time_ms: int = -1000
 
 
-func _init(p_content_loader: ReadingContentLoader) -> void:
+func _init(p_content_loader) -> void:
 	content_loader = p_content_loader
 	_rng.randomize()
 	obstacle_config = ObstacleConfigClass.new()
@@ -119,7 +127,8 @@ func _get_obstacle_scale(obstacle_data: Dictionary) -> float:
 
 
 func _apply_obstacle_scale(
-	obstacle_trigger: ReadingObstacleTrigger, obstacle_data: Dictionary
+	_obstacle_trigger,
+	_obstacle_data: Dictionary,
 ) -> void:
 	# Holiday obstacle visuals may be scaled, but the trigger collision box should stay constant.
 	# This keeps obstacle hit detection independent of decorative model size.
@@ -150,10 +159,15 @@ func load_entry(entry: Dictionary, entry_index: int) -> void:
 				obstacle_triggers.append(obstacle_trigger)
 				valid_obstacles.append(obstacle_trigger)
 		word_obstacle_registry[entry_index] = valid_obstacles
+	if word_choice_registry.has(entry_index):
+		var valid_choices: Array = []
+		for choice_trigger in word_choice_registry[entry_index]:
+			if is_instance_valid(choice_trigger):
+				word_choice_triggers.append(choice_trigger)
+				valid_choices.append(choice_trigger)
+		word_choice_registry[entry_index] = valid_choices
 	if word_finish_registry.has(entry_index):
-		var candidate_finish: ReadingFinishGateTrigger = (
-			word_finish_registry[entry_index] as ReadingFinishGateTrigger
-		)
+		var candidate_finish = word_finish_registry[entry_index] as ReadingFinishGateTrigger
 		if candidate_finish != null and is_instance_valid(candidate_finish):
 			finish_gate_trigger = candidate_finish
 			finish_gate_trigger.set_pickups_collected(false)
@@ -431,12 +445,19 @@ func _spawn_word_course_plan(
 			letter_model.rotation = Vector3(0.0, -PI * 0.5, 0.0)
 			pickup_trigger.add_child(letter_model)
 		else:
-			var label_node = Label3D.new()
-			label_node.text = pickup_trigger.letter.to_upper()
-			label_node.font_size = 512
-			label_node.scale = Vector3(2.0, 2.0, 2.0)
-			label_node.rotation = Vector3(0.0, -PI * 0.5, 0.0)
-			label_node.modulate = Color(1.0, 0.75, 0.0)
+			var label_node = (
+				WorldTextBuilder
+				. create_billboard_label(
+					pickup_trigger.letter.to_upper(),
+					512,
+					Color(1.0, 0.75, 0.0),
+					0,
+					BaseMaterial3D.BILLBOARD_ENABLED,
+					Vector3.ZERO,
+					Vector3.ONE * 2.0,
+					Vector3(0.0, -PI * 0.5, 0.0),
+				)
+			)
 			pickup_trigger.add_child(label_node)
 
 		var light = OmniLight3D.new()
@@ -524,6 +545,77 @@ func _spawn_word_course_plan(
 	}
 
 
+func spawn_loop_course_word_choices(
+	choice_entries: Array,
+	choice_path_index: int,
+	active_word_index: int,
+	p_get_path_frame: Callable,
+	clear_existing: bool = true,
+) -> Array:
+	if choice_entries.is_empty() or spawn_root == null:
+		return []
+
+	if clear_existing:
+		for child in spawn_root.get_children():
+			child.queue_free()
+
+	_clear_course_registries(false)
+	word_choice_triggers.clear()
+
+	var path_frame: Dictionary = p_get_path_frame.call(choice_path_index)
+	var segment_pos: Vector3 = path_frame.get("center", Vector3.ZERO) as Vector3
+	var segment_heading := float(path_frame.get("heading", 0.0))
+	var path_right: Vector3 = path_frame.get("right", Vector3.RIGHT) as Vector3
+
+	for choice_index in range(choice_entries.size()):
+		var choice_data := choice_entries[choice_index] as Dictionary
+		var trigger := WordChoiceTriggerScript.new()
+		trigger.position = segment_pos + path_right * float(choice_index - 1) * 6.0
+		trigger.position += Vector3(0.0, 2.2, 0.0)
+		trigger.rotation.y = segment_heading
+		trigger.word_index = active_word_index
+		trigger.choice_text = str(choice_data.get("text", ""))
+		trigger.is_correct = bool(choice_data.get("is_correct", false))
+		trigger.trigger_width = 10.0
+		trigger.trigger_depth = 4.0
+		spawn_root.add_child(trigger)
+
+		var word_visual := _create_word_choice_visual(str(choice_data.get("text", "")))
+		if word_visual == null:
+			continue
+		word_visual.name = "WordLaneDisplay"
+		word_visual.position = Vector3(0.0, 2.8, 0.0)
+		trigger.add_child(word_visual)
+		trigger.choice_selected.connect(_on_word_choice_triggered)
+		word_choice_triggers.append(trigger)
+
+	return word_choice_triggers
+
+
+func _on_word_choice_triggered(choice_text: String, correct: bool, word_index: int) -> void:
+	if word_index != current_entry_index:
+		return
+	word_choice_selected.emit(choice_text, correct, word_index)
+
+
+func _create_word_choice_visual(choice_text: String) -> Node3D:
+	var word_visual := ReadingWordLaneDisplayScript.new() as Node3D
+	if word_visual == null:
+		return (
+			WorldTextBuilder
+			. create_billboard_label(
+				choice_text,
+				72,
+				Color(1.0, 0.95, 0.45),
+				8,
+				BaseMaterial3D.BILLBOARD_ENABLED,
+			)
+		)
+
+	(word_visual as ReadingWordLaneDisplayScript).configure(choice_text, 8.0, 0.18)
+	return word_visual
+
+
 func _compute_word_seed(word_index: int, entry: Dictionary) -> int:
 	var seed_value := 17 + word_index * 101
 	var text := str(entry.get("text", ""))
@@ -538,9 +630,11 @@ func _clear_course_registries(clear_placement_grid: bool = true) -> void:
 	word_course_plans.clear()
 	word_pickup_registry.clear()
 	word_obstacle_registry.clear()
+	word_choice_registry.clear()
 	word_finish_registry.clear()
 	pickup_triggers.clear()
 	obstacle_triggers.clear()
+	word_choice_triggers.clear()
 	finish_gate_trigger = null
 	if clear_placement_grid:
 		_clear_placement_grid()
@@ -577,45 +671,71 @@ func reset() -> void:
 	next_target_index = 0
 	if finish_gate_trigger != null:
 		finish_gate_trigger.set_pickups_collected(false)
+	for choice_trigger in word_choice_triggers:
+		if is_instance_valid(choice_trigger):
+			choice_trigger.queue_free()
+	word_choice_triggers.clear()
 
 
 func _create_letter_model(letter: String) -> Node3D:
 	var normalized := str(letter).strip_edges().to_upper()
+	var letter_model: Node3D = null
 	if normalized == "" or normalized.length() != 1:
-		return null
+		return letter_model
 
-	var candidate_paths := [
-		LETTER_MODEL_SCENE_BASE % normalized,
-		LETTER_MODEL_PREFAB_BASE % normalized,
-		LETTER_MODEL_FBX_BASE % normalized,
-	]
+	if _letter_model_path_cache.has(normalized):
+		var cached_path := str(_letter_model_path_cache.get(normalized, ""))
+		if not cached_path.is_empty():
+			var cached_resource := load(cached_path)
+			if cached_resource is PackedScene:
+				var cached_scene_inst = (cached_resource as PackedScene).instantiate()
+				if cached_scene_inst is Node3D:
+					letter_model = cached_scene_inst as Node3D
+			elif cached_resource is Mesh:
+				var cached_mesh_instance := MeshInstance3D.new()
+				cached_mesh_instance.mesh = cached_resource
+				letter_model = cached_mesh_instance
 
-	for path in candidate_paths:
-		if not FileAccess.file_exists(path):
-			continue
+	if letter_model == null:
+		var candidate_paths := [
+			LETTER_MODEL_SCENE_BASE % normalized,
+			LETTER_MODEL_FBX_BASE % normalized,
+		]
 
-		var resource := load(path)
-		if resource == null:
-			continue
+		for path in candidate_paths:
+			if not FileAccess.file_exists(path):
+				continue
 
-		if resource is PackedScene:
-			var scene_inst = (resource as PackedScene).instantiate()
-			if scene_inst is Node3D:
-				return scene_inst as Node3D
-			continue
+			var resource := load(path)
+			if resource == null:
+				continue
 
-		if resource is Mesh:
-			var mi = MeshInstance3D.new()
-			mi.mesh = resource
-			return mi
+			if resource is PackedScene:
+				var scene_inst = (resource as PackedScene).instantiate()
+				if scene_inst is Node3D:
+					_letter_model_path_cache[normalized] = path
+					letter_model = scene_inst as Node3D
+					break
+				continue
 
-		# Some imports can produce a MeshInstance3D directly (unlikely), or a Node3D from FBX.
-		var object_resource := resource as Object
-		if object_resource is Node3D:
-			return object_resource as Node3D
+			if resource is Mesh:
+				var mi = MeshInstance3D.new()
+				mi.mesh = resource
+				_letter_model_path_cache[normalized] = path
+				letter_model = mi
+				break
+
+			# Some imports can produce a MeshInstance3D directly (unlikely), or a Node3D from FBX.
+			var object_resource := resource as Object
+			if object_resource is Node3D:
+				_letter_model_path_cache[normalized] = path
+				letter_model = object_resource as Node3D
+				break
 
 	# Last fallback: no model or not usable
-	return null
+	if letter_model == null:
+		_letter_model_path_cache[normalized] = ""
+	return letter_model
 
 
 func _is_corner_segment(p_get_path_frame: Callable, p_path_wrap: Callable, path_index: int) -> bool:
@@ -678,7 +798,7 @@ func get_placement_object(path_index: int, lane_index: int) -> Dictionary:
 
 
 func _on_pickup_triggered(
-	_letter_index: int, _letter: String, _phoneme_label: String, trigger: ReadingPickupTrigger
+	_letter_index: int, _letter: String, _phoneme_label: String, trigger
 ) -> void:
 	if trigger.word_index != current_entry_index:
 		return
@@ -707,7 +827,7 @@ func _on_pickup_triggered(
 	next_target_index += 1
 
 
-func _on_obstacle_hit(_obstacle_index: int, trigger: ReadingObstacleTrigger) -> void:
+func _on_obstacle_hit(_obstacle_index: int, trigger) -> void:
 	if trigger.word_index != current_entry_index:
 		return
 
@@ -728,12 +848,12 @@ func _on_obstacle_hit(_obstacle_index: int, trigger: ReadingObstacleTrigger) -> 
 
 	# Safety guard: require the player to be close before applying slowdown.
 	if player != null and player.is_inside_tree():
-		var player_pos := player.global_transform.origin
-		var obstacle_pos := trigger.global_transform.origin
+		var player_pos: Vector3 = player.global_transform.origin
+		var obstacle_pos: Vector3 = trigger.global_transform.origin
 		var x_dist: float = abs(player_pos.x - obstacle_pos.x)
 		var z_dist: float = abs(player_pos.z - obstacle_pos.z)
-		var min_x := (trigger.trigger_width * 0.5) + 2.0
-		var min_z := (trigger.trigger_depth * 0.5) + 3.0
+		var min_x: float = (trigger.trigger_width * 0.5) + 2.0
+		var min_z: float = (trigger.trigger_depth * 0.5) + 3.0
 		if x_dist > min_x or z_dist > min_z:
 			var warn_msg = "[GameplayController] Obstacle hit suppressed due player too far "
 			var detail_format = "(x=%.2f z=%.2f) trigger=(%.2f %.2f)"
@@ -747,7 +867,7 @@ func _on_obstacle_hit(_obstacle_index: int, trigger: ReadingObstacleTrigger) -> 
 	obstacle_hit.emit(trigger.penalty_seconds)
 
 
-func _on_finish_reached(trigger: ReadingFinishGateTrigger) -> void:
+func _on_finish_reached(trigger) -> void:
 	if trigger.word_index != current_entry_index:
 		return
 	word_completed.emit()

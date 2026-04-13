@@ -7,3 +7,8 @@
 *.onnx
 *.bin
 /audio/words/
+
+# Temporary test and run artifacts
+temp-*.log
+temp-*.txt
+fresh-gdscript-check*.txt

@@ -5,8 +5,35 @@ extends GdUnitTestSuite
 const GPUCameraBrush = preload(
 	"res://addons/gpu-texture-painter/gpu-texture-painter-f4faff9106b51a2e95ef6d74abec774ce86cd453/addons/gpu_texture_painter/brush/camera_brush.gd"
 )
+const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
+const PhonemePlayerScript = preload("res://scripts/reading/phoneme_player.gd")
+const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
 
 var vehicle_select_utils := VehicleSelectUtils.new()
+var _owned_nodes: Array[Node] = []
+var _owned_paint_owners: Array[PaintHelperOwnerStub] = []
+
+
+func _own_node(node: Node) -> Node:
+	_owned_nodes.append(node)
+	return node
+
+
+func _own_paint_owner(paint_owner: PaintHelperOwnerStub) -> PaintHelperOwnerStub:
+	_owned_paint_owners.append(paint_owner)
+	return paint_owner
+
+
+func after_each() -> void:
+	for paint_owner in _owned_paint_owners:
+		if is_instance_valid(paint_owner):
+			paint_owner.cleanup()
+	_owned_paint_owners.clear()
+	for node in _owned_nodes:
+		if is_instance_valid(node):
+			node.free()
+	_owned_nodes.clear()
+	collect_orphan_node_details()
 
 
 class PaintHelperOwnerStub:
@@ -78,43 +105,60 @@ class PaintHelperOwnerStub:
 				closest_index = index
 		return closest_index
 
+	func cleanup() -> void:
+		for node in [
+			paint_color_palette,
+			brush_controls_parent,
+			camera_brush,
+			brush_shape_selector,
+			brush_shape_preview,
+			vehicle_name_label,
+		]:
+			if is_instance_valid(node):
+				node.free()
+
 
 func test_player_vehicle_library_default_scene_exists() -> void:
-	var scene_path := PlayerVehicleLibrary.resolve_vehicle_scene_path({})
+	var player_vehicle_library := PlayerVehicleLibraryScript.new()
+	var scene_path := player_vehicle_library.resolve_vehicle_scene_path_instance({})
 	assert_that(scene_path.is_empty()).is_false()
 	assert_that(ResourceLoader.exists(scene_path)).is_true()
 
 
 func test_reading_settings_store_persists_vehicle_customization() -> void:
-	var store = ReadingSettingsStore.new()
+	var store = ReadingSettingsStoreScript.new()
 	assert_that(store).is_not_null()
 	var original_settings := store.load_settings()
-	var updated_settings := ReadingSettingsStore.default_settings()
-	updated_settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID] = "mail_truck"
-	updated_settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH] = (
-		PlayerVehicleLibrary.get_vehicle_scene_path("mail_truck")
+	var updated_settings := ReadingSettingsStoreScript.default_settings()
+	updated_settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID] = "mail_truck"
+	updated_settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH] = (
+		PlayerVehicleLibraryScript.new().get_vehicle_scene_path_instance("mail_truck")
 	)
-	updated_settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR] = "d14b32ff"
+	updated_settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR] = "d14b32ff"
 
 	store.save_settings(updated_settings)
 	var loaded_settings := store.load_settings()
 
-	assert_that(loaded_settings.get(PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID, "")).is_equal(
-		"mail_truck"
+	(
+		assert_that(loaded_settings.get(PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID, ""))
+		. is_equal("mail_truck")
 	)
 	(
-		assert_that(loaded_settings.get(PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH, ""))
-		. is_equal(PlayerVehicleLibrary.get_vehicle_scene_path("mail_truck"))
+		assert_that(
+			loaded_settings.get(PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH, "")
+		)
+		. is_equal(PlayerVehicleLibraryScript.new().get_vehicle_scene_path_instance("mail_truck"))
 	)
-	assert_that(loaded_settings.get(PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR, "")).is_equal(
-		"d14b32ff"
+	(
+		assert_that(loaded_settings.get(PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR, ""))
+		. is_equal("d14b32ff")
 	)
 
 	store.save_settings(original_settings)
 
 
 func test_phoneme_player_leaves_source_stream_unmodified_when_looping() -> void:
-	var phoneme_player := PhonemePlayer.new()
+	var phoneme_player := _own_node(PhonemePlayerScript.new())
 	phoneme_player._ready()
 
 	var source_stream := AudioStreamWAV.new()
@@ -135,10 +179,10 @@ func test_phoneme_player_leaves_source_stream_unmodified_when_looping() -> void:
 
 
 func test_player_vehicle_library_fit_instance_scales_to_max_dimension() -> void:
-	var player_library = PlayerVehicleLibrary.new()
+	var player_library = PlayerVehicleLibraryScript.new()
 	var model := MeshInstance3D.new()
 	model.mesh = BoxMesh.new()
-	var root := Node3D.new()
+	var root := _own_node(Node3D.new()) as Node3D
 	root.add_child(model)
 
 	# Without scaling, one axis of the default BoxMesh is 1.0 units (size vector set in mesh).
@@ -151,7 +195,7 @@ func test_player_vehicle_library_fit_instance_scales_to_max_dimension() -> void:
 
 
 func test_player_vehicle_library_apply_paint_color_modifies_material() -> void:
-	var player_library = PlayerVehicleLibrary.new()
+	var player_library = PlayerVehicleLibraryScript.new()
 	var mesh_instance := MeshInstance3D.new()
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(1, 1, 1)
@@ -166,8 +210,8 @@ func test_player_vehicle_library_apply_paint_color_modifies_material() -> void:
 
 
 func test_player_vehicle_library_apply_vehicle_decals_adds_decal_nodes() -> void:
-	var player_library = PlayerVehicleLibrary.new()
-	var root := Node3D.new()
+	var player_library = PlayerVehicleLibraryScript.new()
+	var root := _own_node(Node3D.new()) as Node3D
 	var mesh := MeshInstance3D.new()
 	mesh.mesh = BoxMesh.new()
 	root.add_child(mesh)
@@ -203,8 +247,8 @@ func test_player_vehicle_library_apply_vehicle_decals_adds_decal_nodes() -> void
 
 
 func test_player_vehicle_library_decal_textures_have_feathered_edges() -> void:
-	var player_library = PlayerVehicleLibrary.new()
-	var root := Node3D.new()
+	var player_library = PlayerVehicleLibraryScript.new()
+	var root := _own_node(Node3D.new()) as Node3D
 	var mesh := MeshInstance3D.new()
 	mesh.mesh = BoxMesh.new()
 	root.add_child(mesh)
@@ -235,9 +279,12 @@ func test_player_vehicle_library_decal_textures_have_feathered_edges() -> void:
 
 
 func test_build_vehicle_settings_persists_empty_decals() -> void:
-	var settings := PlayerVehicleLibrary.build_vehicle_settings("mail_truck", Color(1, 0, 0), [])
-	assert_that(settings.has(PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS)).is_true()
-	assert_that(settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS].size()).is_equal(0)
+	var player_vehicle_library := PlayerVehicleLibraryScript.new()
+	var settings := player_vehicle_library.build_vehicle_settings_instance(
+		"mail_truck", Color(1, 0, 0), []
+	)
+	assert_that(settings.has(PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS)).is_true()
+	assert_that(settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS].size()).is_equal(0)
 
 
 func test_vehicle_select_brush_shapes_have_soft_edges() -> void:
@@ -257,7 +304,7 @@ func test_vehicle_select_brush_shapes_have_soft_edges() -> void:
 
 
 func test_vehicle_select_paint_helpers_syncs_brush_shape_preview_and_bleed() -> void:
-	var paint_owner := PaintHelperOwnerStub.new()
+	var paint_owner := _own_paint_owner(PaintHelperOwnerStub.new())
 	var paint_helpers := VehicleSelectPaintHelpers.new()
 	paint_helpers.set_selected_brush_shape(paint_owner, "circle", false)
 
@@ -277,7 +324,7 @@ func test_vehicle_select_paint_helpers_syncs_brush_shape_preview_and_bleed() -> 
 
 
 func test_vehicle_select_paint_helpers_increases_bleed_with_brush_size() -> void:
-	var paint_owner := PaintHelperOwnerStub.new()
+	var paint_owner := _own_paint_owner(PaintHelperOwnerStub.new())
 	var paint_helpers := VehicleSelectPaintHelpers.new()
 
 	paint_helpers.set_brush_preset_by_size(paint_owner, 0.12, false)
@@ -290,7 +337,7 @@ func test_vehicle_select_paint_helpers_increases_bleed_with_brush_size() -> void
 
 
 func test_vehicle_select_paint_helpers_sync_does_not_retrigger_selection_handlers() -> void:
-	var paint_owner := PaintHelperOwnerStub.new()
+	var paint_owner := _own_paint_owner(PaintHelperOwnerStub.new())
 	var paint_helpers := VehicleSelectPaintHelpers.new()
 	paint_helpers.build_paint_color_palette(paint_owner)
 	paint_helpers.build_brush_size_selector(paint_owner, paint_owner.brush_controls_parent)
@@ -322,8 +369,10 @@ func test_vehicle_select_overlay_shader_uses_alpha_blending() -> void:
 
 
 func test_player_vehicle_library_sets_overlay_lightmap_hints() -> void:
-	var vehicle := PlayerVehicleLibrary.instantiate_vehicle_from_settings(
-		ReadingSettingsStore.default_settings(), PlayerVehicleLibrary.PREVIEW_MAX_DIMENSION
+	var player_vehicle_library := PlayerVehicleLibraryScript.new()
+	var vehicle := player_vehicle_library.instantiate_vehicle_from_settings_instance(
+		ReadingSettingsStoreScript.default_settings(),
+		PlayerVehicleLibraryScript.PREVIEW_MAX_DIMENSION
 	)
 	assert_that(vehicle).is_not_null()
 
@@ -332,7 +381,7 @@ func test_player_vehicle_library_sets_overlay_lightmap_hints() -> void:
 	assert_that(mesh_instance.mesh).is_not_null()
 	assert_that(mesh_instance.mesh.lightmap_size_hint != Vector2i.ZERO).is_true()
 
-	vehicle.queue_free()
+	vehicle.free()
 
 
 func _find_first_mesh_instance(node: Node) -> MeshInstance3D:

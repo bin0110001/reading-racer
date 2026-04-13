@@ -40,8 +40,22 @@ const HOLIDAY_MODE_ON := "on"
 const HOLIDAY_MODE_OFF := "off"
 const HOLIDAY_MODES := [HOLIDAY_MODE_AUTO, HOLIDAY_MODE_ON, HOLIDAY_MODE_OFF]
 
+const READING_MODE_STANDARD := "standard"
+const READING_MODE_WORD_CHOICE := "word_choice"
+const READING_MODES := [READING_MODE_STANDARD, READING_MODE_WORD_CHOICE]
+
+const READING_SCOPE_READING_LIST := "reading_list"
+const READING_SCOPE_SENTENCE := "sentence"
+const READING_SCOPE_WORD_LIST := "word_list"
+const READING_SCOPE_MODES := [
+	READING_SCOPE_READING_LIST,
+	READING_SCOPE_SENTENCE,
+	READING_SCOPE_WORD_LIST,
+]
+
 
 static func default_settings() -> Dictionary:
+	var vehicle_library := PlayerVehicleLibraryScript.new()
 	return {
 		"control_mode": CONTROL_MODE_KEYBOARD,
 		"word_group": "sightwords",
@@ -51,10 +65,14 @@ static func default_settings() -> Dictionary:
 		"map_style": MAP_STYLE_CIRCULAR,
 		"holiday_mode": HOLIDAY_MODE_AUTO,
 		"holiday_name": HOLIDAY_NONE,
+		"reading_mode": READING_MODE_STANDARD,
+		"reading_scope_mode": READING_SCOPE_READING_LIST,
+		"reading_scope_value": "",
+		"reading_scope_limit": 20,
 		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID:
 		PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID,
 		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH:
-		PlayerVehicleLibraryScript.get_vehicle_scene_path(
+		vehicle_library.get_vehicle_scene_path_instance(
 			PlayerVehicleLibraryScript.DEFAULT_VEHICLE_ID
 		),
 		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR:
@@ -98,6 +116,18 @@ func load_settings() -> Dictionary:
 			settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID]
 		)
 	)
+	settings["reading_mode"] = str(
+		config.get_value("reading", "reading_mode", settings["reading_mode"])
+	)
+	settings["reading_scope_mode"] = str(
+		config.get_value("reading", "reading_scope_mode", settings["reading_scope_mode"])
+	)
+	settings["reading_scope_value"] = str(
+		config.get_value("reading", "reading_scope_value", settings["reading_scope_value"])
+	)
+	settings["reading_scope_limit"] = max(
+		1, int(config.get_value("reading", "reading_scope_limit", settings["reading_scope_limit"]))
+	)
 	settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH] = str(
 		config.get_value(
 			"reading",
@@ -118,9 +148,9 @@ func load_settings() -> Dictionary:
 	)
 	var parsed = JSON.parse_string(raw_decals)
 	if parsed is Array:
-		settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS] = parsed
+		settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS] = parsed
 	else:
-		settings[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS] = []
+		settings[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS] = []
 	settings["paint_brush_size"] = clampf(
 		float(config.get_value("reading", "paint_brush_size", settings["paint_brush_size"])),
 		0.05,
@@ -148,26 +178,30 @@ func save_settings(settings: Dictionary) -> void:
 	config.set_value("reading", "holiday_name", str(merged["holiday_name"]))
 	config.set_value(
 		"reading",
-		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID,
-		str(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_ID])
+		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID,
+		str(merged[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID])
 	)
 	config.set_value(
 		"reading",
-		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH,
-		str(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_SCENE_PATH])
+		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH,
+		str(merged[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_SCENE_PATH])
 	)
 	config.set_value(
 		"reading",
-		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR,
-		str(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_COLOR])
+		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR,
+		str(merged[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_COLOR])
 	)
 	config.set_value(
 		"reading",
-		PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS,
-		JSON.stringify(merged[PlayerVehicleLibrary.SETTING_KEY_VEHICLE_DECALS])
+		PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS,
+		JSON.stringify(merged[PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_DECALS])
 	)
 	config.set_value("reading", "paint_brush_size", str(merged["paint_brush_size"]))
 	config.set_value("reading", "paint_brush_shape", str(merged["paint_brush_shape"]))
+	config.set_value("reading", "reading_mode", str(merged["reading_mode"]))
+	config.set_value("reading", "reading_scope_mode", str(merged["reading_scope_mode"]))
+	config.set_value("reading", "reading_scope_value", str(merged["reading_scope_value"]))
+	config.set_value("reading", "reading_scope_limit", int(merged["reading_scope_limit"]))
 	config.save(SAVE_PATH)
 
 
@@ -239,18 +273,18 @@ func _shift_date_parts(year: int, month: int, day: int, offset_days: int) -> Dic
 
 func _calculate_easter_date(year: int) -> Dictionary:
 	var a := year % 19
-	var b := int(year / 100)
+	var b := floori(float(year) / 100.0)
 	var c := year % 100
-	var d := int(b / 4)
+	var d := floori(float(b) / 4.0)
 	var e := b % 4
-	var f := int((b + 8) / 25)
-	var g := int((b - f + 1) / 3)
+	var f := floori(float(b + 8) / 25.0)
+	var g := floori(float(b - f + 1) / 3.0)
 	var h := (19 * a + b - d - g + 15) % 30
-	var i := int(c / 4)
+	var i := floori(float(c) / 4.0)
 	var k := c % 4
 	var l := (32 + 2 * e + 2 * i - h - k) % 7
-	var m := int((a + 11 * h + 22 * l) / 451)
-	var month := int((h + l - 7 * m + 114) / 31)
+	var m := floori(float(a + 11 * h + 22 * l) / 451.0)
+	var month := floori(float(h + l - 7 * m + 114) / 31.0)
 	var day := ((h + l - 7 * m + 114) % 31) + 1
 	return {"year": year, "month": month, "day": day}
 
@@ -311,11 +345,11 @@ func is_holiday_in_date_range(holiday_name: String, date_override = null) -> boo
 	if holiday_name == HOLIDAY_NONE:
 		return false
 	var date_parts := _get_date_parts(date_override)
-	var range = get_holiday_date_range(holiday_name, date_parts)
-	if range.is_empty():
+	var holiday_range = get_holiday_date_range(holiday_name, date_parts)
+	if holiday_range.is_empty():
 		return false
-	var start = range.get("start", {}) as Dictionary
-	var end = range.get("end", {}) as Dictionary
+	var start = holiday_range.get("start", {}) as Dictionary
+	var end = holiday_range.get("end", {}) as Dictionary
 	if start.is_empty() or end.is_empty():
 		return false
 

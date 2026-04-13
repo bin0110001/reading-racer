@@ -32,13 +32,13 @@ func spawn_vehicle(vehicle_index: int) -> Node3D:
 		race_track.get_starting_position(vehicle_index) if race_track else Transform3D.IDENTITY
 	)
 	vehicle.global_transform = start_transform
+
+	_setup_vehicle_structure(vehicle, vehicle_index)
 	add_child(vehicle)
 
 	vehicle.player_id = vehicle_index
 	if game_manager:
 		game_manager.register_player(vehicle_index, vehicle)
-
-	_setup_vehicle_structure(vehicle, vehicle_index)
 	return vehicle
 
 
@@ -51,7 +51,7 @@ func _setup_vehicle_structure(vehicle: Node3D, index: int) -> void:
 	sphere.gravity_scale = 0.0
 	sphere.linear_damp = 0.1
 	sphere.angular_damp = 4.0
-	sphere.continuous_collision_detection = true
+	sphere.continuous_cd = true
 	sphere.contact_monitor = true
 	sphere.max_contacts_reported = 1
 
@@ -81,7 +81,6 @@ func _setup_vehicle_structure(vehicle: Node3D, index: int) -> void:
 	vehicle.add_child(container)
 
 	# Load model if it exists
-	var color = vehicle_colors[index] if index < vehicle_colors.size() else "yellow"
 	var model_path = _get_vehicle_model_path(index)
 	if ResourceLoader.exists(model_path):
 		var model_scene = load(model_path) as PackedScene
@@ -128,9 +127,9 @@ func _setup_vehicle_structure(vehicle: Node3D, index: int) -> void:
 	container.add_child(engine_sound)
 
 
-func _create_wheel(name: String) -> Node3D:
+func _create_wheel(wheel_name: String) -> Node3D:
 	var wheel = Node3D.new()
-	wheel.name = name
+	wheel.name = wheel_name
 	return wheel
 
 

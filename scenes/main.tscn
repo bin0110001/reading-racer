@@ -1,22 +1,22 @@
-[gd_scene load_steps=25 format=3 uid="uid://clq7nox1juh3a"]
+[gd_scene load_steps=26 format=3 uid="uid://clq7nox1juh3a"]
 
 [ext_resource type="Environment" uid="uid://c3bs0wfxpri8g" path="res://scenes/main-environment.tres" id="1_q4t1r"]
-[ext_resource type="Script" uid="uid://bqite16pastgo" path="res://scripts/Vehicle.cs" id="2_xjb8m"]
+[ext_resource type="Script" path="res://scripts/Vehicle.gd" id="2_xjb8m"]
 [ext_resource type="Texture2D" uid="uid://c026qrhqxgw3n" path="res://sprites/smoke.png" id="4_h8cj5"]
 [ext_resource type="PackedScene" uid="uid://bynb5jk1d478y" path="res://models/vehicle-truck-yellow.glb" id="4_ya4ey"]
-[ext_resource type="Script" uid="uid://b24bstassw26s" path="res://scripts/view.cs" id="5_0lrhn"]
+[ext_resource type="Script" path="res://scripts/View.gd" id="5_0lrhn"]
 [ext_resource type="AudioStream" uid="uid://2in1jtv5bh0y" path="res://audio/skid.ogg" id="5_choun"]
 [ext_resource type="AudioStream" uid="uid://j6x2is8pyt8y" path="res://audio/engine.ogg" id="6_choun"]
 [ext_resource type="MeshLibrary" uid="uid://b6myd2b7l2o2j" path="res://models/Library/mesh-library.tres" id="8_eg7gk"]
 [ext_resource type="PackedScene" uid="uid://c44tfiddyjjm1" path="res://models/vehicle-truck-green.glb" id="9_cmq2j"]
 [ext_resource type="PackedScene" uid="uid://c5e64mpylh1ge" path="res://models/vehicle-truck-purple.glb" id="10_p3c1o"]
 [ext_resource type="PackedScene" uid="uid://b34e2pvbemfac" path="res://models/vehicle-truck-red.glb" id="11_wocnk"]
-[ext_resource type="Script" path="res://scripts/GameManager.cs" id="12_game_mgr"]
-[ext_resource type="Script" path="res://scripts/RaceTrack.cs" id="13_race_track"]
-[ext_resource type="Script" path="res://scripts/RaceHUD.cs" id="14_race_hud"]
-[ext_resource type="Script" path="res://scripts/VehicleSpawner.cs" id="15_vehicle_spawner"]
-[ext_resource type="Script" path="res://scripts/RaceController.cs" id="16_race_controller"]
-[ext_resource type="Script" path="res://scripts/NetworkManager.cs" id="17_network_mgr"]
+[ext_resource type="Script" path="res://scripts/GameManager.gd" id="12_game_mgr"]
+[ext_resource type="Script" path="res://scripts/RaceTrack.gd" id="13_race_track"]
+[ext_resource type="Script" path="res://scripts/RaceHUD.gd" id="14_race_hud"]
+[ext_resource type="Script" path="res://scripts/VehicleSpawner.gd" id="15_vehicle_spawner"]
+[ext_resource type="Script" path="res://scripts/RaceController.gd" id="16_race_controller"]
+[ext_resource type="Script" path="res://scripts/debug/debug_menu_launcher.gd" id="17_debug_menu_launcher"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tfk12"]
 transparency = 1
@@ -83,6 +83,9 @@ script = ExtResource("13_race_track")
 [node name="RaceHUD" type="CanvasLayer" parent="."]
 script = ExtResource("14_race_hud")
 
+[node name="DebugMenuLauncher" type="CanvasLayer" parent="."]
+script = ExtResource("17_debug_menu_launcher")
+
 [node name="VehicleSpawner" type="Node3D" parent="."]
 script = ExtResource("15_vehicle_spawner")
 
@@ -90,7 +93,6 @@ script = ExtResource("15_vehicle_spawner")
 script = ExtResource("16_race_controller")
 
 [node name="NetworkManager" type="Node" parent="."]
-script = ExtResource("17_network_mgr")
 
 [node name="Environment" type="WorldEnvironment" parent="."]
 environment = ExtResource("1_q4t1r")

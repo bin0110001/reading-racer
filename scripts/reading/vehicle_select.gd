@@ -68,6 +68,7 @@ const BRUSH_SHAPE_OPTIONS := [
 	{"label": "Star", "id": "star"},
 	{"label": "Smoke", "id": "smoke"},
 ]
+
 var vehicle_select_utils := VehicleSelectUtilsScript.new()
 var vehicle_select_paint_helpers := VehicleSelectPaintHelpersScript.new()
 var settings_store := ReadingSettingsStoreScript.new()
@@ -415,6 +416,7 @@ func _update_vehicle_selection_display() -> void:
 
 func _load_settings() -> void:
 	var settings = settings_store.load_settings()
+	var vehicle_library := PlayerVehicleLibraryScript.new()
 	vehicle_select_paint_helpers.set_selected_paint_color(
 		self, PlayerVehicleLibraryScript.resolve_paint_color(settings), false
 	)
@@ -447,7 +449,8 @@ func _load_settings() -> void:
 
 
 func _select_vehicle(vehicle_id: String) -> void:
-	selected_vehicle_id = PlayerVehicleLibraryScript.resolve_vehicle_id(
+	var vehicle_library := PlayerVehicleLibraryScript.new()
+	selected_vehicle_id = _vehicle_library.resolve_vehicle_id_instance(
 		{PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID: vehicle_id}
 	)
 	for index in range(vehicle_catalog.size()):
@@ -464,10 +467,11 @@ func _refresh_vehicle_preview() -> void:
 		vehicle_preview_instance.queue_free()
 		vehicle_preview_instance = null
 
-	var vehicle_settings := PlayerVehicleLibraryScript.build_vehicle_settings(
+	var vehicle_library := PlayerVehicleLibraryScript.new()
+	var vehicle_settings := _vehicle_library.build_vehicle_settings_instance(
 		selected_vehicle_id, selected_vehicle_color, selected_vehicle_decals
 	)
-	vehicle_preview_instance = PlayerVehicleLibraryScript.instantiate_vehicle_from_settings(
+	vehicle_preview_instance = _vehicle_library.instantiate_vehicle_from_settings_instance(
 		vehicle_settings, PlayerVehicleLibraryScript.PREVIEW_MAX_DIMENSION * 1.2
 	)
 	if vehicle_preview_instance == null:
@@ -480,7 +484,7 @@ func _refresh_vehicle_preview() -> void:
 	if camera_brush != null:
 		camera_brush.get_atlas_textures()
 	var selected_vehicle: Dictionary = (
-		PlayerVehicleLibraryScript.get_vehicle_by_id(selected_vehicle_id) as Dictionary
+		_vehicle_library.get_vehicle_by_id_instance(selected_vehicle_id) as Dictionary
 	)
 	var vehicle_name: String = str(selected_vehicle.get("name", "Vehicle"))
 	vehicle_name_label.text = vehicle_name
@@ -518,7 +522,8 @@ func _clear_preview_decals() -> void:
 func _apply_preview_decals() -> void:
 	if vehicle_preview_instance == null:
 		return
-	PlayerVehicleLibraryScript.apply_vehicle_decals(
+	var vehicle_library := PlayerVehicleLibraryScript.new()
+	_vehicle_library.apply_vehicle_decals_instance(
 		vehicle_preview_instance, selected_vehicle_decals
 	)
 
@@ -538,7 +543,8 @@ func _collect_decals(node: Node) -> Array:
 
 
 func _apply_vehicle_settings(settings: Dictionary) -> void:
-	var vehicle_settings := PlayerVehicleLibraryScript.build_vehicle_settings(
+	var vehicle_library := PlayerVehicleLibraryScript.new()
+	var vehicle_settings := _vehicle_library.build_vehicle_settings_instance(
 		selected_vehicle_id, selected_vehicle_color, selected_vehicle_decals
 	)
 	for key in vehicle_settings.keys():

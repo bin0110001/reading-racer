@@ -1,6 +1,8 @@
 class_name ReadingObstacle
 extends Node3D
 
+const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
+
 var lane_index := 0
 var segment_index := 0
 var cleared := false
@@ -12,11 +14,17 @@ var _base_height := 0.0
 
 func _ready() -> void:
 	_base_height = position.y
-	_label.text = "!"
-	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_label.font_size = 48
-	_label.modulate = Color(1.0, 0.35, 0.25)
-	_label.position = Vector3(0.0, 1.5, 0.0)
+	_label = (
+		WorldTextBuilder
+		. create_billboard_label(
+			"!",
+			48,
+			Color(1.0, 0.35, 0.25),
+			0,
+			BaseMaterial3D.BILLBOARD_ENABLED,
+			Vector3(0.0, 1.5, 0.0),
+		)
+	)
 	add_child(_label)
 
 

@@ -62,7 +62,11 @@ func _generate_loop_layout() -> Dictionary:
 	}
 
 	var layout = generator.generate_loop_layout(limited_entries, config)
-	return layout
+	if layout is TrackLayout:
+		return layout.to_dictionary()
+	if layout is Dictionary:
+		return layout
+	return {}
 
 
 func _resolve_word_group(loader: Object) -> String:
@@ -78,19 +82,17 @@ func _resolve_word_group(loader: Object) -> String:
 
 func _build_starting_positions(layout: Dictionary) -> Array[Transform3D]:
 	var start_positions: Array[Transform3D] = []
-	var path_cells: Array = layout.get("path_cells", [])
 	var start_positions_data: Array = layout.get("start_positions", [])
 
 	for pos_data in start_positions_data:
 		var cell = pos_data.get("cell", Vector3i.ZERO)
 		var rotation_y = pos_data.get("rotation_y", 0.0)
-		var forward_dir = pos_data.get("forward_dir", Vector3i(1, 0, 0))
 
 		var world_pos = _cell_to_world_position(cell, layout)
-		var transform = Transform3D()
-		transform.origin = world_pos + Vector3(0, starting_height, 0)
-		transform.basis = Basis.from_euler(Vector3(0, rotation_y, 0))
-		start_positions.append(transform)
+		var start_transform = Transform3D()
+		start_transform.origin = world_pos + Vector3(0, starting_height, 0)
+		start_transform.basis = Basis.from_euler(Vector3(0, rotation_y, 0))
+		start_positions.append(start_transform)
 
 	return start_positions
 
@@ -108,7 +110,6 @@ func _rebuild_checkpoints(layout: Dictionary) -> void:
 
 func _cell_to_world_position(cell: Vector3i, layout: Dictionary) -> Vector3:
 	var grid_size = layout.get("grid_size", Vector3i(10, 1, 10))
-	var track_size = layout.get("track_size", Vector2i(10, 10))
 	var cell_length = cell_world_length
 
 	var world_x = (cell.x - grid_size.x / 2.0) * cell_length
@@ -120,9 +121,9 @@ func _cell_to_world_position(cell: Vector3i, layout: Dictionary) -> Vector3:
 func _create_default_starting_positions() -> Array[Transform3D]:
 	var positions: Array[Transform3D] = []
 	for i in range(8):
-		var transform = Transform3D()
-		transform.origin = Vector3(0, starting_height, i * starting_row_spacing)
-		positions.append(transform)
+		var start_transform = Transform3D()
+		start_transform.origin = Vector3(0, starting_height, i * starting_row_spacing)
+		positions.append(start_transform)
 	return positions
 
 

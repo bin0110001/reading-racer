@@ -14,7 +14,7 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if Input.is_action_just_pressed("bounce"):
+	if InputMap.has_action("bounce") and Input.is_action_just_pressed("bounce"):
 		match game_manager.get_race_state():
 			GameManager.RaceState.WAITING:
 				game_manager.start_countdown()

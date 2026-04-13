@@ -2,9 +2,13 @@
 ## Phase 2: Basic scene structure validation
 extends GdUnitTestSuite
 
+const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
+
 const SCENE_PATHS = [
 	"res://scenes/main.tscn",
-	"res://scenes/reading_mode.tscn",
+	"res://scenes/debug/debug_home.tscn",
+	"res://scenes/level_types/pronunciation_mode.tscn",
+	"res://scenes/level_types/whole_word_mode.tscn",
 	"res://scenes/level_select.tscn",
 ]
 const VEHICLE_SELECT_SCENE_PATH = "res://scenes/vehicle_select.tscn"
@@ -15,42 +19,77 @@ func test_all_scenes_load_without_errors() -> void:
 	for scene_path in SCENE_PATHS:
 		assert_that(ResourceLoader.exists(scene_path)).is_true()
 
-		var scene: PackedScene = ResourceLoader.load(scene_path) as PackedScene
+		var scene = ResourceLoader.load(scene_path) as PackedScene
 		assert_that(scene).is_not_null()
 		assert_that(scene is PackedScene).is_true()
 
 		var instance = scene.instantiate()
 		assert_that(instance).is_not_null()
-		instance.queue_free()
+		instance.free()
 
 
 func test_main_scene_structure() -> void:
 	"""Verify main.tscn has basic expected structure."""
-	var scene: PackedScene = load("res://scenes/main.tscn") as PackedScene
+	var scene = load("res://scenes/main.tscn") as PackedScene
 	var instance: Node = scene.instantiate() as Node
+	var debug_launcher = _find_child_by_name(instance, "DebugMenuLauncher")
 
 	# Main scene should have a root node
 	assert_that(instance).is_not_null()
 	assert_that(instance is Node).is_true()
+	assert_that(debug_launcher).is_not_null()
 
-	instance.queue_free()
+	instance.free()
+
+
+func test_debug_home_scene_structure() -> void:
+	"""Verify debug_home.tscn has basic expected structure."""
+	var scene = load("res://scenes/debug/debug_home.tscn") as PackedScene
+	var instance: Node = scene.instantiate() as Node
+	add_child(instance)
+	await get_tree().process_frame
+
+	var button_stack = _find_child_by_name(instance, "DebugButtonStack")
+	var close_button = _find_child_by_name(instance, "CloseDebugMenuButton")
+	var whole_word_button = _find_child_by_name(instance, "WholeWordModeButton")
+
+	assert_that(instance).is_not_null()
+	assert_that(instance is Control).is_true()
+	assert_that(button_stack).is_not_null()
+	assert_that(button_stack.get_child_count()).is_equal(5)
+	assert_that(close_button).is_not_null()
+	assert_that(whole_word_button).is_not_null()
+
+	remove_child(instance)
+	instance.free()
 
 
 func test_reading_mode_scene_structure() -> void:
-	"""Verify reading_mode.tscn has basic expected structure."""
-	var scene: PackedScene = load("res://scenes/reading_mode.tscn") as PackedScene
+	"""Verify pronunciation_mode.tscn has basic expected structure."""
+	var scene = load("res://scenes/level_types/pronunciation_mode.tscn") as PackedScene
 	var instance: Node = scene.instantiate() as Node
 
 	# Reading mode should have a root node
 	assert_that(instance).is_not_null()
 	assert_that(instance is Node).is_true()
 
-	instance.queue_free()
+	instance.free()
+
+
+func test_whole_word_mode_scene_structure() -> void:
+	"""Verify whole_word_mode.tscn has basic expected structure."""
+	var scene = load("res://scenes/level_types/whole_word_mode.tscn") as PackedScene
+	var instance: Node = scene.instantiate() as Node
+
+	assert_that(instance).is_not_null()
+	assert_that(instance is Node).is_true()
+
+	instance.free()
 
 
 func test_level_select_scene_structure() -> void:
 	"""Verify level_select.tscn has basic expected structure."""
-	var scene: PackedScene = load("res://scenes/level_select.tscn") as PackedScene
+	var scene = load("res://scenes/level_select.tscn") as PackedScene
 	var instance: Node = scene.instantiate() as Node
 	var carousel_scroll = _find_child_by_name(instance, "LevelCarouselScroll")
 	var start_button = _find_child_by_name(instance, "StartButton")
@@ -61,18 +100,18 @@ func test_level_select_scene_structure() -> void:
 	assert_that(carousel_scroll).is_not_null()
 	assert_that(start_button).is_null()
 
-	instance.queue_free()
+	instance.free()
 
 
 func test_vehicle_select_scene_structure() -> void:
 	"""Verify vehicle_select.tscn has basic expected structure."""
-	var scene: PackedScene = load(VEHICLE_SELECT_SCENE_PATH) as PackedScene
+	var scene = load(VEHICLE_SELECT_SCENE_PATH) as PackedScene
 	var instance: Node = scene.instantiate() as Node
 
 	assert_that(instance).is_not_null()
 	assert_that(instance is Node).is_true()
 
-	instance.queue_free()
+	instance.free()
 
 
 func test_vehicle_select_smoke_controls() -> void:
@@ -133,13 +172,14 @@ func test_vehicle_select_smoke_controls() -> void:
 	if instance.has_method("_refresh_vehicle_preview"):
 		instance.call("_refresh_vehicle_preview")
 
-	instance.queue_free()
+	remove_child(instance)
+	instance.free()
 
 
 func test_vehicle_select_paint_controls_and_clear_flow() -> void:
 	"""Verify the vehicle selection screen exposes and responds to paint controls."""
-	var settings_store = ReadingSettingsStore.new()
-	settings_store.save_settings(ReadingSettingsStore.default_settings())
+	var settings_store = ReadingSettingsStoreScript.new()
+	settings_store.save_settings(ReadingSettingsStoreScript.default_settings())
 
 	var scene = ResourceLoader.load(VEHICLE_SELECT_SCENE_PATH) as PackedScene
 	assert_that(scene).is_not_null()
@@ -182,7 +222,8 @@ func test_vehicle_select_paint_controls_and_clear_flow() -> void:
 
 	assert_that((instance.get("selected_vehicle_decals") as Array).size()).is_equal(0)
 
-	instance.queue_free()
+	remove_child(instance)
+	instance.free()
 
 
 func test_vehicle_select_preview_applies_overlay_materials() -> void:
@@ -205,7 +246,8 @@ func test_vehicle_select_preview_applies_overlay_materials() -> void:
 	assert_that(mesh_instance).is_not_null()
 	assert_that(mesh_instance.material_overlay).is_not_null()
 
-	instance.queue_free()
+	remove_child(instance)
+	instance.free()
 
 
 func _find_child_by_name(root: Node, target_name: String) -> Node:

@@ -9,57 +9,57 @@ func before_all() -> void:
 	pass
 
 
-func _get_first_non_empty_word_group(loader: ReadingContentLoader) -> String:
-	var groups = loader.list_word_groups() as Array
+func _get_first_non_empty_word_group(loader) -> String:
+	var groups = loader.list_word_groups()
 	for group in groups:
-		var entries = loader.load_word_entries(group) as Array
+		var entries = loader.load_word_entries(group)
 		if not entries.is_empty():
 			return group
 	return ""
 
 
 func test_content_loader_creation() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 	assert_that(loader).is_not_null()
 
 
 func test_list_word_groups_returns_array() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
-	var groups = loader.list_word_groups() as Array
-	assert_that(groups).is_instance_of(Array)
+	var loader = ReadingContentLoaderScript.new()
+	var groups = loader.list_word_groups()
+	assert_that(typeof(groups)).is_equal(TYPE_ARRAY)
 
 
 func test_load_word_entries_with_invalid_group() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
-	var entries = loader.load_word_entries("nonexistent_group") as Array
+	var loader = ReadingContentLoaderScript.new()
+	var entries = loader.load_word_entries("nonexistent_group")
 	assert_that(entries).is_empty()
 
 
 func test_load_word_entries_returns_array() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
-	var entries = loader.load_word_entries("test_group") as Array
+	var loader = ReadingContentLoaderScript.new()
+	var entries = loader.load_word_entries("test_group")
 	# Should return an array (empty if group doesn't exist)
-	assert_that(entries).is_instance_of(Array)
+	assert_that(typeof(entries)).is_equal(TYPE_ARRAY)
 
 
 func test_reading_content_loader_list_word_texts_under_one_second() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 	var start_ms := Time.get_ticks_msec()
-	var words = loader.list_word_texts() as Array
+	var words = loader.list_word_texts()
 	var elapsed_ms := Time.get_ticks_msec() - start_ms
 
 	assert_that(elapsed_ms).is_less(1000)
-	assert_that(words).is_instance_of(Array)
+	assert_that(typeof(words)).is_equal(TYPE_ARRAY)
 
 
 func test_load_word_entries_structure() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 	var group_name := _get_first_non_empty_word_group(loader)
 	if group_name.is_empty():
 		return
-	var entries = loader.load_word_entries(group_name) as Array
+	var entries = loader.load_word_entries(group_name)
 	# Verify first entry has expected fields
-	var entry = entries[0] as Dictionary
+	var entry: Dictionary = entries[0]
 	assert_that(entry.has("text")).is_true()
 	assert_that(entry.has("letters")).is_true()
 	assert_that(entry.has("phonemes")).is_true()
@@ -68,51 +68,51 @@ func test_load_word_entries_structure() -> void:
 
 
 func test_load_word_entries_letters_array() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 	var group_name := _get_first_non_empty_word_group(loader)
 	if group_name.is_empty():
 		return
-	var entries = loader.load_word_entries(group_name) as Array
-	var entry = entries[0] as Dictionary
-	var letters = entry.get("letters", []) as Array
-	assert_that(letters).is_instance_of(Array)
+	var entries = loader.load_word_entries(group_name)
+	var entry: Dictionary = entries[0]
+	var letters = entry.get("letters", [])
+	assert_that(typeof(letters)).is_equal(TYPE_ARRAY)
 	assert_that(letters.size()).is_greater(0)
 
 
 func test_load_word_entries_phonemes_array() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 	var group_name := _get_first_non_empty_word_group(loader)
 	if group_name.is_empty():
 		return
-	var entries = loader.load_word_entries(group_name) as Array
-	var entry = entries[0] as Dictionary
-	var phonemes = entry.get("phonemes", []) as Array
-	assert_that(phonemes).is_instance_of(Array)
+	var entries = loader.load_word_entries(group_name)
+	var entry: Dictionary = entries[0]
+	var phonemes = entry.get("phonemes", [])
+	assert_that(typeof(phonemes)).is_equal(TYPE_ARRAY)
 	assert_that(phonemes.size()).is_greater_equal(0)
 
 
 func test_get_phoneme_stream_for_label_fallback() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 	var stream = loader.get_phoneme_stream_for_label("XXXX")
 	assert_that(stream).is_not_null()
 
 
 func test_get_phoneme_stream_normalizes_long_vowel_aliases() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 
 	var i_stream = loader.get_phoneme_stream("iː")
 	assert_that(i_stream).is_not_null()
 	if i_stream != null:
-		assert_that(i_stream.resource_path).is_equal_to("res://audio/phenomes/i!.wav")
+		assert_that(i_stream.resource_path).is_equal("res://audio/phenomes/i!.wav")
 
 	var u_stream = loader.get_phoneme_stream("uː")
 	assert_that(u_stream).is_not_null()
 	if u_stream != null:
-		assert_that(u_stream.resource_path).is_equal_to("res://audio/phenomes/u!.wav")
+		assert_that(u_stream.resource_path).is_equal("res://audio/phenomes/u!.wav")
 
 
 func test_load_word_entries_csv_breakdown_is_used() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 	var entries := loader.load_word_entries("sightwords")
 	assert_that(entries).is_not_empty()
 
@@ -122,12 +122,12 @@ func test_load_word_entries_csv_breakdown_is_used() -> void:
 			found = entry
 			break
 	assert_that(found.is_empty()).is_false()
-	var letters := found.get("letters", []) as Array
-	var phonemes := found.get("phonemes", []) as Array
-	assert_that(letters.size()).is_equal_to(2)
-	assert_that(phonemes.size()).is_equal_to(2)
-	assert_that(phonemes[0]).is_equal_to("ɡ")
-	assert_that(phonemes[1]).is_equal_to("oʊ")
+	var letters = found.get("letters", [])
+	var phonemes = found.get("phonemes", [])
+	assert_that(letters.size()).is_equal(2)
+	assert_that(phonemes.size()).is_equal(2)
+	assert_that(phonemes[0]).is_equal("ɡ")
+	assert_that(phonemes[1]).is_equal("oʊ")
 
 
 func test_can_cat_word_csv_uses_new_schema() -> void:
@@ -180,7 +180,7 @@ func test_can_cat_sentence_csv_uses_pronunciation_map_schema() -> void:
 
 
 func test_can_cat_sentence_csv_includes_pronunciation_examples() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
+	var loader = ReadingContentLoaderScript.new()
 	var entries := loader.load_sentence_entries("can_cat")
 	assert_that(entries).is_not_empty()
 
@@ -196,12 +196,12 @@ func test_can_cat_sentence_csv_includes_pronunciation_examples() -> void:
 	assert_that(wind_up_sentence.is_empty()).is_false()
 	assert_that(wind_blowing_sentence.is_empty()).is_false()
 
-	var wind_up_pronunciations := wind_up_sentence.get("pronunciations", {}) as Dictionary
-	var wind_blowing_pronunciations := wind_blowing_sentence.get("pronunciations", {}) as Dictionary
+	var wind_up_pronunciations: Dictionary = wind_up_sentence.get("pronunciations", {})
+	var wind_blowing_pronunciations: Dictionary = wind_blowing_sentence.get("pronunciations", {})
 
-	assert_that(str(wind_up_pronunciations.get("wind", ""))).is_equal_to("waɪnd")
-	assert_that(str(wind_blowing_pronunciations.get("wind", ""))).is_equal_to("wɪnd")
-	assert_that(wind_up_sentence.get("words", [])).is_equal_to(["wind", "up", "the", "string"])
+	assert_that(str(wind_up_pronunciations.get("wind", ""))).is_equal("waɪnd")
+	assert_that(str(wind_blowing_pronunciations.get("wind", ""))).is_equal("wɪnd")
+	assert_that(wind_up_sentence.get("words", [])).is_equal(["wind", "up", "the", "string"])
 
 	var wind_in_the_wind_sentence := {}
 	for entry in entries:
@@ -210,19 +210,17 @@ func test_can_cat_sentence_csv_includes_pronunciation_examples() -> void:
 			wind_in_the_wind_sentence = entry
 
 	assert_that(wind_in_the_wind_sentence.is_empty()).is_false()
-	var wind_in_words := wind_in_the_wind_sentence.get("words", []) as Array
-	assert_that(wind_in_words).is_equal_to(["wind", "in", "the", "wind"])
-	assert_that(loader.get_entry_pronunciation_label(wind_in_the_wind_sentence, 0)).is_equal_to(
+	var wind_in_words = wind_in_the_wind_sentence.get("words", [])
+	assert_that(wind_in_words).is_equal(["wind", "in", "the", "wind"])
+	assert_that(loader.get_entry_pronunciation_label(wind_in_the_wind_sentence, 0)).is_equal(
 		"waɪnd"
 	)
-	assert_that(loader.get_entry_pronunciation_label(wind_in_the_wind_sentence, 3)).is_equal_to(
-		"wɪnd"
-	)
+	assert_that(loader.get_entry_pronunciation_label(wind_in_the_wind_sentence, 3)).is_equal("wɪnd")
 
 
 func test_word_audio_candidate_prefers_exact_word_hint_filename() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
-	var candidates := [
+	var loader = ReadingContentLoaderScript.new()
+	var candidates: Array[Dictionary] = [
 		_make_audio_candidate("res://audio/words/sightwords/wind.wav", ["wind", "wav"]),
 		_make_audio_candidate("res://audio/words/sightwords/wind-ænd.wav", ["wind", "ænd", "wav"]),
 	]
@@ -231,14 +229,14 @@ func test_word_audio_candidate_prefers_exact_word_hint_filename() -> void:
 		candidates, "wind", [], "", [], [], ["ænd"]
 	)
 
-	assert_that(str(best_candidate.get("path", ""))).is_equal_to(
+	assert_that(str(best_candidate.get("path", ""))).is_equal(
 		"res://audio/words/sightwords/wind-ænd.wav"
 	)
 
 
 func test_word_audio_candidate_prefers_pronunciation_hint_filename() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
-	var candidates := [
+	var loader = ReadingContentLoaderScript.new()
+	var candidates: Array[Dictionary] = [
 		_make_audio_candidate("res://audio/words/sightwords/wind.wav", ["wind", "wav"]),
 		_make_audio_candidate(
 			"res://audio/words/sightwords/wind-wɪnd.wav", ["wind", "wɪnd", "wav"]
@@ -249,14 +247,14 @@ func test_word_audio_candidate_prefers_pronunciation_hint_filename() -> void:
 		candidates, "wind", [], "", [], [], ["wɪnd"]
 	)
 
-	assert_that(str(best_candidate.get("path", ""))).is_equal_to(
+	assert_that(str(best_candidate.get("path", ""))).is_equal(
 		"res://audio/words/sightwords/wind-wɪnd.wav"
 	)
 
 
 func test_word_audio_candidate_defaults_to_plain_filename_without_hint() -> void:
-	var loader: ReadingContentLoader = ReadingContentLoader.new()
-	var candidates := [
+	var loader = ReadingContentLoaderScript.new()
+	var candidates: Array[Dictionary] = [
 		_make_audio_candidate("res://audio/words/sightwords/wind.wav", ["wind", "wav"]),
 		_make_audio_candidate("res://audio/words/sightwords/wind-ænd.wav", ["wind", "ænd", "wav"]),
 	]
@@ -265,12 +263,12 @@ func test_word_audio_candidate_defaults_to_plain_filename_without_hint() -> void
 		candidates, "wind", [], "", [], [], []
 	)
 
-	assert_that(str(best_candidate.get("path", ""))).is_equal_to(
+	assert_that(str(best_candidate.get("path", ""))).is_equal(
 		"res://audio/words/sightwords/wind.wav"
 	)
 
 
-func _make_audio_candidate(path: String, tokens: Array) -> Dictionary:
+func _make_audio_candidate(path: String, tokens: Array[String]) -> Dictionary:
 	return {
 		"path": path,
 		"group": "sightwords",

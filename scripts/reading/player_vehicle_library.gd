@@ -129,6 +129,10 @@ static func get_vehicle_scene_path(vehicle_id: String) -> String:
 	return str(vehicle.get("scene_path", _DEFAULT_SCENE_PATH))
 
 
+func get_vehicle_scene_path_instance(vehicle_id: String) -> String:
+	return get_vehicle_scene_path(vehicle_id)
+
+
 static func get_vehicle_by_id(vehicle_id: String) -> Dictionary:
 	var normalized_id := vehicle_id.strip_edges().to_lower()
 	for entry in _VEHICLES:
@@ -136,6 +140,10 @@ static func get_vehicle_by_id(vehicle_id: String) -> Dictionary:
 		if str(vehicle.get("id", "")) == normalized_id:
 			return vehicle.duplicate(true)
 	return {}
+
+
+func get_vehicle_by_id_instance(vehicle_id: String) -> Dictionary:
+	return get_vehicle_by_id(vehicle_id)
 
 
 static func resolve_vehicle_id(settings: Dictionary) -> String:
@@ -191,6 +199,12 @@ static func instantiate_vehicle_from_settings(settings: Dictionary, max_dimensio
 	return instance
 
 
+func instantiate_vehicle_from_settings_instance(
+	settings: Dictionary, max_dimension: float
+) -> Node3D:
+	return instantiate_vehicle_from_settings(settings, max_dimension)
+
+
 static func fit_instance_to_dimension(instance: Node3D, max_dimension: float) -> void:
 	var bounds: AABB = _calculate_bounds(instance)
 	if bounds == AABB():
@@ -234,10 +248,6 @@ func apply_paint_color_instance(instance: Node3D, paint_color: Color) -> void:
 	apply_paint_color(instance, paint_color)
 
 
-func apply_vehicle_decals_instance(instance: Node3D, decals: Array) -> int:
-	return apply_vehicle_decals(instance, decals)
-
-
 func fit_instance_to_dimension_instance(instance: Node3D, max_dimension: float) -> void:
 	fit_instance_to_dimension(instance, max_dimension)
 
@@ -274,6 +284,12 @@ static func build_vehicle_settings(
 		SETTING_KEY_VEHICLE_DECALS: paint_decals,
 	}
 	return settings
+
+
+func build_vehicle_settings_instance(
+	vehicle_id: String, paint_color: Color, paint_decals: Array = []
+) -> Dictionary:
+	return build_vehicle_settings(vehicle_id, paint_color, paint_decals)
 
 
 static func _apply_paint_recursive(node: Node, paint_color: Color) -> int:
@@ -405,6 +421,10 @@ static func apply_vehicle_decals(instance: Node3D, decals: Array) -> int:
 	return added_decal_count
 
 
+func apply_vehicle_decals_instance(instance: Node3D, decals: Array) -> int:
+	return apply_vehicle_decals(instance, decals)
+
+
 static func _create_decal_texture(color: Color, brush_shape: String = "circle") -> Texture2D:
 	var size := 32
 	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
@@ -504,8 +524,8 @@ static func _create_quadratic_decal_material(decal_texture: Texture2D) -> Standa
 	mat.albedo_color = Color(1, 1, 1, 1)
 	mat.roughness = 1.0
 	mat.metallic = 0.0
-	# Use numeric enum value to avoid missing constant issue in this engine version
-	mat.depth_draw_mode = 1  # 0=DEPTH_DRAW_OPAQUE, 1=DEPTH_DRAW_ALPHA_PREPASS, 2=DEPTH_DRAW_ALWAYS
+	# Transparent decals should still write depth for proper ordering in Godot 4.x
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	mat.params_cull_mode = BaseMaterial3D.CULL_DISABLED
 	return mat
 

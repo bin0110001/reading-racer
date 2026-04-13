@@ -1,6 +1,8 @@
 class_name ReadingPickup
 extends Node3D
 
+const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
+
 var segment_index := 0
 var lane_index := 0
 var letter := ""
@@ -13,12 +15,16 @@ var _base_height := 0.0
 
 func _ready() -> void:
 	_base_height = position.y
-	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	# Increase letter size by 4x for better readability.
-	_label.font_size = 256
-	_label.modulate = Color(1.0, 0.95, 0.45)
-	_label.outline_size = 48
-	_label.text = letter.to_upper()
+	_label = (
+		WorldTextBuilder
+		. create_billboard_label(
+			letter.to_upper(),
+			256,
+			Color(1.0, 0.95, 0.45),
+			48,
+			BaseMaterial3D.BILLBOARD_ENABLED,
+		)
+	)
 	add_child(_label)
 
 	var glow := OmniLight3D.new()

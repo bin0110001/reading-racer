@@ -1,8 +1,6 @@
 class_name TestControlProfiles
 extends GdUnitTestSuite
 
-const MovementSystemScript = preload("res://scripts/reading/systems/MovementSystem.gd")
-
 
 func before_all() -> void:
 	pass
@@ -40,7 +38,9 @@ func test_throttle_steering_controller_mode_name() -> void:
 
 func test_control_profile_methods_exist() -> void:
 	var controllers = [
-		LaneChangeController.new(), SmoothSteeringController.new(), ThrottleSteeringController.new()
+		LaneChangeController.new(),
+		SmoothSteeringController.new(),
+		ThrottleSteeringController.new(),
 	]
 
 	for controller in controllers:
@@ -74,7 +74,7 @@ func test_smooth_steering_moves_laterally_with_input() -> void:
 	controller.steer_input = 1.0
 	controller.update(0.25)
 
-	var movement_system = MovementSystemScript.new(controller)
+	var movement_system = MovementSystem.new(controller)
 	movement_system.update_position_and_heading(0.25, {"heading": 0.0})
 
 	assert_that(movement_system.player_lane_offset).is_greater(0.0)
@@ -83,7 +83,7 @@ func test_smooth_steering_moves_laterally_with_input() -> void:
 
 func test_lateral_movement_does_not_bank_the_vehicle() -> void:
 	var controller = LaneChangeController.new()
-	var movement_system = MovementSystemScript.new(controller)
+	var movement_system = MovementSystem.new(controller)
 	movement_system.player_heading = 0.0
 	movement_system.player_lane_offset = 0.0
 

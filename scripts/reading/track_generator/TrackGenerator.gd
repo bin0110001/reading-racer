@@ -54,7 +54,7 @@ const CARDINAL_DIRECTIONS := [
 
 var rng := RandomNumberGenerator.new()
 
-var segments: Array[TrackSegment] = []
+var segments: Array = []
 var next_segment_id := 0
 var last_curve_segment_index := -1
 var last_heading := 0.0
@@ -88,7 +88,7 @@ func get_total_length() -> float:
 
 
 ## Get segment at a specific index
-func get_segment(index: int) -> TrackSegment:
+func get_segment(index: int):
 	if index >= 0 and index < segments.size():
 		return segments[index]
 	return null
@@ -97,7 +97,7 @@ func get_segment(index: int) -> TrackSegment:
 ## Find the segment index that contains a given world position
 func get_segment_at_position(world_x: float) -> int:
 	for i in range(segments.size()):
-		var seg: TrackSegment = segments[i]
+		var seg = segments[i]
 		if world_x >= seg.start_pos.x and world_x < seg.start_pos.x + seg.length:
 			return i
 		if world_x < seg.start_pos.x:
@@ -106,7 +106,7 @@ func get_segment_at_position(world_x: float) -> int:
 
 
 ## Get all segments
-func get_all_segments() -> Array[TrackSegment]:
+func get_all_segments():
 	return segments.duplicate()
 
 
@@ -187,9 +187,7 @@ func _spawn_next_segment() -> void:
 
 ## Add a straight segment
 func _add_straight_segment() -> void:
-	var segment: StraightSegment = StraightSegment.new(
-		next_segment_id, last_position, SEGMENT_LENGTH
-	)
+	var segment = StraightSegment.new(next_segment_id, last_position, SEGMENT_LENGTH)
 	segment.road_center_z = 0.0
 	segment.ideal_heading = last_heading
 	segments.append(segment)
@@ -205,7 +203,7 @@ func _add_curve_segment() -> void:
 	var end_heading := last_heading + curve_angle
 	var difficulty := randf_range(CURVE_DIFFICULTY_MIN, CURVE_DIFFICULTY_MAX)
 
-	var segment: CurveSegment = CurveSegment.new(
+	var segment = CurveSegment.new(
 		next_segment_id, last_position, SEGMENT_LENGTH, last_heading, end_heading, difficulty
 	)
 	segment.road_center_z = 0.0
@@ -257,21 +255,23 @@ func _choose_track_dimensions(
 		min_width = max(4, int(config.get("serpentine_min_track_width", 5)))
 	var min_height: int = max(4, int(config.get("min_track_height", DEFAULT_MIN_TRACK_HEIGHT)))
 	if path_style == "serpentine":
-		var width: int = max(min_width, int(ceil(sqrt(float(required_cells)))))
-		var height: int = max(min_height, int(ceil(float(required_cells) / float(width))))
+		var serpentine_width: int = max(min_width, int(ceil(sqrt(float(required_cells)))))
+		var serpentine_height: int = max(
+			min_height, int(ceil(float(required_cells) / float(serpentine_width)))
+		)
 
-		if height % 2 != 0:
-			height += 1
+		if serpentine_height % 2 != 0:
+			serpentine_height += 1
 
-		while width * height < required_cells:
-			if width <= height:
-				width += 1
+		while serpentine_width * serpentine_height < required_cells:
+			if serpentine_width <= serpentine_height:
+				serpentine_width += 1
 			else:
-				height += 1
-			if height % 2 != 0:
-				height += 1
+				serpentine_height += 1
+			if serpentine_height % 2 != 0:
+				serpentine_height += 1
 
-		return Vector2i(width, height)
+		return Vector2i(serpentine_width, serpentine_height)
 
 	var width_factor: float = 1.75
 	var width: int = max(min_width, int(ceil(sqrt(float(required_cells) * width_factor))))
@@ -296,8 +296,8 @@ func _build_serpentine_cycle(width: int, height: int) -> Array[Vector3i]:
 		return _build_circular_cycle(width, height)
 
 	var path: Array[Vector3i] = []
-	var bottom_bump_x: int = maxi(2, width / 3)
-	var right_bump_z: int = maxi(2, height / 3)
+	var bottom_bump_x: int = maxi(2, int(floor(float(width) / 3.0)))
+	var right_bump_z: int = maxi(2, int(floor(float(height) / 3.0)))
 	var top_bump_x: int = mini(width - 3, int(ceil(float(width) * 0.66)))
 	var left_bump_z: int = mini(height - 3, int(ceil(float(height) * 0.66)))
 

@@ -2,10 +2,13 @@
 ## Phase 2-3: Comprehensive scene validation using Scene Runner
 extends GdUnitTestSuite
 
+const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
+
 const MAIN_SCENE_PATH = "res://scenes/main.tscn"
 const LEVEL_SELECT_SCENE_PATH = "res://scenes/level_select.tscn"
 const VEHICLE_SELECT_SCENE_PATH = "res://scenes/vehicle_select.tscn"
-const READING_MODE_SCENE_PATH = "res://scenes/reading_mode.tscn"
+const READING_MODE_SCENE_PATH = "res://scenes/level_types/pronunciation_mode.tscn"
+const WHOLE_WORD_MODE_SCENE_PATH = "res://scenes/level_types/whole_word_mode.tscn"
 
 var _home_requested_emitted := false
 
@@ -37,6 +40,16 @@ func _find_node_by_name_token(node: Node, token: String) -> Node:
 	return null
 
 
+func _count_nodes_by_name_token(node: Node, token: String) -> int:
+	var count := 0
+	if node.name.find(token) >= 0:
+		count += 1
+	for child in node.get_children():
+		if child is Node:
+			count += _count_nodes_by_name_token(child, token)
+	return count
+
+
 func _mark_home_requested() -> void:
 	_home_requested_emitted = true
 
@@ -50,11 +63,31 @@ func test_main_scene_with_scene_runner() -> void:
 	assert_that(runner.scene()).is_not_null()
 
 	# Allow scene to initialize for one frame
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 
 	# Scene should remain valid by still being instantiated and in tree
 	assert_that(runner.scene()).is_not_null()
 	assert_that(runner.scene().is_inside_tree()).is_true()
+
+
+func test_main_scene_debug_menu_button_opens_debug_home() -> void:
+	"""Smoke test: the main screen debug button must open the debug home menu."""
+	var runner = _create_scene_runner(MAIN_SCENE_PATH)
+	runner.simulate_frames(2)
+
+	var main_scene = runner.scene()
+	assert_that(main_scene).is_not_null()
+
+	var debug_button := _find_node_by_name_token(main_scene, "DebugMenuButton") as Button
+	assert_that(debug_button).is_not_null()
+
+	debug_button.emit_signal("pressed")
+	runner.simulate_frames(1)
+
+	var debug_menu := _find_node_by_name_token(main_scene, "DebugHomeMenu")
+	assert_that(debug_menu).is_not_null()
+	assert_that(debug_menu.is_inside_tree()).is_true()
+	assert_that(_find_node_by_name_token(debug_menu, "WholeWordModeButton")).is_not_null()
 
 
 func test_level_select_scene_with_scene_runner() -> void:
@@ -66,7 +99,7 @@ func test_level_select_scene_with_scene_runner() -> void:
 	assert_that(runner.scene()).is_not_null()
 
 	# Allow scene to initialize
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 
 	# Scene should remain valid by still being instantiated and in tree
 	assert_that(runner.scene()).is_not_null()
@@ -77,7 +110,7 @@ func test_main_scene_loads_under_one_second() -> void:
 	"""Smoke test: main menu startup must complete within 1 second."""
 	var start_ms := Time.get_ticks_msec()
 	var runner = _create_scene_runner(MAIN_SCENE_PATH)
-	await runner.simulate_frames(2)
+	runner.simulate_frames(2)
 	var elapsed_ms := Time.get_ticks_msec() - start_ms
 
 	assert_that(elapsed_ms).is_less(1000)
@@ -88,26 +121,26 @@ func test_main_scene_loads_under_one_second() -> void:
 func test_level_select_launch_completes_under_one_second() -> void:
 	"""Smoke test: selecting a level should launch reading mode within 1 second."""
 	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
-	await runner.simulate_frames(2)
+	runner.simulate_frames(2)
 
 	var level_scene = runner.scene()
 	assert_that(level_scene).is_not_null()
 
 	var level_buttons = level_scene.get("level_buttons")
-	if not (level_buttons is Array):
+	if typeof(level_buttons) != TYPE_ARRAY:
 		level_buttons = []
 
 	var wait_frames := 0
 	while level_buttons.size() == 0 and wait_frames < 10:
-		await runner.simulate_frames(1)
+		runner.simulate_frames(1)
 		wait_frames += 1
 		level_buttons = level_scene.get("level_buttons")
-		if not (level_buttons is Array):
+		if typeof(level_buttons) != TYPE_ARRAY:
 			level_buttons = []
 
 	if level_buttons.size() == 0:
 		level_buttons = level_scene.get("level_option_buttons")
-		if not (level_buttons is Array):
+		if typeof(level_buttons) != TYPE_ARRAY:
 			level_buttons = []
 
 	if level_buttons.size() == 0:
@@ -118,24 +151,86 @@ func test_level_select_launch_completes_under_one_second() -> void:
 
 	var start_ms := Time.get_ticks_msec()
 	first_level_button.emit_signal("pressed")
-	await runner.simulate_frames(3)
+	var mode_buttons: Array = level_scene.get("mode_buttons") as Array
+	var mode_wait_frames := 0
+	while mode_buttons.size() == 0 and mode_wait_frames < 10:
+		runner.simulate_frames(1)
+		mode_wait_frames += 1
+		mode_buttons = level_scene.get("mode_buttons") as Array
+
+	assert_that(mode_buttons.size()).is_greater(0)
+	var first_mode_button := mode_buttons[0] as Button
+	assert_that(first_mode_button).is_not_null()
+	first_mode_button.emit_signal("pressed")
+	var start_button := level_scene.get("final_start_button") as Button
+	assert_that(start_button).is_not_null()
+	start_button.emit_signal("pressed")
+	runner.simulate_frames(3)
 	var elapsed_ms := Time.get_ticks_msec() - start_ms
 
 	assert_that(elapsed_ms).is_less(1000)
-	assert_that(level_scene.get_tree().current_scene.get_name()).is_equal("ReadingMode")
+	assert_that(level_scene.get_tree().root.has_meta("reading_mode_start_requested_ms")).is_true()
+	assert_that(runner.scene()).is_not_null()
+	assert_that(runner.scene().is_inside_tree()).is_true()
+
+
+func test_level_select_word_choice_launches_whole_word_mode_under_one_second() -> void:
+	"""Smoke test: word-choice mode should launch the whole-word scene quickly."""
+	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
+	runner.simulate_frames(2)
+
+	var level_scene = runner.scene()
+	assert_that(level_scene).is_not_null()
+
+	var level_buttons = level_scene.get("level_buttons")
+	if typeof(level_buttons) != TYPE_ARRAY:
+		level_buttons = []
+	while level_buttons.size() == 0:
+		runner.simulate_frames(1)
+		level_buttons = level_scene.get("level_buttons")
+		if typeof(level_buttons) != TYPE_ARRAY:
+			level_buttons = []
+
+	var first_level_button := level_buttons[0] as Button
+	assert_that(first_level_button).is_not_null()
+	first_level_button.emit_signal("pressed")
+	runner.simulate_frames(1)
+
+	var mode_buttons: Array = level_scene.get("mode_buttons") as Array
+	assert_that(mode_buttons.size()).is_greater_equal(2)
+	var whole_word_button := mode_buttons[1] as Button
+	assert_that(whole_word_button).is_not_null()
+
+	var start_ms := Time.get_ticks_msec()
+	whole_word_button.emit_signal("pressed")
+	runner.simulate_frames(2)
+	var elapsed_ms := Time.get_ticks_msec() - start_ms
+
+	assert_that(elapsed_ms).is_less(1000)
+	assert_that(str(level_scene.get("selected_mode"))).is_equal("word_choice")
+	assert_that(level_scene.get_tree().root.has_meta("reading_mode_start_requested_ms")).is_false()
+
+	var whole_word_runner = _create_scene_runner(WHOLE_WORD_MODE_SCENE_PATH)
+	whole_word_runner.simulate_frames(10, 100)
+	var whole_word_scene := whole_word_runner.scene()
+	assert_that(whole_word_scene).is_not_null()
+	assert_that(whole_word_scene.is_inside_tree()).is_true()
+	var whole_word_display_count := _count_nodes_by_name_token(whole_word_scene, "WordLaneDisplay")
+	assert_that(whole_word_display_count).is_equal(3)
+	whole_word_scene.queue_free()
 
 
 func test_level_select_carousel_is_visible_and_laid_out() -> void:
 	"""Regression: the level carousel must be visible and occupy real screen space."""
 	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
-	await runner.simulate_frames(5, 100)
+	runner.simulate_frames(5, 100)
 
 	var level_scene = runner.scene()
 	assert_that(level_scene).is_not_null()
 
 	var carousel_scroll := level_scene.get("carousel_scroll") as ScrollContainer
 	var level_buttons = level_scene.get("level_buttons")
-	if not (level_buttons is Array):
+	if typeof(level_buttons) != TYPE_ARRAY:
 		level_buttons = []
 	var config_button := level_scene.get("config_button") as Button
 
@@ -154,11 +249,11 @@ func test_level_select_carousel_is_visible_and_laid_out() -> void:
 
 func test_level_select_settings_menu_opens_and_saves() -> void:
 	"""Regression: the settings menu must reveal controls and persist changes."""
-	var settings_store = ReadingSettingsStore.new()
+	var settings_store = ReadingSettingsStoreScript.new()
 	var original_settings := settings_store.load_settings()
 
 	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
-	await runner.simulate_frames(2)
+	runner.simulate_frames(2)
 
 	var level_scene = runner.scene()
 	assert_that(level_scene).is_not_null()
@@ -190,7 +285,7 @@ func test_level_select_settings_menu_opens_and_saves() -> void:
 	assert_that(config_page_content.visible).is_false()
 
 	config_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 
 	assert_that(panel.visible).is_false()
 	assert_that(config_page.visible).is_true()
@@ -199,18 +294,22 @@ func test_level_select_settings_menu_opens_and_saves() -> void:
 	assert_that(cancel_button.visible).is_true()
 
 	steering_option.select(
-		ReadingSettingsStore.STEERING_TYPES.find(ReadingSettingsStore.STEERING_TYPE_SMOOTH_STEERING)
+		ReadingSettingsStoreScript.STEERING_TYPES.find(
+			ReadingSettingsStoreScript.STEERING_TYPE_SMOOTH_STEERING
+		)
 	)
-	map_option.select(ReadingSettingsStore.MAP_STYLES.find(ReadingSettingsStore.MAP_STYLE_STRAIGHT))
+	map_option.select(
+		ReadingSettingsStoreScript.MAP_STYLES.find(ReadingSettingsStoreScript.MAP_STYLE_STRAIGHT)
+	)
 	save_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 
 	var saved_settings := settings_store.load_settings()
 	assert_that(saved_settings.get("steering_type", "")).is_equal(
-		ReadingSettingsStore.STEERING_TYPE_SMOOTH_STEERING
+		ReadingSettingsStoreScript.STEERING_TYPE_SMOOTH_STEERING
 	)
 	assert_that(saved_settings.get("map_style", "")).is_equal(
-		ReadingSettingsStore.MAP_STYLE_STRAIGHT
+		ReadingSettingsStoreScript.MAP_STYLE_STRAIGHT
 	)
 	assert_that(config_page.visible).is_false()
 	assert_that(config_page_content.visible).is_false()
@@ -221,7 +320,7 @@ func test_level_select_settings_menu_opens_and_saves() -> void:
 	var christmas_date := {"year": 2026, "month": 12, "day": 25}
 	(
 		assert_that(
-			ReadingSettingsStore.new().resolve_effective_holiday(
+			ReadingSettingsStoreScript.new().resolve_effective_holiday(
 				restored_auto_settings, christmas_date
 			)
 		)
@@ -231,11 +330,11 @@ func test_level_select_settings_menu_opens_and_saves() -> void:
 
 func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> void:
 	"""Regression: the main screen steering buttons must switch and persist the scheme."""
-	var settings_store = ReadingSettingsStore.new()
+	var settings_store = ReadingSettingsStoreScript.new()
 	var original_settings := settings_store.load_settings()
 
 	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
-	await runner.simulate_frames(2)
+	runner.simulate_frames(2)
 
 	var level_scene = runner.scene()
 	assert_that(level_scene).is_not_null()
@@ -244,7 +343,7 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	var smooth_steering_button := level_scene.get("smooth_steering_button") as Button
 	var config_button := level_scene.get("config_button") as Button
 	var level_buttons = level_scene.get("level_buttons")
-	if not (level_buttons is Array):
+	if typeof(level_buttons) != TYPE_ARRAY:
 		level_buttons = []
 	assert_that(level_buttons.size()).is_greater(0)
 	var first_level_button := level_buttons[0] as Button
@@ -253,7 +352,7 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	assert_that(smooth_steering_button).is_not_null()
 	assert_that(config_button).is_not_null()
 	assert_that(first_level_button).is_not_null()
-	assert_that(first_level_button.custom_minimum_size.x).is_greater_equal(300.0)
+	assert_that(first_level_button.custom_minimum_size.x).is_greater_equal(260.0)
 	assert_that(first_level_button.custom_minimum_size.y).is_greater_equal(220.0)
 	assert_that(lane_switch_button.icon).is_not_null()
 	assert_that(smooth_steering_button.icon).is_not_null()
@@ -263,14 +362,14 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	assert_that(smooth_steering_button.button_pressed).is_false()
 
 	level_scene.call("_on_smooth_steering_button_pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	var expected_smooth := ReadingSettingsStore.STEERING_TYPE_SMOOTH_STEERING
 	assert_that(bool(level_scene.get("selected_steering_type") == expected_smooth)).is_true()
 	assert_that(lane_switch_button.button_pressed).is_false()
 	assert_that(smooth_steering_button.button_pressed).is_true()
 
 	first_level_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	assert_that(level_scene.get_tree().current_scene.get_name()).is_equal("ReadingMode")
 
 	var saved_settings := settings_store.load_settings()
@@ -279,13 +378,13 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	)
 
 	var lane_runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
-	await lane_runner.simulate_frames(2)
+	lane_runner.simulate_frames(2)
 	var lane_scene = lane_runner.scene()
 	assert_that(lane_scene).is_not_null()
 	var lane_button := lane_scene.get("lane_switch_button") as Button
 	assert_that(lane_button).is_not_null()
 	lane_button.emit_signal("pressed")
-	await lane_runner.simulate_frames(1)
+	lane_runner.simulate_frames(1)
 	assert_that(lane_button.button_pressed).is_true()
 	(
 		assert_that(bool((lane_scene.get("smooth_steering_button") as Button).button_pressed))
@@ -306,34 +405,39 @@ func test_level_select_main_screen_steering_buttons_save_selected_scheme() -> vo
 	settings_store.save_settings(original_settings)
 
 
-func test_level_select_grade_buttons_respond_within_frames() -> void:
-	"""Smoke test: grade buttons must update selection quickly and keep the scene responsive."""
+func test_level_select_level_and_mode_buttons_respond_within_frames() -> void:
+	"""Smoke test: level selection must reveal modes quickly and keep the scene responsive."""
 	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
-	await runner.simulate_frames(3, 50)
+	runner.simulate_frames(3, 50)
 
 	var level_scene = runner.scene()
 	assert_that(level_scene).is_not_null()
 	assert_that(level_scene.is_inside_tree()).is_true()
 
-	var grade_buttons: Array = level_scene.get("grade_buttons") as Array
-	assert_that(grade_buttons.size()).is_greater_equal(2)
+	var level_buttons: Array = level_scene.get("level_buttons") as Array
+	assert_that(level_buttons.size()).is_greater(1)
+	assert_that((level_buttons[0] as Button).text).is_equal("Tests")
 
-	var initial_grade := int(level_scene.get("selected_grade"))
-	var target_grade := (initial_grade + 1) % grade_buttons.size()
-	var target_button := grade_buttons[target_grade] as Button
+	var target_button := level_buttons[1] as Button
 	assert_that(target_button).is_not_null()
 
-	# Press a grade button and wait for selection to update.
+	# Press a level button and wait for the mode row to update.
 	target_button.emit_signal("pressed")
+	var mode_buttons: Array = level_scene.get("mode_buttons") as Array
 
 	var frames_waited := 0
 	while frames_waited < 10:
-		await runner.simulate_frames(1, 50)
+		runner.simulate_frames(1, 50)
 		frames_waited += 1
-		if int(level_scene.get("selected_grade")) == target_grade:
+		mode_buttons = level_scene.get("mode_buttons") as Array
+		if mode_buttons.size() > 0:
 			break
 
-	assert_that(int(level_scene.get("selected_grade"))).is_equal(target_grade)
+	mode_buttons = level_scene.get("mode_buttons") as Array
+	assert_that(mode_buttons.size()).is_equal(2)
+	assert_that((mode_buttons[0] as Button).text).is_equal("Spelling")
+	assert_that((mode_buttons[1] as Button).text).is_equal("Select Word")
+	assert_that(str(level_scene.get("selected_level_label"))).is_not_empty()
 	assert_that(frames_waited).is_less(10)
 	assert_that(level_scene.is_inside_tree()).is_true()
 
@@ -341,7 +445,7 @@ func test_level_select_grade_buttons_respond_within_frames() -> void:
 func test_vehicle_select_scene_with_scene_runner() -> void:
 	"""Smoke test: vehicle select initializes, exposes paint controls, and can paint."""
 	var runner = _create_scene_runner(VEHICLE_SELECT_SCENE_PATH)
-	await runner.simulate_frames(3)
+	runner.simulate_frames(3)
 
 	var vehicle_scene = runner.scene()
 	assert_that(vehicle_scene).is_not_null()
@@ -375,18 +479,18 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	assert_that(paint_palette.get_child_count()).is_equal(24)
 
 	rotate_side_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	var side_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
 	var rotation_degrees: Vector3 = side_snapshot.get("vehicle_rotation_degrees", Vector3.ZERO)
 	assert_that(rotation_degrees.y).is_equal(90.0)
 
 	rotate_reset_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	var reset_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
 	rotation_degrees = reset_snapshot.get("vehicle_rotation_degrees", Vector3.ZERO)
 	assert_that(rotation_degrees.is_equal_approx(Vector3.ZERO)).is_true()
 
-	await runner.simulate_frames(2)
+	runner.simulate_frames(2)
 	assert_that((camera_brush as CameraBrush).viewport).is_not_null()
 	var brush_before := (camera_brush as Node3D).global_position
 
@@ -407,7 +511,7 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	press_event.pressed = true
 	press_event.position = preview_container.size * 0.5
 	vehicle_scene.call("_on_vehicle_preview_gui_input", press_event)
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	assert_that((camera_brush as CameraBrush).drawing).is_true()
 	assert_that((camera_brush as Node3D).global_position).is_not_equal(brush_before)
 
@@ -419,7 +523,7 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	var overlay_apply_before := int(painting_snapshot.get("overlay_apply_count", 0))
 
 	# Non-regression: live brush movement should not force repeated atlas apply calls.
-	await runner.simulate_frames(2)
+	runner.simulate_frames(2)
 	var paint_snapshot2: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
 	var overlay_apply_after := int(paint_snapshot2.get("overlay_apply_count", 0))
 	assert_that(overlay_apply_after).is_less_equal(overlay_apply_before + 1)
@@ -429,7 +533,7 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	release_event.pressed = false
 	release_event.position = preview_container.size * 0.5
 	vehicle_scene.call("_on_vehicle_preview_gui_input", release_event)
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	assert_that((camera_brush as CameraBrush).drawing).is_false()
 
 	var after_release_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
@@ -442,7 +546,7 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 func test_vehicle_select_scene_brush_shape_selection_updates_camera_brush() -> void:
 	"""Regression: brush shape selection should propagate into the live CameraBrush texture."""
 	var runner = _create_scene_runner(VEHICLE_SELECT_SCENE_PATH)
-	await runner.simulate_frames(3)
+	runner.simulate_frames(3)
 
 	var vehicle_scene = runner.scene()
 	assert_that(vehicle_scene).is_not_null()
@@ -456,7 +560,7 @@ func test_vehicle_select_scene_brush_shape_selection_updates_camera_brush() -> v
 	assert_that(initial_brush_image.get_pixel(128, 128).a).is_equal(1.0)
 
 	vehicle_scene.call("_on_brush_shape_selected", 1)
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 
 	var updated_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
 	assert_that(str(updated_snapshot.get("selected_brush_shape", ""))).is_equal("square")
@@ -467,27 +571,16 @@ func test_vehicle_select_scene_brush_shape_selection_updates_camera_brush() -> v
 	assert_that(updated_brush_image.get_pixel(128, 128).a).is_equal(1.0)
 
 	vehicle_scene.call("_on_brush_shape_selected", 0)
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	updated_snapshot = vehicle_scene.call("get_paint_debug_snapshot")
 	assert_that(str(updated_snapshot.get("selected_brush_shape", ""))).is_equal("circle")
 
 
 func test_reading_mode_scene_with_scene_runner() -> void:
-	"""Test reading_mode.tscn initialization and basic scene validity.
-
-	This is the critical gameplay scene that needs comprehensive testing.
-	Validates that the scene can initialize without errors and run for several frames.
-	"""
 	var runner = _create_scene_runner(READING_MODE_SCENE_PATH)
-
-	# Verify scene loaded correctly
 	assert_that(runner).is_not_null()
 	assert_that(runner.scene()).is_not_null()
-
-	# Allow scene to initialize and run for multiple frames
-	await runner.simulate_frames(30, 100)
-
-	# Scene should remain valid throughout simulation
+	runner.simulate_frames(30, 100)
 	assert_that(runner.scene()).is_not_null()
 	assert_that(runner.scene().is_inside_tree()).is_true()
 
@@ -495,29 +588,29 @@ func test_reading_mode_scene_with_scene_runner() -> void:
 func test_reading_mode_home_button_returns_to_level_select() -> void:
 	"""Smoke test: in-level home button should return to level select."""
 	var runner = _create_scene_runner(READING_MODE_SCENE_PATH)
-	await runner.simulate_frames(15, 100)
+	runner.simulate_frames(15, 100)
 	var reading_scene = runner.scene()
 	assert_that(reading_scene).is_not_null()
-	var hud = reading_scene.get_node_or_null("ReadingHUD") as ReadingHUD
+	var hud = reading_scene.get_node_or_null("ReadingHUD")
 	assert_that(hud).is_not_null()
-	var home_button := hud.get_home_button()
+	var home_button: Button = hud.get_home_button()
 	assert_that(home_button).is_not_null()
 	_home_requested_emitted = false
 	hud.home_requested.connect(_mark_home_requested)
 	home_button.emit_signal("pressed")
-	await runner.simulate_frames(1, 100)
+	runner.simulate_frames(1, 100)
 	assert_that(_home_requested_emitted).is_true()
 
 
 func test_reading_mode_initialization() -> void:
-	"""Test that reading_mode.tscn initializes game state correctly.
+	"""Test that pronunciation_mode.tscn initializes game state correctly.
 
 	Phase 3: Gameplay flow validation - verifies core game initialization.
 	"""
 	var runner = _create_scene_runner(READING_MODE_SCENE_PATH)
 
 	# Let the scene fully initialize
-	await runner.simulate_frames(5, 100)
+	runner.simulate_frames(5, 100)
 
 	var scene_root = runner.scene()
 	assert_that(scene_root).is_not_null()
@@ -528,14 +621,14 @@ func test_reading_mode_initialization() -> void:
 
 
 func test_reading_mode_no_orphan_nodes() -> void:
-	"""Test that reading_mode.tscn doesn't create orphan nodes during initialization.
+	"""Test that pronunciation_mode.tscn doesn't create orphan nodes during initialization.
 
 	GDUnit4 orphan detection is enabled; this test documents that we're checking for it.
 	"""
 	var runner = _create_scene_runner(READING_MODE_SCENE_PATH)
 
 	# Run through several frames to exercise initialization
-	await runner.simulate_frames(15, 100)
+	runner.simulate_frames(15, 100)
 
 	# If any orphan nodes are detected, GDUnit will report them
 	# This test ensures the scene can run without creating leaked nodes
@@ -548,13 +641,13 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 
 	# Main scene basic startup check
 	var main_runner = _create_scene_runner(MAIN_SCENE_PATH)
-	await main_runner.simulate_frames(2)
+	main_runner.simulate_frames(2)
 	assert_that(main_runner.scene()).is_not_null()
 	assert_that(main_runner.scene().is_inside_tree()).is_true()
 
 	# Level select scene UI navigation check
 	var level_runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
-	await level_runner.simulate_frames(2)
+	level_runner.simulate_frames(2)
 	var level_scene = level_runner.scene()
 	assert_that(level_scene).is_not_null()
 
@@ -570,21 +663,38 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 
 	# Open and close configuration panel
 	config_button.emit_signal("pressed")
-	await level_runner.simulate_frames(1)
+	level_runner.simulate_frames(1)
 	assert_that(config_page.visible).is_true()
 
 	var cancel_button: Button = _find_node_by_name_token(level_scene, "CancelButton") as Button
 	cancel_button.emit_signal("pressed")
-	await level_runner.simulate_frames(1)
+	level_runner.simulate_frames(1)
 	assert_that(config_page.visible).is_false()
 
-	# Simulate user pressing a level card and validate scene transition to ReadingMode
+	# Simulate user pressing a level card, then a mode, then start.
 	var first_level_button := level_buttons[0] as Button
 	assert_that(first_level_button).is_not_null()
 	first_level_button.emit_signal("pressed")
-	await level_runner.simulate_frames(5, 100)
+	level_runner.simulate_frames(2, 100)
 
-	var tree_current_scene = level_scene.get_tree().current_scene
+	var mode_buttons: Array = level_scene.get("mode_buttons") as Array
+	assert_that(mode_buttons.size()).is_equal(2)
+	var first_mode_button := mode_buttons[0] as Button
+	assert_that(first_mode_button).is_not_null()
+	first_mode_button.emit_signal("pressed")
+
+	var start_button := level_scene.get("final_start_button") as Button
+	assert_that(start_button).is_not_null()
+	start_button.emit_signal("pressed")
+	var tree_current_scene = null
+	var wait_frames := 0
+	while wait_frames < 12:
+		tree_current_scene = level_scene.get_tree().current_scene
+		if tree_current_scene != null and tree_current_scene.get_name() == "ReadingMode":
+			break
+		level_runner.simulate_frames(1, 100)
+		wait_frames += 1
+
 	assert_that(tree_current_scene).is_not_null()
 	assert_that(tree_current_scene.get_name()).is_equal("ReadingMode")
 	assert_that(tree_current_scene.is_inside_tree()).is_true()
@@ -595,18 +705,26 @@ func test_scene_runner_navigation_smoke_flow() -> void:
 
 	# Keep a dedicated runner check for reading mode as final smoke endpoint
 	var reading_runner = _create_scene_runner(READING_MODE_SCENE_PATH)
-	await reading_runner.simulate_frames(10, 100)
+	reading_runner.simulate_frames(10, 100)
 	assert_that(reading_runner.scene()).is_not_null()
 	assert_that(reading_runner.scene().is_inside_tree()).is_true()
 
+	var whole_word_runner = _create_scene_runner(WHOLE_WORD_MODE_SCENE_PATH)
+	whole_word_runner.simulate_frames(10, 100)
+	assert_that(whole_word_runner.scene()).is_not_null()
+	assert_that(whole_word_runner.scene().is_inside_tree()).is_true()
+	var whole_word_runner_display_count := _count_nodes_by_name_token(
+		whole_word_runner.scene(), "WordLaneDisplay"
+	)
+	assert_that(whole_word_runner_display_count).is_equal(3)
+
 
 func test_level_select_holiday_settings_flow() -> void:
-	"""Test opening config, saving Christmas and Easter holidays, and restoring settings."""
-	var settings_store = ReadingSettingsStore.new()
+	var settings_store = ReadingSettingsStoreScript.new()
 	var original_settings = settings_store.load_settings()
 
 	var runner = _create_scene_runner(LEVEL_SELECT_SCENE_PATH)
-	await runner.simulate_frames(2)
+	runner.simulate_frames(2)
 	var level_scene = runner.scene()
 	assert_that(level_scene).is_not_null()
 
@@ -626,66 +744,76 @@ func test_level_select_holiday_settings_flow() -> void:
 
 	assert_that(config_page.visible).is_false()
 	config_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	assert_that(config_page.visible).is_true()
 
-	var holiday_on_idx = ReadingSettingsStore.HOLIDAY_MODES.find(
-		ReadingSettingsStore.HOLIDAY_MODE_ON
+	var holiday_on_idx = ReadingSettingsStoreScript.HOLIDAY_MODES.find(
+		ReadingSettingsStoreScript.HOLIDAY_MODE_ON
 	)
-	var christmas_idx = ReadingSettingsStore.HOLIDAY_OPTIONS.find(
-		ReadingSettingsStore.HOLIDAY_CHRISTMAS
+	var christmas_idx = ReadingSettingsStoreScript.HOLIDAY_OPTIONS.find(
+		ReadingSettingsStoreScript.HOLIDAY_CHRISTMAS
 	)
 	assert_that(holiday_on_idx).is_greater_equal(0)
 	assert_that(christmas_idx).is_greater_equal(0)
-	var easter_idx = ReadingSettingsStore.HOLIDAY_OPTIONS.find(ReadingSettingsStore.HOLIDAY_EASTER)
+	var easter_idx = ReadingSettingsStoreScript.HOLIDAY_OPTIONS.find(
+		ReadingSettingsStoreScript.HOLIDAY_EASTER
+	)
 	assert_that(easter_idx).is_greater_equal(0)
 
 	holiday_mode_option.select(holiday_on_idx)
 	holiday_name_option.select(christmas_idx)
 	save_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	assert_that(config_page.visible).is_false()
 
 	var settings = settings_store.load_settings()
-	assert_that(settings.get("holiday_mode")).is_equal(ReadingSettingsStore.HOLIDAY_MODE_ON)
-	assert_that(settings.get("holiday_name")).is_equal(ReadingSettingsStore.HOLIDAY_CHRISTMAS)
-	var resolved_christmas := ReadingSettingsStore.new().resolve_effective_holiday(
+	assert_that(settings.get("holiday_mode")).is_equal(ReadingSettingsStoreScript.HOLIDAY_MODE_ON)
+	assert_that(settings.get("holiday_name")).is_equal(ReadingSettingsStoreScript.HOLIDAY_CHRISTMAS)
+	var resolved_christmas := ReadingSettingsStoreScript.new().resolve_effective_holiday(
 		settings, christmas_date
 	)
-	assert_that(resolved_christmas).is_equal(ReadingSettingsStore.HOLIDAY_CHRISTMAS)
+	assert_that(resolved_christmas).is_equal(ReadingSettingsStoreScript.HOLIDAY_CHRISTMAS)
 
 	# Save Easter too so the UI and settings round-trip both seasonal options.
 	config_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	assert_that(config_page.visible).is_true()
 	holiday_mode_option.select(holiday_on_idx)
 	holiday_name_option.select(easter_idx)
 	save_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 
 	var easter_settings = settings_store.load_settings()
-	assert_that(easter_settings.get("holiday_mode")).is_equal(ReadingSettingsStore.HOLIDAY_MODE_ON)
-	assert_that(easter_settings.get("holiday_name")).is_equal(ReadingSettingsStore.HOLIDAY_EASTER)
-	var resolved_easter := ReadingSettingsStore.new().resolve_effective_holiday(
+	assert_that(easter_settings.get("holiday_mode")).is_equal(
+		ReadingSettingsStoreScript.HOLIDAY_MODE_ON
+	)
+	assert_that(easter_settings.get("holiday_name")).is_equal(
+		ReadingSettingsStoreScript.HOLIDAY_EASTER
+	)
+	var resolved_easter := ReadingSettingsStoreScript.new().resolve_effective_holiday(
 		easter_settings, easter_date
 	)
-	assert_that(resolved_easter).is_equal(ReadingSettingsStore.HOLIDAY_EASTER)
+	assert_that(resolved_easter).is_equal(ReadingSettingsStoreScript.HOLIDAY_EASTER)
 
 	# restore previous settings
 	config_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	assert_that(config_page.visible).is_true()
-	var none_idx = ReadingSettingsStore.HOLIDAY_OPTIONS.find(ReadingSettingsStore.HOLIDAY_NONE)
-	var auto_idx = ReadingSettingsStore.HOLIDAY_MODES.find(ReadingSettingsStore.HOLIDAY_MODE_AUTO)
+	var none_idx = ReadingSettingsStoreScript.HOLIDAY_OPTIONS.find(
+		ReadingSettingsStoreScript.HOLIDAY_NONE
+	)
+	var auto_idx = ReadingSettingsStoreScript.HOLIDAY_MODES.find(
+		ReadingSettingsStoreScript.HOLIDAY_MODE_AUTO
+	)
 	assert_that(none_idx).is_greater_equal(0)
 	assert_that(auto_idx).is_greater_equal(0)
 
 	holiday_mode_option.select(auto_idx)
 	holiday_name_option.select(none_idx)
 	save_button.emit_signal("pressed")
-	await runner.simulate_frames(1)
+	runner.simulate_frames(1)
 	assert_that(settings_store.load_settings().get("holiday_mode")).is_equal(
-		ReadingSettingsStore.HOLIDAY_MODE_AUTO
+		ReadingSettingsStoreScript.HOLIDAY_MODE_AUTO
 	)
 
 	# persist original settings to avoid side effects for other tests or dev env

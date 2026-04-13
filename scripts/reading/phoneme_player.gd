@@ -30,7 +30,8 @@ func play_looping_phoneme(label: String, stream: AudioStream) -> void:
 	_phoneme_player.stop()
 	_phoneme_player.stream = stream
 	_phoneme_player.volume_db = 0.0
-	_phoneme_player.play()
+	if is_inside_tree():
+		_phoneme_player.play()
 
 
 func stop_phoneme() -> void:
@@ -55,7 +56,8 @@ func play_word(stream: AudioStream) -> void:
 	_phoneme_player.stop()
 	_word_player.stop()
 	_word_player.stream = stream
-	_word_player.play()
+	if is_inside_tree():
+		_word_player.play()
 
 
 func _on_phoneme_player_finished() -> void:
@@ -63,4 +65,5 @@ func _on_phoneme_player_finished() -> void:
 		return
 	if _current_label == "" or _phoneme_player.stream == null:
 		return
-	_phoneme_player.play()
+	if is_inside_tree():
+		_phoneme_player.play()

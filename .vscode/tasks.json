@@ -45,6 +45,40 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "gdscript-check",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"./tools/gdscript-check.ps1",
+				"-ProjectRoot",
+				"c:/Projects/reading-racer",
+				"-GodotBin",
+				"D:/Gadot/Godot_v4.6-stable_mono_win64/Godot_v4.6-stable_mono_win64/Godot_v4.6-stable_mono_win64.exe",
+				"-Headless",
+				"-TimeoutSeconds",
+				"300"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "reading-mode-system-smoke",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"$proc = Start-Process -FilePath 'D:\\Gadot\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64\\Godot_v4.6-stable_mono_win64.exe' -ArgumentList @('--headless','--path','C:\\Projects\\reading-racer','-s','res://addons/gdUnit4/bin/GdUnitCmdTool.gd','--verbose','-a','res://test/scripts/systems','-rd','C:\\Projects\\reading-racer\\reports\\manual-reading-smoke-current-5','-rc','1','--ignoreHeadlessMode','--verbose') -Wait -PassThru -NoNewWindow; $proc.ExitCode"
+			],
+			"isBackground": false,
+			"group": "test"
 		}
 	]
 }

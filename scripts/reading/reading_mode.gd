@@ -3,12 +3,14 @@ extends Node3D
 # gdlint: disable=max-file-lines,class-definitions-order
 
 const CameraController3DClass = preload("res://scripts/reading/CameraController3D.gd")
-const MovementSystem = preload("res://scripts/reading/systems/MovementSystem.gd")
-const MapDisplayManager = preload("res://scripts/reading/systems/MapDisplayManager.gd")
-const GameplayController = preload("res://scripts/reading/systems/GameplayController.gd")
+const MovementSystemScript = preload("res://scripts/reading/systems/MovementSystem.gd")
+const MapDisplayManagerScript = preload("res://scripts/reading/systems/MapDisplayManager.gd")
+const GameplayControllerScript = preload("res://scripts/reading/systems/GameplayController.gd")
 const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
 const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
 const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
+const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
+const WordChoicePicker = preload("res://scripts/reading/word_choice_picker.gd")
 
 # Grid layout constants
 const GRID_WIDTH := 7  # Z-axis: 7 columns (decorations + 1 road + decorations)
@@ -53,6 +55,7 @@ const DECORATION_MODELS := [
 	{"path": "res://models/decoration-forest.glb", "weight": 2},
 	{"path": "res://models/decoration-tents.glb", "weight": 2},
 ]
+const READ_MODE_START_REQUEST_META_KEY := "reading_mode_start_requested_ms"
 
 @export var stream_tiles_each_side: int = 5
 @export var stream_tiles_ahead: int = 10
@@ -60,14 +63,14 @@ const DECORATION_MODELS := [
 @export var debug_draw_path: bool = true
 
 # Systems (separation of concerns)
-var movement_system: MovementSystem = null
-var map_display_manager: MapDisplayManager = null
-var gameplay_controller: GameplayController = null
+var movement_system = null
+var map_display_manager = null
+var gameplay_controller = null
 
 # Member variables
-var track_generator: TrackGenerator
-var settings_store: ReadingSettingsStore = null
-var content_loader: ReadingContentLoader = null
+var track_generator = null
+var settings_store = null
+var content_loader = null
 var camera_controller = null  # CameraController3D instance
 
 var settings: Dictionary = {}
@@ -86,7 +89,13 @@ var course_length := 120.0
 var finish_line_x := 0.0
 var farthest_spawned_x := 0.0
 var random_word_order := false
+var reading_mode: String = ReadingSettingsStore.READING_MODE_STANDARD
+var startup_reading_mode_override: String = ""
+var startup_scope_mode_override: String = ""
+var startup_scope_value_override: String = ""
+var startup_scope_limit_override: int = -1
 var rng := RandomNumberGenerator.new()
+static var _shared_content_loader = null
 
 # Optimized map streaming update (avoid full rebuild each frame)
 var _map_update_timer := 0.0
@@ -104,7 +113,7 @@ var layout_origin := Vector3.ZERO
 var current_word_start_x := WORD_START_X
 var next_word_start_x := WORD_START_X
 var next_spawn_entry_index := 0
-var course_plan_summary: Dictionary = {}
+var course_plan_summary: Variant = null
 
 @onready var road: Node3D = $Road
 @onready var spawn_root: Node3D = $SpawnRoot
@@ -112,14 +121,20 @@ var course_plan_summary: Dictionary = {}
 @onready var vehicle_anchor: Node3D = $Player/VehicleAnchor
 @onready var camera_rig: Node3D = $CameraRig
 @onready var camera: Camera3D = $CameraRig/Camera3D
-@onready var hud: ReadingHUD = $ReadingHUD
-@onready var phoneme_player: PhonemePlayer = $PhonemePlayer
-@onready var control_profile: ControlProfile = null
-@onready var debug_collision_root: Node3D = null
+@onready var hud = get_node_or_null("ReadingHUD")
+@onready var phoneme_player = get_node_or_null("PhonemePlayer")
+@onready var control_profile = null
+@onready var debug_collision_root = null
 var debug_draw_colliders: bool = false
 var _phoneme_smoke_root: Node3D = null
 var _phoneme_smoke_spawn_timer := 0.0
 var _phoneme_smoke_label := ""
+
+
+func _log_startup_step(step_name: String, start_ms: int) -> void:
+	if start_ms < 0:
+		return
+	print("[ReadingMode.startup] %s: %d ms" % [step_name, Time.get_ticks_msec() - start_ms])
 
 
 # Helper function to get the center Z position of the road (used consistently everywhere)
@@ -334,39 +349,40 @@ func _setup_simple_skybox() -> void:
 	print("[ReadingMode] Procedural spherical-like sky applied (default_sky fallback).")
 	return
 
-	# Fallback: strong procedural sky with green lower band.
-	var proc_sky_mat = ProceduralSkyMaterial.new()
-	proc_sky_mat.sky_top_color = Color(0.06, 0.45, 0.95, 1)
-	proc_sky_mat.sky_horizon_color = Color(0.35, 0.83, 0.6, 1)
-	proc_sky_mat.sky_curve = 0.02
-	proc_sky_mat.ground_bottom_color = Color(0.3, 0.95, 0.57, 1)
-	proc_sky_mat.ground_curve = 0.1
-
-	var procedural_sky = Sky.new()
-	procedural_sky.sky_material = proc_sky_mat
-
-	target_env.sky = procedural_sky
-	target_env.background_mode = Environment.BG_SKY
-	target_env.tonemap_exposure = 1.1
-	target_env.ambient_light_color = Color(0.72, 0.78, 0.88, 1)
-	target_env.ambient_light_energy = 1.25
-	print("[ReadingMode] Procedural sky applied as fallback.")
-
 
 func _ready() -> void:
 	print("[ReadingMode._ready] Starting initialization...")
+	var transition_start_ms := -1
+	if get_tree() != null and get_tree().root.has_meta(READ_MODE_START_REQUEST_META_KEY):
+		transition_start_ms = int(get_tree().root.get_meta(READ_MODE_START_REQUEST_META_KEY, -1))
+		get_tree().root.remove_meta(READ_MODE_START_REQUEST_META_KEY)
+	_log_startup_step("scene entered", transition_start_ms)
+	if hud == null or phoneme_player == null:
+		push_warning(
+			"[ReadingMode] Missing HUD or PhonemePlayer; skipping reading-mode initialization."
+		)
+		return
 	ReadingControlProfile.ensure_input_actions()
 	if settings_store == null:
 		settings_store = ReadingSettingsStoreScript.new()
 	if content_loader == null:
-		content_loader = ReadingContentLoaderScript.new()
+		if _shared_content_loader == null:
+			_shared_content_loader = ReadingContentLoaderScript.new()
+		content_loader = _shared_content_loader
+	_log_startup_step("content loader created", transition_start_ms)
 	settings = settings_store.load_settings()
-	var debug_draw_path = bool(settings.get("debug_draw_path", true))
+	var is_debug_draw_path = bool(settings.get("debug_draw_path", true))
 	random_word_order = bool(settings.get("random_word_order", false))
 	rng.randomize()
 	print("[ReadingMode] Loaded settings: %s" % str(settings.keys()))
 	settings_store.apply_master_volume(float(settings.get("master_volume", 0.8)))
+	reading_mode = (
+		startup_reading_mode_override
+		if not startup_reading_mode_override.is_empty()
+		else str(settings.get("reading_mode", ReadingSettingsStore.READING_MODE_STANDARD))
+	)
 	available_groups = content_loader.list_word_groups()
+	_log_startup_step("word groups listed", transition_start_ms)
 	print(
 		"[ReadingMode] Found %d word groups: %s" % [available_groups.size(), str(available_groups)]
 	)
@@ -383,7 +399,7 @@ func _ready() -> void:
 		settings["word_group"] = requested_group
 
 	hud.configure(available_groups, settings)
-	hud.set_debug_path(debug_draw_path)
+	hud.set_debug_path(is_debug_draw_path)
 	hud.control_mode_changed.connect(_on_control_mode_changed)
 	hud.steering_type_changed.connect(_on_steering_type_changed)
 	hud.map_style_changed.connect(_on_map_style_changed)
@@ -407,6 +423,7 @@ func _ready() -> void:
 	track_generator.generate_to_distance(course_length)
 	var initial_segments = track_generator.get_all_segments()
 	print("[ReadingMode] Generated %d initial track segments" % initial_segments.size())
+	_log_startup_step("track generator ready", transition_start_ms)
 
 	# Initialize control profile - starts with default, updated when word loads
 	var steering_type = str(settings.get("steering_type", "lane_change"))
@@ -414,39 +431,46 @@ func _ready() -> void:
 	print("[ReadingMode] Control profile set to: %s" % steering_type)
 
 	# Initialize Movement System
-	movement_system = MovementSystem.new(control_profile)
+	movement_system = MovementSystemScript.new(control_profile)
 	print("[ReadingMode] MovementSystem initialized")
+	_log_startup_step("movement system ready", transition_start_ms)
 
 	_update_help_text()
 	_attach_player_model()
 	player.add_to_group("player")  # For trigger detection
 	print("[ReadingMode] Player model attached and added to 'player' group")
+	_log_startup_step("player model attached", transition_start_ms)
 	_load_group(requested_group)
+	_log_startup_step("word group loaded", transition_start_ms)
 	_update_debug_audio_options()
 
 	# Initialize Map Display Manager early so _build_course_geometry can signal into it
-	map_display_manager = MapDisplayManager.new()
+	map_display_manager = MapDisplayManagerScript.new()
 	map_display_manager.set_nodes(road, spawn_root)
 	map_display_manager.stream_tiles_each_side = stream_tiles_each_side
 	map_display_manager.stream_tiles_ahead = stream_tiles_ahead
 	map_display_manager.stream_tiles_behind = stream_tiles_behind
 	print("[ReadingMode] MapDisplayManager initialized")
+	_log_startup_step("map display manager ready", transition_start_ms)
 
 	_build_course_geometry()
 	print("[ReadingMode] Course geometry built")
+	_log_startup_step("course geometry built", transition_start_ms)
 
 	map_display_manager.update_debug_visualization(
 		debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
 	)
 
 	# Initialize Gameplay Controller
-	gameplay_controller = GameplayController.new(content_loader)
+	gameplay_controller = GameplayControllerScript.new(content_loader)
 	gameplay_controller.set_spawn_root(spawn_root)
 	gameplay_controller.set_player(player)
 	gameplay_controller.pickup_collected.connect(_on_gameplay_pickup_collected)
 	gameplay_controller.obstacle_hit.connect(_on_gameplay_obstacle_hit)
 	gameplay_controller.word_completed.connect(_on_gameplay_word_completed)
+	gameplay_controller.word_choice_selected.connect(_on_gameplay_word_choice_selected)
 	print("[ReadingMode] GameplayController initialized")
+	_log_startup_step("gameplay controller ready", transition_start_ms)
 
 	# Initialize camera controller
 	camera_controller = CameraController3DClass.new()
@@ -457,6 +481,7 @@ func _ready() -> void:
 	camera_controller.set_vertical_angle(-30.0)  # Look down at the car
 	camera_controller.focus_on(player.position, 15.0)
 	print("[ReadingMode] Camera controller initialized with smoothing")
+	_log_startup_step("camera controller ready", transition_start_ms)
 
 	# Debug collision helper root
 	debug_collision_root = Node3D.new()
@@ -470,6 +495,7 @@ func _ready() -> void:
 	# Start the first word in playing mode to avoid perceived 'no movement' startup wait
 	_start_next_word(false, false, true)
 	print("[ReadingMode] Initialization complete!")
+	_log_startup_step("first word started", transition_start_ms)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -487,16 +513,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F10:
-		var debug_draw_path = not bool(settings.get("debug_draw_path", true))
-		settings["debug_draw_path"] = debug_draw_path
+		var is_debug_draw_path = not bool(settings.get("debug_draw_path", true))
+		settings["debug_draw_path"] = is_debug_draw_path
 		settings_store.save_settings(settings)
-		debug_draw_colliders = debug_draw_path
+		debug_draw_colliders = is_debug_draw_path
 		if map_display_manager:
 			map_display_manager.update_debug_visualization(
-				debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
+				is_debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
 			)
 		_update_debug_collision_visuals()
-		var status_text := "ON" if debug_draw_path else "OFF"
+		var status_text := "ON" if is_debug_draw_path else "OFF"
 		hud.set_help("F10 toggles path + collision debug - %s" % status_text)
 		hud.flash_feedback("Path + collision debug %s" % status_text, Color(0.4, 0.9, 0.4))
 		get_viewport().set_input_as_handled()
@@ -530,6 +556,9 @@ func _create_control_profile(steering_type: String) -> void:
 
 func _physics_process(delta: float) -> void:
 	if state == "error":
+		return
+
+	if movement_system == null:
 		return
 
 	if state == "paused":
@@ -666,12 +695,12 @@ func _update_debug_collision_visuals() -> void:
 			debug_collision_root.add_child(player_cube)
 
 
-func _create_debug_box(size: Vector3, transform: Transform3D, color: Color) -> MeshInstance3D:
+func _create_debug_box(size: Vector3, box_transform: Transform3D, color: Color) -> MeshInstance3D:
 	var box = BoxMesh.new()
 	box.size = size
 	var mesh_instance = MeshInstance3D.new()
 	mesh_instance.mesh = box
-	mesh_instance.transform = transform
+	mesh_instance.transform = box_transform
 
 	var material = StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -689,7 +718,34 @@ func _create_debug_box(size: Vector3, transform: Transform3D, color: Color) -> M
 
 
 func _load_group(group_name: String) -> void:
-	current_entries = content_loader.load_word_entries(group_name)
+	var scope_mode := (
+		startup_scope_mode_override
+		if not startup_scope_mode_override.is_empty()
+		else str(
+			settings.get("reading_scope_mode", ReadingSettingsStore.READING_SCOPE_READING_LIST)
+		)
+	)
+	var scope_value := (
+		startup_scope_value_override
+		if not startup_scope_value_override.is_empty()
+		else str(settings.get("reading_scope_value", ""))
+	)
+	var scope_limit: int = (
+		startup_scope_limit_override
+		if startup_scope_limit_override > 0
+		else max(1, int(settings.get("reading_scope_limit", 20)))
+	)
+	match scope_mode:
+		ReadingSettingsStore.READING_SCOPE_SENTENCE:
+			current_entries = content_loader.load_sentence_entries_for_text(group_name, scope_value)
+		ReadingSettingsStore.READING_SCOPE_WORD_LIST:
+			current_entries = content_loader.load_word_entries_for_reading_list(
+				group_name, scope_value, -1
+			)
+		_:
+			current_entries = content_loader.load_word_entries_for_reading_list(
+				group_name, scope_value, scope_limit
+			)
 	current_entry_index = -1
 	settings["word_group"] = group_name
 	settings_store.save_settings(settings)
@@ -767,7 +823,10 @@ func _start_next_word(
 	current_word_start_x = _path_index_to_distance(int(word_anchor.get("start_index", 0)))
 
 	_reset_word_state(reset_position, use_countdown)
-	hud.set_word(str(current_entry.get("text", "")))
+	if reading_mode == ReadingSettingsStore.READING_MODE_WORD_CHOICE:
+		hud.set_word("LISTEN")
+	else:
+		hud.set_word(str(current_entry.get("text", "")))
 	hud.set_phoneme("")
 	if play_feedback:
 		hud.flash_feedback("Next word", Color(0.45, 0.75, 1.0))
@@ -838,7 +897,7 @@ func _spawn_course_for_entry(
 	if word_anchor.is_empty():
 		return
 
-	# Spawn pickups and obstacles via gameplay controller
+	# Spawn mode-specific triggers via gameplay controller
 	var get_path_frame_callable = Callable(self, "_get_path_frame")
 	var path_wrap_callable = Callable(self, "_wrap_path_index")
 	if shared_track_layout != null and clear_existing:
@@ -846,29 +905,48 @@ func _spawn_course_for_entry(
 			shared_track_layout.path_cells.size(), LANE_POSITIONS.size()
 		)
 
-	if clear_existing:
-		var active_holiday = settings_store.resolve_effective_holiday(settings)
+	if reading_mode == ReadingSettingsStore.READING_MODE_WORD_CHOICE:
+		var choice_index := int(
+			word_anchor.get("end_index", int(word_anchor.get("start_index", 0)))
+		)
+		choice_index = _wrap_path_index(choice_index + 1)
+		var choice_entries := _pick_choice_entries(current_entry_index, current_entries)
 		course_plan_summary = (
 			gameplay_controller
-			. spawn_loop_course_pickups_and_obstacles(
-				current_entries,
-				shared_track_layout.word_anchors,
-				get_path_frame_callable,
-				path_wrap_callable,
+			. spawn_loop_course_word_choices(
+				choice_entries,
+				choice_index,
 				current_entry_index,
-				requested_group,
-				active_holiday,
+				get_path_frame_callable,
 				true,
 			)
 		)
 		if map_display_manager != null:
-			var finish_cells: Array[Vector3i] = []
-			for finish_index in gameplay_controller.get_all_finish_indices():
-				if finish_index >= 0:
-					finish_cells.append(_get_path_cell(finish_index))
-			map_display_manager.set_finish_cells(finish_cells)
+			map_display_manager.set_finish_cells([] as Array[Vector3i])
 	else:
-		gameplay_controller.load_entry(entry, current_entry_index)
+		if clear_existing:
+			var active_holiday = settings_store.resolve_effective_holiday(settings)
+			course_plan_summary = (
+				gameplay_controller
+				. spawn_loop_course_pickups_and_obstacles(
+					current_entries,
+					shared_track_layout.word_anchors,
+					get_path_frame_callable,
+					path_wrap_callable,
+					current_entry_index,
+					requested_group,
+					active_holiday,
+					true,
+				)
+			)
+			if map_display_manager != null:
+				var finish_cells: Array[Vector3i] = []
+				for finish_index in gameplay_controller.get_all_finish_indices():
+					if finish_index >= 0:
+						finish_cells.append(_get_path_cell(finish_index))
+				map_display_manager.set_finish_cells(finish_cells)
+		else:
+			gameplay_controller.load_entry(entry, current_entry_index)
 
 	# Update word progression state
 	var start_index: int = gameplay_controller.get_word_start_index(current_entry_index)
@@ -884,6 +962,35 @@ func _spawn_course_for_entry(
 		finish_index + int(round(WORD_GAP / SEGMENT_SPACING))
 	)
 	farthest_spawned_x = max(farthest_spawned_x, finish_line_x)
+
+
+func _on_gameplay_word_choice_selected(choice_text: String, correct: bool, word_index: int) -> void:
+	if word_index != current_entry_index:
+		return
+
+	if correct:
+		gameplay_controller.reset()
+		phoneme_player.play_word(content_loader.get_word_stream(current_entry))
+		hud.flash_feedback("Correct!", Color(0.45, 1.0, 0.55))
+		_complete_word()
+		return
+
+	movement_system.apply_slowdown(1.2)
+	hud.flash_feedback("Wrong: %s" % choice_text, Color(1.0, 0.42, 0.32))
+	var wrong_entry := _find_entry_by_text(choice_text)
+	if not wrong_entry.is_empty():
+		phoneme_player.play_word(content_loader.get_word_stream(wrong_entry))
+
+
+func _find_entry_by_text(text: String) -> Dictionary:
+	for entry in current_entries:
+		if str(entry.get("text", "")).to_lower() == text.to_lower():
+			return entry
+	return {}
+
+
+func _pick_choice_entries(current_index: int, entries: Array) -> Array[Dictionary]:
+	return WordChoicePicker.build_similar_choice_entries(entries, current_index)
 
 
 func _build_course_geometry() -> void:
@@ -941,7 +1048,7 @@ func _attach_player_model() -> void:
 	for child in vehicle_anchor.get_children():
 		child.queue_free()
 
-	var vehicle_settings := settings
+	var vehicle_settings: Dictionary = settings.duplicate(true)
 	if vehicle_settings.is_empty():
 		vehicle_settings = settings_store.load_settings()
 
@@ -1012,13 +1119,16 @@ func _update_camera(delta: float) -> void:
 func _update_status() -> void:
 	if current_entry.is_empty() or not gameplay_controller:
 		return
+	var mode_text: String = control_profile.mode_name.capitalize() if control_profile else "Unknown"
+	if reading_mode == ReadingSettingsStore.READING_MODE_WORD_CHOICE:
+		hud.set_status("Choose the spoken word   %s" % mode_text)
+		return
 	var total_letters: int = gameplay_controller.get_total_letters()
 	var target_text := (
 		"Complete"
 		if gameplay_controller.is_word_complete()
 		else "Next: %s" % gameplay_controller.get_next_target_letter()
 	)
-	var mode_text := control_profile.mode_name.capitalize() if control_profile else "Unknown"
 	var status_format = "%s   %d/%d   %s"
 	hud.set_status(
 		(
@@ -1085,12 +1195,12 @@ func _on_volume_changed(volume: float) -> void:
 
 
 func _on_debug_path_toggled(enabled: bool) -> void:
-	var debug_draw_path = enabled
+	var is_debug_draw_path = enabled
 	settings["debug_draw_path"] = enabled
 	settings_store.save_settings(settings)
 	if map_display_manager:
 		map_display_manager.update_debug_visualization(
-			debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
+			is_debug_draw_path, Callable(self, "_get_pose_at_path_distance"), track_tile_length
 		)
 	debug_draw_colliders = enabled
 	_update_debug_collision_visuals()
@@ -1223,18 +1333,23 @@ func _spawn_phoneme_smoke_letter(label: String) -> void:
 		_phoneme_smoke_root.name = "PhonemeSmoke"
 		add_child(_phoneme_smoke_root)
 
-	var smoke_label := Label3D.new()
-	smoke_label.text = label
-	smoke_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	smoke_label.font_size = 72
-	smoke_label.outline_size = 8
-	smoke_label.modulate = Color(0.95, 0.95, 0.95, 0.82)
-	smoke_label.position = Vector3.ZERO
+	var smoke_label := (
+		WorldTextBuilder
+		. create_billboard_label(
+			label,
+			72,
+			Color(0.95, 0.95, 0.95, 0.82),
+			8,
+			BaseMaterial3D.BILLBOARD_ENABLED,
+		)
+	)
 	smoke_label.scale = Vector3.ONE * rng.randf_range(0.85, 1.1)
 	_phoneme_smoke_root.add_child(smoke_label)
 
-	var player_basis := movement_system.get_player_basis() if movement_system else Basis.IDENTITY
-	var forward := player_basis.z.normalized()
+	var player_basis: Basis = (
+		movement_system.get_player_basis() if movement_system else Basis.IDENTITY
+	)
+	var forward: Vector3 = player_basis.z.normalized()
 	if forward.length_squared() == 0.0:
 		forward = Vector3.RIGHT
 	var right := player_basis.x.normalized()

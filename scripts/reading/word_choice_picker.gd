@@ -20,7 +20,7 @@ static func build_similar_choice_entries(
 		var text: String = str(entry.get("text", "")).strip_edges()
 		candidates.append({"index": idx, "score": score_text_similarity(current_text, text)})
 
-	candidates.sort_custom(func(a, b): return int(b.get("score", 0) - a.get("score", 0)))
+	candidates.sort_custom(ReadingWordChoicePicker._sort_by_score_desc)
 	result.append({"text": current_text, "is_correct": true})
 	for candidate in candidates:
 		if result.size() >= choice_count:
@@ -66,6 +66,10 @@ static func _common_prefix_length(a: String, b: String) -> int:
 		if a[index] != b[index]:
 			return index
 	return max_len
+
+
+static func _sort_by_score_desc(a: Dictionary, b: Dictionary) -> bool:
+	return a.get("score", 0) > b.get("score", 0)
 
 
 static func _result_contains_text(result: Array[Dictionary], text: String) -> bool:

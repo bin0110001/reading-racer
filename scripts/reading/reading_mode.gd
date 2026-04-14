@@ -9,8 +9,11 @@ const GameplayControllerScript = preload("res://scripts/reading/systems/Gameplay
 const PlayerVehicleLibraryScript = preload("res://scripts/reading/player_vehicle_library.gd")
 const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
 const ReadingContentLoaderScript = preload("res://scripts/reading/content_loader.gd")
+const ReadingStandardModeScript = preload("res://scripts/reading/modes/reading_standard_mode.gd")
+const ReadingWordChoiceModeScript = preload(
+	"res://scripts/reading/modes/reading_word_choice_mode.gd"
+)
 const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
-const WordChoicePicker = preload("res://scripts/reading/word_choice_picker.gd")
 
 # Grid layout constants
 const GRID_WIDTH := 7  # Z-axis: 7 columns (decorations + 1 road + decorations)
@@ -90,6 +93,7 @@ var finish_line_x := 0.0
 var farthest_spawned_x := 0.0
 var random_word_order := false
 var reading_mode: String = ReadingSettingsStore.READING_MODE_STANDARD
+var gameplay_mode = null
 var startup_reading_mode_override: String = ""
 var startup_scope_mode_override: String = ""
 var startup_scope_value_override: String = ""
@@ -362,7 +366,6 @@ func _ready() -> void:
 			"[ReadingMode] Missing HUD or PhonemePlayer; skipping reading-mode initialization."
 		)
 		return
-	ReadingControlProfile.ensure_input_actions()
 	if settings_store == null:
 		settings_store = ReadingSettingsStoreScript.new()
 	if content_loader == null:
@@ -381,6 +384,7 @@ func _ready() -> void:
 		if not startup_reading_mode_override.is_empty()
 		else str(settings.get("reading_mode", ReadingSettingsStore.READING_MODE_STANDARD))
 	)
+	gameplay_mode = _create_gameplay_mode(reading_mode)
 	available_groups = content_loader.list_word_groups()
 	_log_startup_step("word groups listed", transition_start_ms)
 	print(
@@ -498,6 +502,10 @@ func _ready() -> void:
 	_log_startup_step("first word started", transition_start_ms)
 
 
+func _enter_tree() -> void:
+	ReadingControlProfile.ensure_input_actions()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	# Allow camera controller to handle input first
 	if camera_controller and camera_controller.handle_input(event):
@@ -507,7 +515,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if movement_system:
 		movement_system.handle_input(event)
 
-	if event.is_action_pressed(ReadingControlProfile.ACTION_TOGGLE_OPTIONS):
+	if (
+		InputMap.has_action(ReadingControlProfile.ACTION_TOGGLE_OPTIONS)
+		and event.is_action_pressed(ReadingControlProfile.ACTION_TOGGLE_OPTIONS)
+	):
 		_toggle_options()
 		get_viewport().set_input_as_handled()
 		return
@@ -529,7 +540,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if (
-		event.is_action_pressed(ReadingControlProfile.ACTION_CONFIRM)
+		InputMap.has_action(ReadingControlProfile.ACTION_CONFIRM)
+		and event.is_action_pressed(ReadingControlProfile.ACTION_CONFIRM)
 		and not hud.is_options_open()
 		and not current_entry.is_empty()
 	):
@@ -823,10 +835,13 @@ func _start_next_word(
 	current_word_start_x = _path_index_to_distance(int(word_anchor.get("start_index", 0)))
 
 	_reset_word_state(reset_position, use_countdown)
-	if reading_mode == ReadingSettingsStore.READING_MODE_WORD_CHOICE:
-		hud.set_word("LISTEN")
-	else:
-		hud.set_word(str(current_entry.get("text", "")))
+	hud.set_word(
+		(
+			gameplay_mode.get_start_word_label(self, current_entry)
+			if gameplay_mode != null
+			else str(current_entry.get("text", ""))
+		)
+	)
 	hud.set_phoneme("")
 	if play_feedback:
 		hud.flash_feedback("Next word", Color(0.45, 0.75, 1.0))
@@ -876,7 +891,7 @@ func _reset_word_state(reset_position: bool = false, use_countdown: bool = true)
 func _spawn_course_for_entry(
 	entry: Dictionary, _unused_word_start_x: float, clear_existing: bool = true
 ) -> void:
-	if shared_track_layout == null or not gameplay_controller:
+	if shared_track_layout == null or not gameplay_controller or gameplay_mode == null:
 		return
 
 	if clear_existing:
@@ -898,55 +913,29 @@ func _spawn_course_for_entry(
 		return
 
 	# Spawn mode-specific triggers via gameplay controller
-	var get_path_frame_callable = Callable(self, "_get_path_frame")
-	var path_wrap_callable = Callable(self, "_wrap_path_index")
 	if shared_track_layout != null and clear_existing:
 		gameplay_controller.initialize_placement_grid(
 			shared_track_layout.path_cells.size(), LANE_POSITIONS.size()
 		)
-
-	if reading_mode == ReadingSettingsStore.READING_MODE_WORD_CHOICE:
-		var choice_index := int(
-			word_anchor.get("end_index", int(word_anchor.get("start_index", 0)))
+	var spawn_result: Dictionary = (
+		gameplay_mode
+		. spawn_course_for_entry(
+			self,
+			entry,
+			current_entry_index,
+			clear_existing,
+			word_anchor,
 		)
-		choice_index = _wrap_path_index(choice_index + 1)
-		var choice_entries := _pick_choice_entries(current_entry_index, current_entries)
-		course_plan_summary = (
-			gameplay_controller
-			. spawn_loop_course_word_choices(
-				choice_entries,
-				choice_index,
-				current_entry_index,
-				get_path_frame_callable,
-				true,
-			)
-		)
-		if map_display_manager != null:
-			map_display_manager.set_finish_cells([] as Array[Vector3i])
-	else:
-		if clear_existing:
-			var active_holiday = settings_store.resolve_effective_holiday(settings)
-			course_plan_summary = (
-				gameplay_controller
-				. spawn_loop_course_pickups_and_obstacles(
-					current_entries,
-					shared_track_layout.word_anchors,
-					get_path_frame_callable,
-					path_wrap_callable,
-					current_entry_index,
-					requested_group,
-					active_holiday,
-					true,
-				)
-			)
-			if map_display_manager != null:
-				var finish_cells: Array[Vector3i] = []
-				for finish_index in gameplay_controller.get_all_finish_indices():
-					if finish_index >= 0:
-						finish_cells.append(_get_path_cell(finish_index))
-				map_display_manager.set_finish_cells(finish_cells)
-		else:
-			gameplay_controller.load_entry(entry, current_entry_index)
+	)
+	if spawn_result.has("course_plan_summary"):
+		course_plan_summary = spawn_result.get("course_plan_summary", null)
+	if map_display_manager != null and spawn_result.has("finish_cells"):
+		var finish_cells: Array[Vector3i] = []
+		var finish_cells_val: Array = spawn_result.get("finish_cells", [])
+		for finish_cell in finish_cells_val:
+			if finish_cell is Vector3i:
+				finish_cells.append(finish_cell)
+		map_display_manager.set_finish_cells(finish_cells)
 
 	# Update word progression state
 	var start_index: int = gameplay_controller.get_word_start_index(current_entry_index)
@@ -965,21 +954,11 @@ func _spawn_course_for_entry(
 
 
 func _on_gameplay_word_choice_selected(choice_text: String, correct: bool, word_index: int) -> void:
-	if word_index != current_entry_index:
+	if (
+		gameplay_mode != null
+		and gameplay_mode.handle_word_choice_selected(self, choice_text, correct, word_index)
+	):
 		return
-
-	if correct:
-		gameplay_controller.reset()
-		phoneme_player.play_word(content_loader.get_word_stream(current_entry))
-		hud.flash_feedback("Correct!", Color(0.45, 1.0, 0.55))
-		_complete_word()
-		return
-
-	movement_system.apply_slowdown(1.2)
-	hud.flash_feedback("Wrong: %s" % choice_text, Color(1.0, 0.42, 0.32))
-	var wrong_entry := _find_entry_by_text(choice_text)
-	if not wrong_entry.is_empty():
-		phoneme_player.play_word(content_loader.get_word_stream(wrong_entry))
 
 
 func _find_entry_by_text(text: String) -> Dictionary:
@@ -989,8 +968,12 @@ func _find_entry_by_text(text: String) -> Dictionary:
 	return {}
 
 
-func _pick_choice_entries(current_index: int, entries: Array) -> Array[Dictionary]:
-	return WordChoicePicker.build_similar_choice_entries(entries, current_index)
+func _create_gameplay_mode(mode_id: String):
+	match mode_id:
+		ReadingSettingsStore.READING_MODE_WORD_CHOICE:
+			return ReadingWordChoiceModeScript.new()
+		_:
+			return ReadingStandardModeScript.new()
 
 
 func _build_course_geometry() -> void:
@@ -1117,25 +1100,11 @@ func _update_camera(delta: float) -> void:
 
 
 func _update_status() -> void:
-	if current_entry.is_empty() or not gameplay_controller:
+	if current_entry.is_empty() or not gameplay_controller or gameplay_mode == null:
 		return
-	var mode_text: String = control_profile.mode_name.capitalize() if control_profile else "Unknown"
-	if reading_mode == ReadingSettingsStore.READING_MODE_WORD_CHOICE:
-		hud.set_status("Choose the spoken word   %s" % mode_text)
-		return
-	var total_letters: int = gameplay_controller.get_total_letters()
-	var target_text := (
-		"Complete"
-		if gameplay_controller.is_word_complete()
-		else "Next: %s" % gameplay_controller.get_next_target_letter()
-	)
-	var status_format = "%s   %d/%d   %s"
-	hud.set_status(
-		(
-			status_format
-			% [target_text, gameplay_controller.next_target_index, total_letters, mode_text]
-		)
-	)
+	var status_text: String = gameplay_mode.get_status_text(self)
+	if not status_text.is_empty():
+		hud.set_status(status_text)
 
 
 func _toggle_options() -> void:

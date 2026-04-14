@@ -152,6 +152,21 @@ func test_reading_mode_scene_player_has_trigger_hitbox() -> void:
 	instance.free()
 
 
+func test_reading_mode_registers_toggle_and_confirm_actions_before_input() -> void:
+	var toggle_action := ReadingControlProfile.ACTION_TOGGLE_OPTIONS
+	var confirm_action := ReadingControlProfile.ACTION_CONFIRM
+	if InputMap.has_action(toggle_action):
+		InputMap.erase_action(toggle_action)
+	if InputMap.has_action(confirm_action):
+		InputMap.erase_action(confirm_action)
+
+	var runner = scene_runner("res://scenes/level_types/pronunciation_mode.tscn")
+	runner.simulate_frames(1)
+
+	assert_that(InputMap.has_action(toggle_action)).is_true()
+	assert_that(InputMap.has_action(confirm_action)).is_true()
+
+
 func test_reading_mode_path_smooth_corner() -> void:
 	var reading_mode: Variant = _own_node(PronunciationMode.new())
 	var layout = TrackLayout.new()

@@ -80,9 +80,18 @@ func test_whole_word_mode_scene_structure() -> void:
 	"""Verify whole_word_mode.tscn has basic expected structure."""
 	var scene = load("res://scenes/level_types/whole_word_mode.tscn") as PackedScene
 	var instance: Node = scene.instantiate() as Node
+	var world_environment := _find_child_by_name(instance, "Environment") as WorldEnvironment
+	var selection_panel := _find_child_by_name(instance, "SelectionPanel") as Control
+	var selection_title := _find_child_by_name(instance, "Title") as Label
 
 	assert_that(instance).is_not_null()
 	assert_that(instance is Node).is_true()
+	assert_that(world_environment).is_not_null()
+	assert_that(world_environment.environment).is_not_null()
+	assert_that(world_environment.environment.background_color.r).is_less(0.2)
+	assert_that(selection_panel).is_not_null()
+	assert_that(selection_title).is_not_null()
+	assert_that(selection_title.text).is_equal("Select Word")
 
 	instance.free()
 

@@ -1,0 +1,29 @@
+Godot Engine v4.6.stable.mono.official.89cea1439 - https://godotengine.org
+
+
+=== Reading Racer Diagnostic Report ===
+
+
+=== Diagnostic Results ===
+
+Γ£ô TrackGenerator
+Γ£ô TrackSegment
+Γ£ô StraightSegment
+Γ£ô CurveSegment
+Γ£ô ControlProfile
+Γ£ô LaneChangeController
+Γ£ô SmoothSteeringController
+Γ£ô ThrottleSteeringController
+Γ£ô ReadingPickupTrigger
+Γ£ô ReadingObstacleTrigger
+Γ£ô ReadingFinishGateTrigger
+Γ£ô ReadingContentLoader
+Γ£ô ReadingSettingsStore
+Γ£ô ReadingHUD
+Γ£ô PhonemePlayer
+Γ£ô res://scenes/level_types/pronunciation_mode.tscn
+Γ£ô res://scenes/level_types/whole_word_mode.tscn
+
+Passed: 17/17
+
+Γ£ô All systems loaded successfully!

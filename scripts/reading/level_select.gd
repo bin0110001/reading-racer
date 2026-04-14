@@ -705,8 +705,6 @@ func _get_level_data_from_button(button: Button) -> Dictionary:
 
 
 func _get_start_scene_path() -> String:
-	if selected_mode == LEVEL_MODE_WORD_CHOICE:
-		return WHOLE_WORD_MODE_SCENE_PATH
 	return PRONUNCIATION_MODE_SCENE_PATH
 
 

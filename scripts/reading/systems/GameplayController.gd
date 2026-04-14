@@ -567,6 +567,8 @@ func spawn_loop_course_word_choices(
 	var segment_heading := float(path_frame.get("heading", 0.0))
 	var path_right: Vector3 = path_frame.get("right", Vector3.RIGHT) as Vector3
 
+	var wrong_choice_obstacles: Array[ReadingObstacleTrigger] = []
+
 	for choice_index in range(choice_entries.size()):
 		var choice_data := choice_entries[choice_index] as Dictionary
 		var trigger := WordChoiceTriggerScript.new()
@@ -589,7 +591,58 @@ func spawn_loop_course_word_choices(
 		trigger.choice_selected.connect(_on_word_choice_triggered)
 		word_choice_triggers.append(trigger)
 
+		if not trigger.is_correct:
+			var wrong_obstacle := ReadingObstacleTrigger.new()
+			wrong_obstacle.position = trigger.position
+			wrong_obstacle.position.y = 0.6
+			wrong_obstacle.rotation.y = segment_heading
+			wrong_obstacle.word_index = active_word_index
+			wrong_obstacle.obstacle_index = choice_index
+			wrong_obstacle.trigger_width = trigger.trigger_width
+			wrong_obstacle.trigger_depth = trigger.trigger_depth
+
+			var obstacle_data = obstacle_config.choose_random_obstacle("", "", _rng)
+			var obstacle_model_path = str(obstacle_data.get("model_path", OBSTACLE_MODEL_PATH))
+			var hit_sounds = obstacle_data.get("sound_paths", ["res://audio/skid.ogg"]) as Array
+			wrong_obstacle.hit_sound_paths = hit_sounds
+			_apply_obstacle_scale(wrong_obstacle, obstacle_data)
+
+			spawn_root.add_child(wrong_obstacle)
+
+			var obstacle_visual := _instantiate_scene(obstacle_model_path)
+			if obstacle_visual != null:
+				obstacle_visual.scale = Vector3.ONE * _get_obstacle_scale(obstacle_data)
+				wrong_obstacle.add_child(obstacle_visual)
+
+			wrong_obstacle.obstacle_hit.connect(
+				_on_word_choice_obstacle_hit.bindv([wrong_obstacle])
+			)
+			wrong_choice_obstacles.append(wrong_obstacle)
+
+	for wrong_obstacle in wrong_choice_obstacles:
+		obstacle_triggers.append(wrong_obstacle)
+
+	word_obstacle_registry[active_word_index] = wrong_choice_obstacles
+
 	return word_choice_triggers
+
+
+func _on_word_choice_obstacle_hit(_obstacle_index: int, trigger) -> void:
+	if trigger.word_index != current_entry_index:
+		return
+	if player != null and player.is_inside_tree():
+		var player_pos: Vector3 = player.global_transform.origin
+		var trigger_pos: Vector3 = trigger.global_transform.origin
+		var x_dist: float = abs(player_pos.x - trigger_pos.x)
+		var z_dist: float = abs(player_pos.z - trigger_pos.z)
+		var min_x: float = (trigger.trigger_width * 0.5) + 2.0
+		var min_z: float = (trigger.trigger_depth * 0.5) + 3.0
+		if x_dist > min_x or z_dist > min_z:
+			push_warning(
+				"[GameplayController] Word choice obstacle hit suppressed - player too far"
+			)
+			return
+	obstacle_hit.emit(trigger.penalty_seconds)
 
 
 func _on_word_choice_triggered(choice_text: String, correct: bool, word_index: int) -> void:

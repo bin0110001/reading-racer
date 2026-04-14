@@ -450,7 +450,7 @@ func _load_settings() -> void:
 
 func _select_vehicle(vehicle_id: String) -> void:
 	var vehicle_library := PlayerVehicleLibraryScript.new()
-	selected_vehicle_id = _vehicle_library.resolve_vehicle_id_instance(
+	selected_vehicle_id = vehicle_library.resolve_vehicle_id_instance(
 		{PlayerVehicleLibraryScript.SETTING_KEY_VEHICLE_ID: vehicle_id}
 	)
 	for index in range(vehicle_catalog.size()):
@@ -468,10 +468,10 @@ func _refresh_vehicle_preview() -> void:
 		vehicle_preview_instance = null
 
 	var vehicle_library := PlayerVehicleLibraryScript.new()
-	var vehicle_settings := _vehicle_library.build_vehicle_settings_instance(
+	var vehicle_settings: Dictionary = vehicle_library.build_vehicle_settings_instance(
 		selected_vehicle_id, selected_vehicle_color, selected_vehicle_decals
 	)
-	vehicle_preview_instance = _vehicle_library.instantiate_vehicle_from_settings_instance(
+	vehicle_preview_instance = vehicle_library.instantiate_vehicle_from_settings_instance(
 		vehicle_settings, PlayerVehicleLibraryScript.PREVIEW_MAX_DIMENSION * 1.2
 	)
 	if vehicle_preview_instance == null:
@@ -484,7 +484,7 @@ func _refresh_vehicle_preview() -> void:
 	if camera_brush != null:
 		camera_brush.get_atlas_textures()
 	var selected_vehicle: Dictionary = (
-		_vehicle_library.get_vehicle_by_id_instance(selected_vehicle_id) as Dictionary
+		vehicle_library.get_vehicle_by_id_instance(selected_vehicle_id) as Dictionary
 	)
 	var vehicle_name: String = str(selected_vehicle.get("name", "Vehicle"))
 	vehicle_name_label.text = vehicle_name
@@ -523,9 +523,7 @@ func _apply_preview_decals() -> void:
 	if vehicle_preview_instance == null:
 		return
 	var vehicle_library := PlayerVehicleLibraryScript.new()
-	_vehicle_library.apply_vehicle_decals_instance(
-		vehicle_preview_instance, selected_vehicle_decals
-	)
+	vehicle_library.apply_vehicle_decals_instance(vehicle_preview_instance, selected_vehicle_decals)
 
 
 func _setup_paint_collision(_node: Node) -> void:
@@ -544,7 +542,7 @@ func _collect_decals(node: Node) -> Array:
 
 func _apply_vehicle_settings(settings: Dictionary) -> void:
 	var vehicle_library := PlayerVehicleLibraryScript.new()
-	var vehicle_settings := _vehicle_library.build_vehicle_settings_instance(
+	var vehicle_settings: Dictionary = vehicle_library.build_vehicle_settings_instance(
 		selected_vehicle_id, selected_vehicle_color, selected_vehicle_decals
 	)
 	for key in vehicle_settings.keys():

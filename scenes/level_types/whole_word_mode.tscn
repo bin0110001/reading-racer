@@ -1,7 +1,23 @@
 [gd_scene format=3 uid="uid://dttplp856vnyb"]
 
 [ext_resource type="Script" uid="uid://ml73gfprcrpf" path="res://scripts/reading/level_types/whole_word_mode.gd" id="1_whole_word_mode"]
-[ext_resource type="Environment" uid="uid://c3bs0wfxpri8g" path="res://scenes/main-environment.tres" id="2_environment"]
+
+[sub_resource type="Environment" id="Environment_whole_word"]
+background_mode = 1
+background_color = Color(0.0823529, 0.0980392, 0.141176, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.345098, 0.392157, 0.47451, 1)
+tonemap_mode = 2
+tonemap_exposure = 0.82
+ssao_enabled = true
+ssao_intensity = 2.0
+ssil_enabled = true
+ssil_radius = 2.0
+ssil_intensity = 0.6
+glow_enabled = true
+glow_levels/2 = 0.4
+glow_levels/3 = 0.2
+glow_strength = 0.35
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_player"]
 size = Vector3(1.33, 3, 3)
@@ -10,7 +26,45 @@ size = Vector3(1.33, 3, 3)
 script = ExtResource("1_whole_word_mode")
 
 [node name="Environment" type="WorldEnvironment" parent="." unique_id=599490795]
-environment = ExtResource("2_environment")
+environment = SubResource("Environment_whole_word")
+
+[node name="UiLayer" type="CanvasLayer" parent="." unique_id=2000000001]
+layer = 1
+
+[node name="SelectionPanel" type="Panel" parent="UiLayer" unique_id=2000000002]
+anchors_preset = 15
+offset_right = 0.0
+offset_bottom = 0.0
+
+[node name="PanelVBox" type="VBoxContainer" parent="UiLayer/SelectionPanel" unique_id=2000000003]
+offset_left = 64.0
+offset_top = 64.0
+offset_right = -64.0
+offset_bottom = -64.0
+theme_override_constants/separation = 20
+
+[node name="Title" type="Label" parent="UiLayer/SelectionPanel/PanelVBox" unique_id=2000000004]
+text = "Select Word"
+theme_override_font_sizes/font_size = 48
+
+[node name="Subtitle" type="Label" parent="UiLayer/SelectionPanel/PanelVBox" unique_id=2000000005]
+text = "Choose a word preview from the row below."
+theme_override_font_sizes/font_size = 24
+
+[node name="ChoiceRow" type="HBoxContainer" parent="UiLayer/SelectionPanel/PanelVBox" unique_id=2000000006]
+theme_override_constants/separation = 28
+
+[node name="ChoiceCat" type="Label" parent="UiLayer/SelectionPanel/PanelVBox/ChoiceRow" unique_id=2000000007]
+text = "CAT"
+theme_override_font_sizes/font_size = 32
+
+[node name="ChoiceVelocity" type="Label" parent="UiLayer/SelectionPanel/PanelVBox/ChoiceRow" unique_id=2000000008]
+text = "VELOCITY"
+theme_override_font_sizes/font_size = 32
+
+[node name="ChoiceRainbow" type="Label" parent="UiLayer/SelectionPanel/PanelVBox/ChoiceRow" unique_id=2000000009]
+text = "RAINBOW"
+theme_override_font_sizes/font_size = 32
 
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=2082590000]
 transform = Transform3D(-0.511864, -0.564863, 0.646877, 0, 0.753356, 0.657615, -0.859066, 0.336635, -0.385035, 0, 0, 0)
@@ -37,3 +91,27 @@ fov = 42.0
 far = 250.0
 
 [node name="WordDisplayRoot" type="Node3D" parent="." unique_id=1082301838]
+
+[node name="WordLaneDisplay_CAT" type="Label3D" parent="WordDisplayRoot" unique_id=1800000001]
+text = "CAT"
+billboard = 1
+font_size = 72
+outline_size = 8
+modulate = Color(1, 0.95, 0.45, 1)
+position = Vector3(-12, 1.2, 0)
+
+[node name="WordLaneDisplay_VELOCITY" type="Label3D" parent="WordDisplayRoot" unique_id=1800000002]
+text = "VELOCITY"
+billboard = 1
+font_size = 72
+outline_size = 8
+modulate = Color(1, 0.95, 0.45, 1)
+position = Vector3(0, 1.2, 0)
+
+[node name="WordLaneDisplay_RAINBOW" type="Label3D" parent="WordDisplayRoot" unique_id=1800000003]
+text = "RAINBOW"
+billboard = 1
+font_size = 72
+outline_size = 8
+modulate = Color(1, 0.95, 0.45, 1)
+position = Vector3(12, 1.2, 0)

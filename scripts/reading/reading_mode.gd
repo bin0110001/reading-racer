@@ -835,13 +835,10 @@ func _start_next_word(
 	current_word_start_x = _path_index_to_distance(int(word_anchor.get("start_index", 0)))
 
 	_reset_word_state(reset_position, use_countdown)
-	hud.set_word(
-		(
-			gameplay_mode.get_start_word_label(self, current_entry)
-			if gameplay_mode != null
-			else str(current_entry.get("text", ""))
-		)
-	)
+	if gameplay_mode != null:
+		gameplay_mode.update_word_display(self)
+	else:
+		hud.set_word(str(current_entry.get("text", "")))
 	hud.set_phoneme("")
 	if play_feedback:
 		hud.flash_feedback("Next word", Color(0.45, 0.75, 1.0))
@@ -1247,6 +1244,8 @@ func _on_gameplay_pickup_collected(letter: String, phoneme_label: String) -> voi
 
 	# Update HUD phoneme text immediately (important for tests and direct event calls)
 	_on_phoneme_changed(resolved_label)
+	if gameplay_mode != null:
+		gameplay_mode.update_word_display(self)
 	_phoneme_smoke_spawn_timer = 0.0
 	if not _phoneme_smoke_label.is_empty():
 		_spawn_phoneme_smoke_letter(_phoneme_smoke_label)

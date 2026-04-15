@@ -551,6 +551,7 @@ func spawn_loop_course_word_choices(
 	active_word_index: int,
 	p_get_path_frame: Callable,
 	clear_existing: bool = true,
+	spawn_wrong_obstacles: bool = false,
 ) -> Array:
 	if choice_entries.is_empty() or spawn_root == null:
 		return []
@@ -591,7 +592,7 @@ func spawn_loop_course_word_choices(
 		trigger.choice_selected.connect(_on_word_choice_triggered)
 		word_choice_triggers.append(trigger)
 
-		if not trigger.is_correct:
+		if spawn_wrong_obstacles and not trigger.is_correct:
 			var wrong_obstacle := ReadingObstacleTrigger.new()
 			wrong_obstacle.position = trigger.position
 			wrong_obstacle.position.y = 0.6
@@ -619,10 +620,10 @@ func spawn_loop_course_word_choices(
 			)
 			wrong_choice_obstacles.append(wrong_obstacle)
 
-	for wrong_obstacle in wrong_choice_obstacles:
-		obstacle_triggers.append(wrong_obstacle)
-
 	word_obstacle_registry[active_word_index] = wrong_choice_obstacles
+	if spawn_wrong_obstacles:
+		for wrong_obstacle in wrong_choice_obstacles:
+			obstacle_triggers.append(wrong_obstacle)
 
 	return word_choice_triggers
 

@@ -33,6 +33,7 @@ func _rebuild() -> void:
 	for child in get_children():
 		child.queue_free()
 
+	rotation_degrees = Vector3(0.0, 270.0, 0.0)
 	word_scale = 1.0
 	word_width = 0.0
 	var normalized_word := text.strip_edges()

@@ -31,6 +31,12 @@ func get_status_text(owner) -> String:
 	)
 
 
+func update_word_display(owner) -> void:
+	if owner == null or owner.hud == null:
+		return
+	owner.hud.set_word(str(owner.current_entry.get("text", "")))
+
+
 func spawn_course_for_entry(
 	_owner,
 	_entry: Dictionary,

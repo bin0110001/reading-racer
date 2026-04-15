@@ -271,7 +271,12 @@ func test_gameplay_controller_spawns_word_choice_triggers() -> void:
 	)
 
 	assert_that(triggers.size()).is_equal(3)
+	assert_that(controller.obstacle_triggers).is_empty()
 	assert_that(str(triggers[0].choice_text)).is_not_equal("")
+	var word_visual := triggers[0].get_node_or_null("WordLaneDisplay") as Node3D
+	assert_that(word_visual).is_not_null()
+	if word_visual != null:
+		assert_that(float(word_visual.rotation_degrees.y)).is_equal(270.0)
 
 
 func test_reading_mode_spawns_phoneme_smoke_letters() -> void:

@@ -40,3 +40,13 @@ func spawn_course_for_entry(
 		"course_plan_summary": course_plan_summary,
 		"finish_cells": finish_cells,
 	}
+
+
+func update_word_display(owner) -> void:
+	if owner == null or owner.hud == null:
+		return
+	var current_text := str(owner.current_entry.get("text", ""))
+	var current_letter_index := 0
+	if owner.gameplay_controller != null:
+		current_letter_index = owner.gameplay_controller.next_target_index
+	owner.hud.set_spelling_word(current_text, current_letter_index)

@@ -12,10 +12,14 @@ signal map_style_changed(map_style: String)
 signal play_debug_audio(selected_word: String, selected_phoneme: String)
 
 var _status_label := Label.new()
-var _word_label := Label.new()
+var _word_display_root := Control.new()
+var _spelling_word_label := RichTextLabel.new()
+var _whole_word_strip := Control.new()
 var _phoneme_label := Label.new()
 var _help_label := Label.new()
 var _feedback_label := Label.new()
+
+var _whole_word_word_labels: Array[Label] = []
 
 var _options_panel := PanelContainer.new()
 var _control_mode_option := OptionButton.new()
@@ -54,15 +58,42 @@ func _build_hud() -> void:
 	_status_label.text = "Loading reading mode..."
 	add_child(_status_label)
 
-	_word_label.anchor_left = 0.5
-	_word_label.anchor_top = 0.03
-	_word_label.anchor_right = 0.5
-	_word_label.offset_left = -180
-	_word_label.offset_right = 180
-	_word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_word_label.add_theme_font_size_override("font_size", 34)
-	_word_label.add_theme_color_override("font_color", Color.BLACK)
-	add_child(_word_label)
+	_word_display_root.anchor_left = 0.0
+	_word_display_root.anchor_top = 0.03
+	_word_display_root.anchor_right = 1.0
+	_word_display_root.anchor_bottom = 0.18
+	_word_display_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_word_display_root.clip_contents = false
+	add_child(_word_display_root)
+
+	_spelling_word_label.anchor_left = 0.5
+	_spelling_word_label.anchor_top = 0.0
+	_spelling_word_label.anchor_right = 0.5
+	_spelling_word_label.offset_left = -420
+	_spelling_word_label.offset_right = 420
+	_spelling_word_label.offset_top = 0
+	_spelling_word_label.offset_bottom = 72
+	_spelling_word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spelling_word_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_spelling_word_label.bbcode_enabled = true
+	_spelling_word_label.fit_content = true
+	_spelling_word_label.scroll_active = false
+	_spelling_word_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_spelling_word_label.add_theme_font_size_override("normal_font_size", 34)
+	_spelling_word_label.add_theme_color_override("default_color", Color.BLACK)
+	_word_display_root.add_child(_spelling_word_label)
+
+	_whole_word_strip.anchor_left = 0.5
+	_whole_word_strip.anchor_top = 0.0
+	_whole_word_strip.anchor_right = 0.5
+	_whole_word_strip.offset_left = -960
+	_whole_word_strip.offset_right = 960
+	_whole_word_strip.offset_top = 0
+	_whole_word_strip.offset_bottom = 72
+	_whole_word_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_whole_word_strip.clip_contents = false
+	_whole_word_strip.visible = false
+	_word_display_root.add_child(_whole_word_strip)
 
 	_phoneme_label.anchor_left = 0.5
 	_phoneme_label.anchor_top = 0.9
@@ -206,7 +237,86 @@ func set_status(text_value: String) -> void:
 
 
 func set_word(text_value: String) -> void:
-	_word_label.text = text_value.to_upper()
+	set_spelling_word(text_value, -1)
+
+
+func set_spelling_word(text_value: String, current_letter_index: int = -1) -> void:
+	_whole_word_strip.visible = false
+	_spelling_word_label.visible = true
+	var normalized_text := text_value.to_upper()
+	if normalized_text.is_empty():
+		_spelling_word_label.text = ""
+		return
+	var safe_letter_index := clampi(current_letter_index, -1, normalized_text.length() - 1)
+	if safe_letter_index < 0 or safe_letter_index >= normalized_text.length():
+		_spelling_word_label.text = normalized_text
+		return
+	var prefix := normalized_text.substr(0, safe_letter_index)
+	var highlight := normalized_text.substr(safe_letter_index, 1)
+	var suffix := normalized_text.substr(safe_letter_index + 1)
+	_spelling_word_label.text = "%s[color=#ffd966][u]%s[/u][/color]%s" % [
+		prefix,
+		highlight,
+		suffix,
+	]
+
+
+func set_word_sequence(entries: Array, current_index: int) -> void:
+	_spelling_word_label.visible = false
+	_whole_word_strip.visible = true
+	_clear_whole_word_strip()
+
+	var words: Array[String] = []
+	for entry in entries:
+		if entry is Dictionary:
+			words.append(str((entry as Dictionary).get("text", "")).to_upper())
+		else:
+			words.append(str(entry).to_upper())
+
+	if words.is_empty():
+		return
+
+	var highlighted_index := clampi(current_index, 0, words.size() - 1)
+	var cursor_x := 0.0
+	var word_label_data: Array[Dictionary] = []
+	for word_index in range(words.size()):
+		var word_text := words[word_index]
+		var word_label := Label.new()
+		word_label.text = word_text
+		word_label.add_theme_font_size_override("font_size", 34)
+		word_label.add_theme_color_override(
+			"font_color",
+			Color(1.0, 0.95, 0.45) if word_index == highlighted_index else Color.BLACK
+		)
+		_whole_word_strip.add_child(word_label)
+		var word_width := _measure_label_width(word_label)
+		word_label.position = Vector2(cursor_x, 0.0)
+		word_label.size = Vector2(word_width, 48.0)
+		word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		word_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		word_label_data.append({"label": word_label, "center": cursor_x + word_width * 0.5, "width": word_width})
+		cursor_x += word_width + 24.0
+
+	var screen_center_x := get_viewport_rect().size.x * 0.5
+	var highlighted_word := word_label_data[highlighted_index]
+	var highlighted_center := float(highlighted_word.get("center", 0.0))
+	_whole_word_strip.position = Vector2(screen_center_x - highlighted_center, 0.0)
+
+
+func _clear_whole_word_strip() -> void:
+	for child in _whole_word_strip.get_children():
+		child.queue_free()
+	_whole_word_word_labels.clear()
+
+
+func _measure_label_width(label: Label) -> float:
+	var font := label.get_theme_font("font")
+	if font == null:
+		font = ThemeDB.fallback_font
+	var font_size := label.get_theme_font_size("font_size")
+	if font_size <= 0:
+		font_size = 34
+	return float(font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
 
 
 func set_phoneme(text_value: String) -> void:

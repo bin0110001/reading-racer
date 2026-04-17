@@ -153,6 +153,10 @@ static func resolve_vehicle_id(settings: Dictionary) -> String:
 	return vehicle_id
 
 
+func resolve_vehicle_id_instance(settings: Dictionary) -> String:
+	return PlayerVehicleLibrary.resolve_vehicle_id(settings)
+
+
 static func resolve_scene_path(settings: Dictionary) -> String:
 	var stored_path := str(settings.get(SETTING_KEY_VEHICLE_SCENE_PATH, ""))
 	if not stored_path.is_empty() and ResourceLoader.exists(stored_path):

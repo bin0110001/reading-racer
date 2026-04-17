@@ -10,6 +10,9 @@ const ReadingObstacleTriggerScript = preload(
 	"res://scripts/reading/triggers/ReadingObstacleTrigger.gd"
 )
 const ReadingPickupTriggerScript = preload("res://scripts/reading/triggers/ReadingPickupTrigger.gd")
+const ReadingWordChoiceTriggerScript = preload(
+	"res://scripts/reading/triggers/ReadingWordChoiceTrigger.gd"
+)
 
 var _owned_nodes: Array[Node] = []
 
@@ -27,14 +30,28 @@ func _own_node(node: Node) -> Node:
 func after_each() -> void:
 	for node in _owned_nodes:
 		if is_instance_valid(node):
-			node.free()
+			_free_node_tree(node)
 	_owned_nodes.clear()
 	collect_orphan_node_details()
 
 
+func _free_node_tree(node: Node) -> void:
+	for child in node.get_children():
+		if child is Node:
+			_free_node_tree(child)
+	node.free()
+
+
 func test_pickup_trigger_initialization() -> void:
 	var trigger = _own_node(ReadingPickupTriggerScript.new())
+	trigger._ready()
 	assert_that(trigger).is_not_null()
+	assert_that(trigger.get_child_count()).is_greater(0)
+	var collision_shape := trigger.get_child(0) as CollisionShape3D
+	assert_that(collision_shape).is_not_null()
+	if collision_shape != null and collision_shape.shape is BoxShape3D:
+		var box_shape := collision_shape.shape as BoxShape3D
+		assert_that(box_shape.size).is_equal(Vector3(8.0, 2.0, 6.0))
 
 
 func test_pickup_trigger_properties() -> void:
@@ -58,7 +75,14 @@ func test_pickup_trigger_has_signal() -> void:
 
 func test_obstacle_trigger_initialization() -> void:
 	var trigger = _own_node(ReadingObstacleTriggerScript.new())
+	trigger._ready()
 	assert_that(trigger).is_not_null()
+	assert_that(trigger.get_child_count()).is_greater(0)
+	var collision_shape := trigger.get_child(0) as CollisionShape3D
+	assert_that(collision_shape).is_not_null()
+	if collision_shape != null and collision_shape.shape is BoxShape3D:
+		var box_shape := collision_shape.shape as BoxShape3D
+		assert_that(box_shape.size).is_equal(Vector3(1.35, 2.0, 1.0))
 
 
 func test_obstacle_trigger_has_signal() -> void:
@@ -106,7 +130,26 @@ func test_obstacle_trigger_collision_box_does_not_scale_with_holiday_visuals() -
 
 func test_finish_gate_trigger_initialization() -> void:
 	var trigger = _own_node(ReadingFinishGateTriggerScript.new())
+	trigger._ready()
 	assert_that(trigger).is_not_null()
+	assert_that(trigger.get_child_count()).is_greater(0)
+	var collision_shape := trigger.get_child(0) as CollisionShape3D
+	assert_that(collision_shape).is_not_null()
+	if collision_shape != null and collision_shape.shape is BoxShape3D:
+		var box_shape := collision_shape.shape as BoxShape3D
+		assert_that(box_shape.size).is_equal(Vector3(16.0, 3.0, 8.0))
+
+
+func test_word_choice_trigger_initialization() -> void:
+	var trigger = _own_node(ReadingWordChoiceTriggerScript.new())
+	trigger._ready()
+	assert_that(trigger).is_not_null()
+	assert_that(trigger.get_child_count()).is_greater(0)
+	var collision_shape := trigger.get_child(0) as CollisionShape3D
+	assert_that(collision_shape).is_not_null()
+	if collision_shape != null and collision_shape.shape is BoxShape3D:
+		var box_shape := collision_shape.shape as BoxShape3D
+		assert_that(box_shape.size).is_equal(Vector3(10.0, 3.0, 4.0))
 
 
 func test_finish_gate_trigger_has_signal() -> void:

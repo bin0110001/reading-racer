@@ -576,35 +576,28 @@ function Get-GdUnitTargetResPaths {
         return $targets.ToArray()
     }
 
-    $testDirectories = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
+    $testTargets = New-Object System.Collections.Generic.List[string]
+    $testTargetSet = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($testFile in @($TestFiles)) {
-        $testDirectory = Split-Path -Parent $testFile
-        if ([string]::IsNullOrWhiteSpace($testDirectory)) {
+        $testFileResPath = Convert-ToResPath -RepoRoot $RepoRoot -FilePath $testFile
+        if (-not (
+            $testFileResPath.StartsWith('res://test/', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $testFileResPath.StartsWith('res://tests/', [System.StringComparison]::OrdinalIgnoreCase)
+        )) {
             continue
         }
-        $testDirectoryResPath = Convert-ToResPath -RepoRoot $RepoRoot -FilePath $testDirectory
-        if ($testDirectoryResPath.StartsWith('res://test/', [System.StringComparison]::OrdinalIgnoreCase) -or
-            $testDirectoryResPath.StartsWith('res://tests/', [System.StringComparison]::OrdinalIgnoreCase)) {
-            [void]$testDirectories.Add($testDirectoryResPath)
+        if ($testTargetSet.Add($testFileResPath)) {
+            $testTargets.Add($testFileResPath)
         }
     }
 
-    if ($testDirectories.Count -eq 0) {
+    if ($testTargets.Count -eq 0) {
         return [string[]]@()
     }
 
-    $orderedDirectories = @($testDirectories | Sort-Object { $_.Length } -Descending)
-    foreach ($testDirectoryResPath in $orderedDirectories) {
-        $isCoveredByExistingTarget = $false
-        foreach ($target in $targets) {
-            if ($target.StartsWith($testDirectoryResPath + '/', [System.StringComparison]::OrdinalIgnoreCase)) {
-                $isCoveredByExistingTarget = $true
-                break
-            }
-        }
-
-        if (-not $isCoveredByExistingTarget -and $seen.Add($testDirectoryResPath)) {
-            $targets.Add($testDirectoryResPath)
+    foreach ($testTargetResPath in $testTargets) {
+        if ($seen.Add($testTargetResPath)) {
+            $targets.Add($testTargetResPath)
         }
     }
 

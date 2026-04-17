@@ -2,6 +2,10 @@ class_name ReadingWordChoiceTrigger extends Area3D
 
 signal choice_selected(text: String, correct: bool, word_index: int)
 
+const TriggerCollisionBuilder = preload(
+	"res://scripts/reading/triggers/ReadingTriggerCollisionBuilder.gd"
+)
+
 @export var word_index: int = 0
 @export var choice_text: String = ""
 @export var is_correct: bool = false
@@ -12,12 +16,16 @@ var has_triggered := false
 
 
 func _ready() -> void:
-	var collision_shape = CollisionShape3D.new()
-	var box_shape = BoxShape3D.new()
-	box_shape.size = Vector3(trigger_width, 2.0, trigger_depth)
-	collision_shape.shape = box_shape
-	add_child(collision_shape)
-	collision_shape.position = Vector3.ZERO
+	(
+		TriggerCollisionBuilder
+		. add_box_collision(
+			self,
+			trigger_width,
+			3.0,
+			trigger_depth,
+			Vector3(0.0, -0.5, 0.0),
+		)
+	)
 	area_entered.connect(_on_area_entered)
 
 

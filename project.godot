@@ -19,6 +19,10 @@ config/icon="res://icon.svg"
 
 Diagnostic="*res://scripts/reading/startup_diagnostic.gd"
 
+[dotnet]
+
+project/assembly_name="ReadingRacer"
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/Godot-MToon-Shader/plugin.cfg", "res://addons/gdUnit4/plugin.cfg", "res://addons/unidot_importer/plugin.cfg")

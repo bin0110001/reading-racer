@@ -97,6 +97,13 @@ func _ready() -> void:
 	_ensure_base_layout()
 	_populate_level_grid()
 	_populate_options()
+	if (
+		steering_option
+		and not steering_option.item_selected.is_connected(_on_steering_option_selected)
+	):
+		steering_option.item_selected.connect(_on_steering_option_selected)
+	if map_option and not map_option.item_selected.is_connected(_on_map_option_selected):
+		map_option.item_selected.connect(_on_map_option_selected)
 	_load_settings()
 	_build_steering_type_buttons()
 	_build_map_preview()
@@ -343,6 +350,12 @@ func _on_map_option_selected(_index: int) -> void:
 	_update_map_preview()
 
 
+func _on_steering_option_selected(index: int) -> void:
+	if index < 0 or index >= ReadingSettingsStore.STEERING_TYPES.size():
+		return
+	_set_selected_steering_type(ReadingSettingsStore.STEERING_TYPES[index])
+
+
 func _populate_vehicle_options() -> void:
 	vehicle_catalog = PlayerVehicleLibraryScript.list_vehicles()
 	vehicle_option.clear()
@@ -551,10 +564,22 @@ func _update_final_row() -> void:
 
 func _populate_options() -> void:
 	_populate_vehicle_options()
-	if content_loader != null:
-		var groups: Array[String] = content_loader.list_word_groups()
-		for group in groups:
-			map_option.add_item(str(group))
+	if steering_option:
+		steering_option.clear()
+		for steering_type in ReadingSettingsStore.STEERING_TYPES:
+			steering_option.add_item(steering_type.replace("_", " ").capitalize())
+	if map_option:
+		map_option.clear()
+		for map_style in ReadingSettingsStore.MAP_STYLES:
+			map_option.add_item(map_style.capitalize())
+	if holiday_mode_option:
+		holiday_mode_option.clear()
+		for holiday_mode in ReadingSettingsStore.HOLIDAY_MODES:
+			holiday_mode_option.add_item(holiday_mode.capitalize())
+	if holiday_name_option:
+		holiday_name_option.clear()
+		for holiday_name in ReadingSettingsStore.HOLIDAY_OPTIONS:
+			holiday_name_option.add_item(holiday_name.capitalize())
 
 
 func _load_settings() -> void:
@@ -567,6 +592,23 @@ func _load_settings() -> void:
 		var default_steering := ReadingSettingsStore.STEERING_TYPE_LANE_CHANGE
 		var steering_type := str(settings.get("steering_type", default_steering))
 		_set_selected_steering_type(steering_type)
+		if map_option:
+			var map_style := str(settings.get("map_style", ReadingSettingsStore.MAP_STYLE_CIRCULAR))
+			var map_index := ReadingSettingsStore.MAP_STYLES.find(map_style)
+			if map_index >= 0:
+				map_option.select(map_index)
+		if holiday_mode_option:
+			var holiday_mode := str(
+				settings.get("holiday_mode", ReadingSettingsStore.HOLIDAY_MODE_AUTO)
+			)
+			var holiday_mode_index := ReadingSettingsStore.HOLIDAY_MODES.find(holiday_mode)
+			if holiday_mode_index >= 0:
+				holiday_mode_option.select(holiday_mode_index)
+		if holiday_name_option:
+			var holiday_name := str(settings.get("holiday_name", ReadingSettingsStore.HOLIDAY_NONE))
+			var holiday_name_index := ReadingSettingsStore.HOLIDAY_OPTIONS.find(holiday_name)
+			if holiday_name_index >= 0:
+				holiday_name_option.select(holiday_name_index)
 
 
 func _on_vehicle_selected(index: int) -> void:
@@ -657,8 +699,6 @@ func _set_selected_steering_type(steering_type: String) -> void:
 
 
 func _get_selected_steering_type() -> String:
-	if steering_option and steering_option.selected >= 0:
-		return ReadingSettingsStore.STEERING_TYPES[steering_option.selected]
 	return selected_steering_type
 
 
@@ -734,10 +774,17 @@ func _on_vehicle_button_pressed() -> void:
 
 func _on_save_pressed() -> void:
 	var settings = settings_store.load_settings()
+	if steering_option and steering_option.selected >= 0:
+		var steering_index := steering_option.selected
+		if steering_index < ReadingSettingsStore.STEERING_TYPES.size():
+			selected_steering_type = ReadingSettingsStore.STEERING_TYPES[steering_index]
+	if map_option and map_option.selected >= 0:
+		var map_index := map_option.selected
+		if map_index < ReadingSettingsStore.MAP_STYLES.size():
+			settings["map_style"] = ReadingSettingsStore.MAP_STYLES[map_index]
 	settings["holiday_mode"] = ReadingSettingsStore.HOLIDAY_MODES[holiday_mode_option.selected]
 	settings["holiday_name"] = ReadingSettingsStore.HOLIDAY_OPTIONS[holiday_name_option.selected]
 	settings["steering_type"] = _get_selected_steering_type()
-	settings["map_style"] = ReadingSettingsStore.MAP_STYLES[map_option.selected]
 	_apply_vehicle_settings(settings)
 	settings_store.save_settings(settings)
 	_set_config_page_visible(false)

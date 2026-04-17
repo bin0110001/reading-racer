@@ -5,6 +5,7 @@ extends GdUnitTestSuite
 # For additional coverage, create separate files like test_reading_mode_word_flow.gd.
 
 const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
+const PronunciationModeScript = preload("res://scripts/reading/level_types/pronunciation_mode.gd")
 
 var obstacle_hit_signaled: bool = false
 var _owned_nodes: Array[Node] = []
@@ -168,7 +169,7 @@ func test_reading_mode_registers_toggle_and_confirm_actions_before_input() -> vo
 
 
 func test_reading_mode_path_smooth_corner() -> void:
-	var reading_mode: Variant = _own_node(PronunciationMode.new())
+	var reading_mode: Variant = _own_node(PronunciationModeScript.new())
 	var layout = TrackLayout.new()
 	var cells: Array[Vector3i] = [
 		Vector3i(0, 0, 0),
@@ -208,7 +209,7 @@ func test_gameplay_controller_does_not_use_invalid_energy_property() -> void:
 
 
 func test_reading_mode_lane_offset_is_clamped_to_track_width() -> void:
-	var reading_mode: Variant = _own_node(PronunciationMode.new())
+	var reading_mode: Variant = _own_node(PronunciationModeScript.new())
 	var layout = TrackLayout.new()
 	var cells: Array[Vector3i] = [
 		Vector3i(0, 0, 0),
@@ -231,7 +232,7 @@ func test_reading_mode_lane_offset_is_clamped_to_track_width() -> void:
 
 
 func test_start_next_word_transition_resets_player_position() -> void:
-	var reading_mode: Variant = _own_node(PronunciationMode.new())
+	var reading_mode: Variant = _own_node(PronunciationModeScript.new())
 	reading_mode.movement_system = MovementSystem.new(LaneChangeController.new())
 	reading_mode.hud = _own_node(ReadingHUD.new())
 	reading_mode.player = _own_node(Node3D.new()) as Node3D

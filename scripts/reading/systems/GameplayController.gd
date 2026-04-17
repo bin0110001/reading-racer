@@ -574,12 +574,12 @@ func spawn_loop_course_word_choices(
 		var choice_data := choice_entries[choice_index] as Dictionary
 		var trigger := WordChoiceTriggerScript.new()
 		trigger.position = segment_pos + path_right * float(choice_index - 1) * 6.0
-		trigger.position += Vector3(0.0, 2.2, 0.0)
+		trigger.position += Vector3(0.0, 1.0, 0.0)
 		trigger.rotation.y = segment_heading
 		trigger.word_index = active_word_index
 		trigger.choice_text = str(choice_data.get("text", ""))
 		trigger.is_correct = bool(choice_data.get("is_correct", false))
-		trigger.trigger_width = 10.0
+		trigger.trigger_width = 3.0
 		trigger.trigger_depth = 4.0
 		spawn_root.add_child(trigger)
 
@@ -587,7 +587,7 @@ func spawn_loop_course_word_choices(
 		if word_visual == null:
 			continue
 		word_visual.name = "WordLaneDisplay"
-		word_visual.position = Vector3(0.0, 2.8, 0.0)
+		word_visual.position = Vector3(0.0, 2.0, 0.0)
 		trigger.add_child(word_visual)
 		trigger.choice_selected.connect(_on_word_choice_triggered)
 		word_choice_triggers.append(trigger)

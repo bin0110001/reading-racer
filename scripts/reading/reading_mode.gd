@@ -13,6 +13,7 @@ const ReadingStandardModeScript = preload("res://scripts/reading/modes/reading_s
 const ReadingWordChoiceModeScript = preload(
 	"res://scripts/reading/modes/reading_word_choice_mode.gd"
 )
+const WordChoicePicker = preload("res://scripts/reading/word_choice_picker.gd")
 const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
 
 # Grid layout constants
@@ -308,6 +309,45 @@ func _get_word_anchor(word_index: int) -> Dictionary:
 	if word_index < 0 or word_index >= shared_track_layout.word_anchors.size():
 		return {}
 	return shared_track_layout.word_anchors[word_index] as Dictionary
+
+
+func _pick_choice_entries(current_index: int, entries: Array) -> Array[Dictionary]:
+	return WordChoicePicker.build_similar_choice_entries(entries, current_index)
+
+
+func _is_path_index_corner(path_index: int) -> bool:
+	if shared_track_layout == null:
+		return false
+	var path_count: int = shared_track_layout.path_cells.size()
+	if path_count < 3:
+		return false
+	var current_cell: Vector3i = shared_track_layout.path_cells[_wrap_path_index(path_index)]
+	var previous_cell: Vector3i = shared_track_layout.path_cells[_wrap_path_index(path_index - 1)]
+	var next_cell: Vector3i = shared_track_layout.path_cells[_wrap_path_index(path_index + 1)]
+	var incoming_dir := current_cell - previous_cell
+	var outgoing_dir := next_cell - current_cell
+	return incoming_dir != outgoing_dir
+
+
+func _is_path_index_too_close_to_corner(path_index: int) -> bool:
+	for offset in range(3):
+		if _is_path_index_corner(path_index - offset):
+			return true
+	return false
+
+
+func _find_safe_word_choice_path_index(path_index: int) -> int:
+	if shared_track_layout == null:
+		return max(path_index, 0)
+	var path_count: int = shared_track_layout.path_cells.size()
+	if path_count <= 0:
+		return max(path_index, 0)
+	var safe_index := _wrap_path_index(path_index)
+	for _step in range(path_count):
+		if not _is_path_index_too_close_to_corner(safe_index):
+			return safe_index
+		safe_index = _wrap_path_index(safe_index + 1)
+	return safe_index
 
 
 func _setup_simple_skybox() -> void:
@@ -960,7 +1000,7 @@ func _on_gameplay_word_choice_selected(choice_text: String, correct: bool, word_
 
 func _find_entry_by_text(text: String) -> Dictionary:
 	for entry in current_entries:
-		if str(entry.get("text", "")).to_lower() == text.to_lower():
+		if str(entry.get("text", "")).strip_edges().to_lower() == text.strip_edges().to_lower():
 			return entry
 	return {}
 
@@ -1067,13 +1107,34 @@ func _find_first_mesh_instance(node: Node) -> MeshInstance3D:
 # Old trigger methods removed - now handled by GameplayController
 
 
-func _complete_word() -> void:
+func _begin_word_transition(
+	feedback_text: String,
+	feedback_color: Color,
+	replay_current_word_audio: bool = true,
+	status_text: String = "",
+) -> void:
 	state = "transition"
 	completion_timer = 2.0
 	phoneme_player.stop_phoneme()
-	phoneme_player.play_word(content_loader.get_word_stream(current_entry))
-	hud.set_status("Great job")
-	hud.flash_feedback("%s" % str(current_entry.get("text", "")).to_upper(), Color(0.45, 1.0, 0.55))
+	if replay_current_word_audio:
+		phoneme_player.play_word(content_loader.get_word_stream(current_entry))
+	if not status_text.is_empty():
+		hud.set_status(status_text)
+	hud.flash_feedback(feedback_text, feedback_color)
+
+
+func _queue_next_word_transition(transition_delay: float) -> void:
+	state = "transition"
+	completion_timer = maxf(0.0, transition_delay)
+
+
+func _complete_word() -> void:
+	_begin_word_transition(
+		"%s" % str(current_entry.get("text", "")).to_upper(),
+		Color(0.45, 1.0, 0.55),
+		true,
+		"Great job",
+	)
 
 
 func _update_camera(delta: float) -> void:

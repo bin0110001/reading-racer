@@ -254,11 +254,14 @@ func set_spelling_word(text_value: String, current_letter_index: int = -1) -> vo
 	var prefix := normalized_text.substr(0, safe_letter_index)
 	var highlight := normalized_text.substr(safe_letter_index, 1)
 	var suffix := normalized_text.substr(safe_letter_index + 1)
-	_spelling_word_label.text = "%s[color=#ffd966][u]%s[/u][/color]%s" % [
-		prefix,
-		highlight,
-		suffix,
-	]
+	_spelling_word_label.text = (
+		"%s[color=#ffd966][u]%s[/u][/color]%s"
+		% [
+			prefix,
+			highlight,
+			suffix,
+		]
+	)
 
 
 func set_word_sequence(entries: Array, current_index: int) -> void:
@@ -285,8 +288,7 @@ func set_word_sequence(entries: Array, current_index: int) -> void:
 		word_label.text = word_text
 		word_label.add_theme_font_size_override("font_size", 34)
 		word_label.add_theme_color_override(
-			"font_color",
-			Color(1.0, 0.95, 0.45) if word_index == highlighted_index else Color.BLACK
+			"font_color", Color(1.0, 0.95, 0.45) if word_index == highlighted_index else Color.BLACK
 		)
 		_whole_word_strip.add_child(word_label)
 		var word_width := _measure_label_width(word_label)
@@ -294,10 +296,25 @@ func set_word_sequence(entries: Array, current_index: int) -> void:
 		word_label.size = Vector2(word_width, 48.0)
 		word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		word_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		word_label_data.append({"label": word_label, "center": cursor_x + word_width * 0.5, "width": word_width})
+		(
+			word_label_data
+			. append(
+				{
+					"label": word_label,
+					"center": cursor_x + word_width * 0.5,
+					"width": word_width,
+				}
+			)
+		)
 		cursor_x += word_width + 24.0
 
-	var screen_center_x := get_viewport_rect().size.x * 0.5
+	var viewport_size := Vector2(1920.0, 1080.0)
+	var viewport := get_viewport()
+	if viewport != null:
+		viewport_size = viewport.get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		viewport_size = Vector2(1920.0, 1080.0)
+	var screen_center_x: float = viewport_size.x * 0.5
 	var highlighted_word := word_label_data[highlighted_index]
 	var highlighted_center := float(highlighted_word.get("center", 0.0))
 	_whole_word_strip.position = Vector2(screen_center_x - highlighted_center, 0.0)

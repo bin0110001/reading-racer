@@ -5,6 +5,26 @@ extends GdUnitTestSuite
 # This flow tests live transitions in a dedicated file.
 
 const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
+const PronunciationModeScript = preload("res://scripts/reading/level_types/pronunciation_mode.gd")
+const ReadingWordChoiceModeScript = preload(
+	"res://scripts/reading/modes/reading_word_choice_mode.gd"
+)
+
+
+class TestWordChoiceContentLoader:
+	extends ReadingContentLoader
+	var test_entries: Array[Dictionary] = []
+	var requested_words: Array[String] = []
+
+	func load_word_entries_for_reading_list(
+		_group_name: String, _scope_value: String = "", _scope_limit: int = 20
+	) -> Array[Dictionary]:
+		return test_entries.duplicate(true)
+
+	func get_word_stream(_entry: Dictionary) -> AudioStream:
+		requested_words.append(str(_entry.get("text", "")))
+		return null
+
 
 var obstacle_hit_signaled: bool = false
 var _owned_nodes: Array[Node] = []
@@ -50,7 +70,7 @@ func after_each() -> void:
 
 
 func _create_reading_mode() -> Variant:
-	return _own_node(PronunciationMode.new())
+	return _own_node(PronunciationModeScript.new())
 
 
 func _configure_reading_mode() -> Variant:
@@ -115,6 +135,97 @@ func test_reading_mode_progresses_to_second_word_placement_grid() -> void:
 	reading_mode._start_next_word(false, false, true)
 	assert_that(reading_mode.current_entry_index).is_equal(1)
 	assert_that(reading_mode.current_entry.get("text", "")).is_equal("b")
+	reading_mode.free()
+
+
+func test_reading_mode_word_choice_skips_first_two_tiles_after_corner() -> void:
+	var reading_mode: Variant = _configure_reading_mode()
+	var layout = TrackLayout.new()
+	layout.path_cells = [
+		Vector3i(0, 0, 0),
+		Vector3i(1, 0, 0),
+		Vector3i(2, 0, 0),
+		Vector3i(2, 0, 1),
+		Vector3i(2, 0, 2),
+		Vector3i(3, 0, 2),
+		Vector3i(4, 0, 2),
+	]
+	reading_mode.shared_track_layout = layout
+	assert_that(reading_mode._find_safe_word_choice_path_index(3)).is_equal(3)
+	reading_mode.free()
+
+
+func test_word_choice_wrong_answer_advances_to_next_word() -> void:
+	var reading_mode: Variant = _configure_reading_mode()
+	var content_loader := TestWordChoiceContentLoader.new()
+	content_loader.test_entries = [
+		{
+			"text": "cat",
+			"letters": PackedStringArray(["c", "a", "t"]),
+			"phonemes": PackedStringArray(["k", "a", "t"]),
+		},
+		{
+			"text": "cap",
+			"letters": PackedStringArray(["c", "a", "p"]),
+			"phonemes": PackedStringArray(["k", "a", "p"]),
+		},
+	]
+	reading_mode.content_loader = content_loader
+	var layout = TrackLayout.new()
+	layout.path_cells = [
+		Vector3i(0, 0, 0),
+		Vector3i(1, 0, 0),
+		Vector3i(2, 0, 0),
+		Vector3i(3, 0, 0),
+		Vector3i(4, 0, 0),
+	]
+	layout.word_anchors = [
+		{"text": "cat", "start_index": 0, "end_index": 1, "letter_count": 3},
+		{"text": "cap", "start_index": 2, "end_index": 3, "letter_count": 3},
+	]
+	reading_mode._load_group("test")
+	reading_mode.shared_track_layout = layout
+	reading_mode.track_tile_length = 18.0
+	reading_mode.track_tile_width = 18.0
+	reading_mode.layout_origin = Vector3.ZERO
+	reading_mode.gameplay_mode = ReadingWordChoiceModeScript.new()
+	reading_mode._start_next_word(false, false, true)
+	content_loader.requested_words.clear()
+
+	(
+		assert_that(
+			reading_mode.gameplay_mode.handle_word_choice_selected(reading_mode, "cap", false, 0)
+		)
+		. is_true()
+	)
+
+	assert_that(content_loader.requested_words.size()).is_equal(1)
+	assert_that(reading_mode.current_entry_index).is_equal(0)
+	assert_that(reading_mode.state).is_equal("transition")
+	assert_that(reading_mode.completion_timer).is_greater(0.0)
+
+	reading_mode._physics_process(0.2)
+	assert_that(content_loader.requested_words.size()).is_equal(1)
+	assert_that(reading_mode.current_entry_index).is_equal(0)
+	assert_that(reading_mode.state).is_equal("transition")
+
+	reading_mode._physics_process(0.3)
+	assert_that(content_loader.requested_words.size()).is_equal(2)
+	assert_that(reading_mode.current_entry_index).is_equal(1)
+	assert_that(reading_mode.current_entry.get("text", "")).is_equal("cap")
+	assert_that(reading_mode.state).is_equal("playing")
+	assert_that(reading_mode.movement_system.slowed_timer).is_equal(0.0)
+	assert_that(reading_mode.gameplay_controller.word_choice_triggers.size()).is_equal(3)
+
+	var choice_texts: Array[String] = []
+	var correct_count := 0
+	for trigger in reading_mode.gameplay_controller.word_choice_triggers:
+		choice_texts.append(str(trigger.choice_text).to_lower())
+		if bool(trigger.is_correct):
+			correct_count += 1
+
+	assert_that(choice_texts.has("cap")).is_true()
+	assert_that(correct_count).is_equal(1)
 	reading_mode.free()
 
 

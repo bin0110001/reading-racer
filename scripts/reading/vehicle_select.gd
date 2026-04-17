@@ -416,7 +416,6 @@ func _update_vehicle_selection_display() -> void:
 
 func _load_settings() -> void:
 	var settings = settings_store.load_settings()
-	var vehicle_library := PlayerVehicleLibraryScript.new()
 	vehicle_select_paint_helpers.set_selected_paint_color(
 		self, PlayerVehicleLibraryScript.resolve_paint_color(settings), false
 	)

@@ -5,6 +5,10 @@ class_name ReadingFinishGateTrigger extends Area3D
 
 signal finish_gate_reached
 
+const TriggerCollisionBuilder = preload(
+	"res://scripts/reading/triggers/ReadingTriggerCollisionBuilder.gd"
+)
+
 @export var word_index: int = 0
 @export var trigger_width: float = 16.0  # X-axis width
 @export var trigger_depth: float = 8.0  # Z-axis depth
@@ -14,15 +18,7 @@ var all_pickups_collected := false
 
 
 func _ready() -> void:
-	# Create a box collision shape for detection
-	var collision_shape = CollisionShape3D.new()
-	var box_shape = BoxShape3D.new()
-	box_shape.size = Vector3(trigger_width, 3.0, trigger_depth)
-	collision_shape.shape = box_shape
-	add_child(collision_shape)
-
-	# Position the collision shape centered at origin
-	collision_shape.position = Vector3.ZERO
+	TriggerCollisionBuilder.add_box_collision(self, trigger_width, 3.0, trigger_depth)
 
 	area_entered.connect(_on_area_entered)
 

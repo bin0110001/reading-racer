@@ -6,6 +6,7 @@ extends GdUnitTestSuite
 
 const ReadingSettingsStoreScript = preload("res://scripts/reading/settings_store.gd")
 const PronunciationModeScript = preload("res://scripts/reading/level_types/pronunciation_mode.gd")
+const PronunciationModeScene = preload("res://scenes/level_types/pronunciation_mode.tscn")
 
 var obstacle_hit_signaled: bool = false
 var _owned_nodes: Array[Node] = []
@@ -142,14 +143,26 @@ func test_reading_mode_scene_location() -> void:
 
 
 func test_reading_mode_scene_player_has_trigger_hitbox() -> void:
-	var packed_scene := load("res://scenes/level_types/pronunciation_mode.tscn") as PackedScene
-	assert_that(packed_scene).is_not_null()
+	assert_that(PronunciationModeScene).is_not_null()
 
-	var instance := packed_scene.instantiate()
+	var instance := PronunciationModeScene.instantiate()
 	var player := instance.get_node_or_null("Player")
 	assert_that(player != null).is_true()
 	assert_that(player is Area3D).is_true()
 	assert_that(player.get_node_or_null("CollisionShape3D") != null).is_true()
+	instance.free()
+
+
+func test_reading_mode_scene_has_music_rhythm_wiring() -> void:
+	assert_that(PronunciationModeScene).is_not_null()
+
+	var instance := PronunciationModeScene.instantiate()
+	assert_that(instance.get_node_or_null("MusicPlayer") != null).is_true()
+	assert_that(instance.get_node_or_null("RhythmNotifier") != null).is_true()
+	(
+		assert_that(instance.get_node_or_null("Player/VehicleAnchor/VehicleBeatLight") != null)
+		. is_true()
+	)
 	instance.free()
 
 

@@ -426,7 +426,11 @@ func test_level_select_level_and_mode_buttons_respond_within_frames() -> void:
 
 	mode_buttons = level_scene.get("mode_buttons") as Array
 	assert_that(mode_buttons.size()).is_equal(2)
-	assert_that((mode_buttons[0] as Button).text).is_equal("Spelling")
+	assert_that((mode_buttons[0] as Button).text).is_equal("📖")
+	assert_that((mode_buttons[0] as Button).icon).is_null()
+	assert_that((mode_buttons[0] as Button).tooltip_text).is_equal(
+		"Pronounce words from the selected reading list."
+	)
 	assert_that((mode_buttons[1] as Button).text).is_equal("Select Word")
 	assert_that(str(level_scene.get("selected_level_label"))).is_not_empty()
 	assert_that(frames_waited).is_less(10)
@@ -496,6 +500,11 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	assert_that(preview_container).is_not_null()
 	assert_that(preview_container.size.x > 0.0).is_true()
 	assert_that(preview_container.size.y > 0.0).is_true()
+	var preview_instance := vehicle_scene.get("vehicle_preview_instance") as Node3D
+	assert_that(preview_instance).is_not_null()
+	var decals_before_drag := int(
+		(vehicle_scene.call("_collect_decals", preview_instance) as Array).size()
+	)
 
 	var press_event := InputEventMouseButton.new()
 	press_event.button_index = MOUSE_BUTTON_LEFT
@@ -505,6 +514,10 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	runner.simulate_frames(1)
 	assert_that((camera_brush as CameraBrush).drawing).is_true()
 	assert_that((camera_brush as Node3D).global_position).is_not_equal(brush_before)
+	var decals_after_drag := int(
+		(vehicle_scene.call("_collect_decals", preview_instance) as Array).size()
+	)
+	assert_that(decals_after_drag).is_greater(decals_before_drag)
 
 	var painting_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
 

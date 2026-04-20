@@ -97,7 +97,7 @@ text = "CAT"
 billboard = 1
 font_size = 72
 outline_size = 8
-modulate = Color(0, 0, 0, 1)
+modulate = Color(0.1, 0.35, 0.8, 1)
 position = Vector3(-12, 0.5, 0)
 
 [node name="WordLaneDisplay_VELOCITY" type="Label3D" parent="WordDisplayRoot" unique_id=1800000002]
@@ -105,7 +105,7 @@ text = "VELOCITY"
 billboard = 1
 font_size = 72
 outline_size = 8
-modulate = Color(0, 0, 0, 1)
+modulate = Color(0.1, 0.35, 0.8, 1)
 position = Vector3(0, 0.5, 0)
 
 [node name="WordLaneDisplay_RAINBOW" type="Label3D" parent="WordDisplayRoot" unique_id=1800000003]
@@ -113,5 +113,5 @@ text = "RAINBOW"
 billboard = 1
 font_size = 72
 outline_size = 8
-modulate = Color(0, 0, 0, 1)
+modulate = Color(0.1, 0.35, 0.8, 1)
 position = Vector3(12, 0.5, 0)

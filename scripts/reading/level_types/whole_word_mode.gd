@@ -1,7 +1,7 @@
 class_name WholeWordMode
 extends Node3D
 
-const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
+const ReadingWordLaneDisplayScript = preload("res://scripts/reading/word_lane_display.gd")
 const WordChoiceTriggerScript = preload(
 	"res://scripts/reading/triggers/ReadingWordChoiceTrigger.gd"
 )
@@ -62,20 +62,11 @@ func _create_demo_word_display(word_text: String, target_width: float) -> Node3D
 	if word_text.strip_edges().is_empty():
 		return null
 	var word_root := Node3D.new()
-	var width_divisor := maxf(float(max(1, word_text.length())), 1.0)
-	var word_label := (
-		WorldTextBuilder
-		. create_billboard_label(
-			word_text,
-			72,
-			Color(0.0, 0.0, 0.0),
-			8,
-			BaseMaterial3D.BILLBOARD_ENABLED,
-			Vector3.ZERO,
-			Vector3.ONE * clampf(target_width / width_divisor, 0.45, 2.2),
-		)
-	)
-	word_root.add_child(word_label)
+	var word_display := ReadingWordLaneDisplayScript.new() as Node3D
+	if word_display == null:
+		return null
+	(word_display as ReadingWordLaneDisplayScript).configure(word_text, target_width, 0.18)
+	word_root.add_child(word_display)
 	_add_word_trigger(word_root, word_text, target_width)
 	return word_root
 

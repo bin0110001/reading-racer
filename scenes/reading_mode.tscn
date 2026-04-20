@@ -4,6 +4,8 @@
 [ext_resource type="Environment" uid="uid://c3bs0wfxpri8g" path="res://scenes/main-environment.tres" id="2_environment"]
 [ext_resource type="Script" uid="uid://der3y613vpmds" path="res://scripts/reading/reading_hud.gd" id="3_reading_hud"]
 [ext_resource type="Script" uid="uid://dydf4mmdw0x1l" path="res://scripts/reading/phoneme_player.gd" id="4_phoneme_player"]
+[ext_resource type="Script" uid="uid://dos3qhffr4v0a" path="res://addons/rhythm_notifier/rhythm_notifier.gd" id="5_rhythm_notifier"]
+[ext_resource type="AudioStream" path="res://Assets/Music/Let's Rock.mp3" id="6_music_stream"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_player"]
 size = Vector3(1.33, 3, 3)
@@ -30,6 +32,13 @@ shape = SubResource("BoxShape3D_player")
 
 [node name="VehicleAnchor" type="Node3D" parent="Player" unique_id=1276057858]
 
+[node name="VehicleBeatLight" type="OmniLight3D" parent="Player/VehicleAnchor" unique_id=1676023531]
+position = Vector3(0, 1.35, 0.6)
+light_color = Color(0.72, 0.9, 1, 1)
+light_energy = 0.18
+omni_range = 5.5
+shadow_enabled = false
+
 [node name="CameraRig" type="Node3D" parent="." unique_id=220955330]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18, 13, 0)
 
@@ -43,3 +52,10 @@ script = ExtResource("3_reading_hud")
 
 [node name="PhonemePlayer" type="Node" parent="." unique_id=1368063568]
 script = ExtResource("4_phoneme_player")
+
+[node name="MusicPlayer" type="AudioStreamPlayer" parent="." unique_id=2004832197]
+stream = ExtResource("6_music_stream")
+volume_db = -8.0
+
+[node name="RhythmNotifier" type="Node" parent="." unique_id=1802400404]
+script = ExtResource("5_rhythm_notifier")

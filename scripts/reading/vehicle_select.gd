@@ -720,6 +720,9 @@ func _paint_at_viewport_point(_local_point: Vector2) -> void:
 					}
 				)
 			)
+			PlayerVehicleLibraryScript.apply_vehicle_decals(
+				vehicle_preview_instance, [selected_vehicle_decals.back()]
+			)
 
 
 func get_paint_debug_snapshot() -> Dictionary:

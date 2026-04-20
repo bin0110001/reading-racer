@@ -5,6 +5,7 @@ const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
 
 const LETTER_MODEL_PREFAB_BASE := "res://Assets/PolygonIcons/Prefabs/SM_Icon_Text_%s.prefab"
 const LETTER_MODEL_FBX_BASE := "res://Assets/PolygonIcons/Models/SM_Icon_Text_%s.fbx"
+const DEFAULT_GLYPH_TINT := Color(0.1, 0.35, 0.8, 1.0)
 
 const DEFAULT_TARGET_WIDTH := 8.0
 const DEFAULT_LETTER_GAP := 0.18
@@ -106,10 +107,12 @@ func _create_glyph_node(glyph_text: String) -> Node3D:
 		if resource is PackedScene:
 			var scene_instance := (resource as PackedScene).instantiate()
 			if scene_instance is Node3D:
+				_tint_mesh_nodes(scene_instance as Node, DEFAULT_GLYPH_TINT)
 				return scene_instance as Node3D
 		elif resource is Mesh:
 			var mesh_instance := MeshInstance3D.new()
 			mesh_instance.mesh = resource
+			_tint_mesh_instance(mesh_instance, DEFAULT_GLYPH_TINT)
 			return mesh_instance
 
 	return _create_label_fallback(normalized)
@@ -162,6 +165,40 @@ func _measure_node_bounds(node: Node) -> AABB:
 			return mesh_bounds
 
 	return AABB(Vector3(-0.5, -0.5, -0.5), Vector3.ONE)
+
+
+static func _tint_mesh_nodes(node: Node, tint_color: Color) -> void:
+	if node is MeshInstance3D:
+		_tint_mesh_instance(node as MeshInstance3D, tint_color)
+
+	for child in node.get_children():
+		if child is Node:
+			_tint_mesh_nodes(child as Node, tint_color)
+
+
+static func _tint_mesh_instance(mesh_instance: MeshInstance3D, tint_color: Color) -> int:
+	if mesh_instance.mesh == null:
+		return 0
+
+	var tinted_surfaces := 0
+	for surface_index in range(mesh_instance.mesh.get_surface_count()):
+		var override_material := mesh_instance.get_surface_override_material(surface_index)
+		var base_material := override_material
+		if base_material == null:
+			base_material = mesh_instance.mesh.surface_get_material(surface_index)
+		if not (base_material is BaseMaterial3D):
+			continue
+
+		var duplicated := (base_material as BaseMaterial3D).duplicate(true) as BaseMaterial3D
+		var source_color := duplicated.albedo_color
+		if source_color == Color.WHITE:
+			duplicated.albedo_color = tint_color
+		else:
+			duplicated.albedo_color = source_color.lerp(tint_color, 0.7)
+		mesh_instance.set_surface_override_material(surface_index, duplicated)
+		tinted_surfaces += 1
+
+	return tinted_surfaces
 
 
 func _find_first_mesh_instance(node: Node) -> MeshInstance3D:

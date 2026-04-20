@@ -10,9 +10,10 @@ const ICON_PREFAB_SETTINGS := POLYGON_ICON_PREFABS_BASE + "SM_Icon_Settings_01.p
 const ICON_PREFAB_VEHICLE := POLYGON_ICON_PREFABS_BASE + "SM_Icon_Car_01.prefab"
 const ICON_SVG_LANE_SWITCH := "res://sprites/Swipe.svg"
 const ICON_SVG_SMOOTH_STEERING := "res://sprites/Tilt.svg"
+const PRONUNCIATION_MODE_EMOJI := "📖"
 const LEVEL_OPTION_TYPE_GROUP := "group"
 const LEVEL_OPTION_TYPE_MODE := "mode"
-const LEVEL_MODE_SPELLING := "spelling"
+const LEVEL_MODE_PRONUNCIATION := "pronunciation"
 const LEVEL_MODE_WORD_CHOICE := "word_choice"
 const READ_MODE_START_REQUEST_META_KEY := "reading_mode_start_requested_ms"
 const PRONUNCIATION_MODE_SCENE_PATH := "res://scenes/level_types/pronunciation_mode.tscn"
@@ -473,9 +474,13 @@ func _refresh_mode_buttons() -> void:
 		_update_final_row()
 		return
 	grade_scroll.visible = true
-	for mode_name in [LEVEL_MODE_SPELLING, LEVEL_MODE_WORD_CHOICE]:
+	for mode_name in [LEVEL_MODE_PRONUNCIATION, LEVEL_MODE_WORD_CHOICE]:
 		var button := Button.new()
-		button.text = _get_mode_label(mode_name)
+		if mode_name == LEVEL_MODE_PRONUNCIATION:
+			button.text = PRONUNCIATION_MODE_EMOJI
+			button.add_theme_font_size_override("font_size", 72)
+		else:
+			button.text = _get_mode_label(mode_name)
 		button.tooltip_text = _get_mode_tooltip(mode_name)
 		button.custom_minimum_size = Vector2(360.0, 220.0)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -529,7 +534,7 @@ func _apply_mode_from_settings(settings: Dictionary) -> void:
 	if reading_mode == ReadingSettingsStore.READING_MODE_WORD_CHOICE:
 		selected_mode = LEVEL_MODE_WORD_CHOICE
 	else:
-		selected_mode = LEVEL_MODE_SPELLING
+		selected_mode = LEVEL_MODE_PRONUNCIATION
 
 
 func _on_mode_selected(mode_name: String) -> void:
@@ -939,7 +944,7 @@ func _get_mode_label(mode_name: String) -> String:
 		LEVEL_MODE_WORD_CHOICE:
 			return "Select Word"
 		_:
-			return "Spelling"
+			return "Pronunciation"
 
 
 func _get_mode_tooltip(mode_name: String) -> String:
@@ -947,7 +952,7 @@ func _get_mode_tooltip(mode_name: String) -> String:
 		LEVEL_MODE_WORD_CHOICE:
 			return "Hear a word and pick the correct match."
 		_:
-			return "Spell words from the selected reading list."
+			return "Pronounce words from the selected reading list."
 
 
 func _build_preview_word_entries(group_name: String) -> Array[Dictionary]:

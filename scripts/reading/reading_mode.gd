@@ -13,6 +13,14 @@ const ReadingStandardModeScript = preload("res://scripts/reading/modes/reading_s
 const ReadingWordChoiceModeScript = preload(
 	"res://scripts/reading/modes/reading_word_choice_mode.gd"
 )
+const DEFAULT_MUSIC_TRACK_PATH := "res://Assets/Music/Let's Rock.mp3"
+const DEFAULT_MUSIC_BPM := 124.0
+const MUSIC_BPM_BY_TRACK := {
+	"let's rock": 124.0,
+	"don't stop": 118.0,
+	"fight till dying": 132.0,
+	"rhythm of life": 108.0,
+}
 const WordChoicePicker = preload("res://scripts/reading/word_choice_picker.gd")
 const WorldTextBuilder = preload("res://scripts/reading/word_text_builder.gd")
 
@@ -128,12 +136,20 @@ var course_plan_summary: Variant = null
 @onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var hud = get_node_or_null("ReadingHUD")
 @onready var phoneme_player = get_node_or_null("PhonemePlayer")
+@onready var rhythm_notifier = get_node_or_null("RhythmNotifier")
+@onready var music_player = get_node_or_null("MusicPlayer")
+@onready
+var vehicle_beat_light: OmniLight3D = get_node_or_null("Player/VehicleAnchor/VehicleBeatLight")
 @onready var control_profile = null
 @onready var debug_collision_root = null
 var debug_draw_colliders: bool = false
 var _phoneme_smoke_root: Node3D = null
 var _phoneme_smoke_spawn_timer := 0.0
 var _phoneme_smoke_label := ""
+var _pending_music_phoneme_label := ""
+var _pending_music_phoneme_stream: AudioStream = null
+var _vehicle_light_base_energy := 0.18
+var _vehicle_light_pulse := 0.0
 
 
 func _log_startup_step(step_name: String, start_ms: int) -> void:
@@ -454,6 +470,7 @@ func _ready() -> void:
 	hud.home_requested.connect(_on_home_requested)
 	hud.play_debug_audio.connect(_on_debug_play_audio)
 	phoneme_player.phoneme_changed.connect(_on_phoneme_changed)
+	_setup_music_rhythm_notifier()
 	print("[ReadingMode] HUD configured with group: %s" % requested_group)
 
 	# Set up skybox from project-native environment configuration
@@ -659,6 +676,12 @@ func _physics_process(delta: float) -> void:
 	var player_basis = movement_system.get_player_basis()
 	player.global_transform = Transform3D(player_basis, player_position)
 	vehicle_anchor.global_transform = Transform3D(player_basis, player_position)
+	if _vehicle_light_pulse > 0.0:
+		_vehicle_light_pulse = maxf(0.0, _vehicle_light_pulse - (delta * 5.5))
+		if vehicle_beat_light != null:
+			vehicle_beat_light.light_energy = (
+				_vehicle_light_base_energy + (_vehicle_light_pulse * 0.9)
+			)
 
 	# Update map display (throttled)
 	if map_display_manager and movement_system:
@@ -856,6 +879,8 @@ func _start_next_word(
 ) -> void:
 	if current_entries.is_empty():
 		return
+
+	_start_music_playback()
 
 	if random_word_order:
 		if current_entries.size() <= 1:
@@ -1066,6 +1091,8 @@ func _attach_player_model() -> void:
 		return
 
 	for child in vehicle_anchor.get_children():
+		if child.name == "VehicleBeatLight":
+			continue
 		child.queue_free()
 
 	var vehicle_settings: Dictionary = settings.duplicate(true)
@@ -1082,7 +1109,27 @@ func _attach_player_model() -> void:
 	model.rotation_degrees = Vector3.ZERO
 	# Lower the vehicle so it sits closer to the road.
 	vehicle_anchor.position = Vector3(0.0, 0.08, 0.0)
+	_ensure_vehicle_beat_light()
 	vehicle_anchor.add_child(model)
+
+
+func _ensure_vehicle_beat_light() -> void:
+	if vehicle_anchor == null:
+		return
+
+	if vehicle_beat_light == null:
+		vehicle_beat_light = vehicle_anchor.get_node_or_null("VehicleBeatLight") as OmniLight3D
+
+	if vehicle_beat_light == null:
+		vehicle_beat_light = OmniLight3D.new()
+		vehicle_beat_light.name = "VehicleBeatLight"
+		vehicle_beat_light.position = Vector3(0.0, 1.35, 0.6)
+		vehicle_anchor.add_child(vehicle_beat_light)
+
+	vehicle_beat_light.light_color = Color(0.72, 0.9, 1.0, 1.0)
+	vehicle_beat_light.light_energy = _vehicle_light_base_energy
+	vehicle_beat_light.omni_range = 5.5
+	vehicle_beat_light.shadow_enabled = false
 
 
 func _instantiate_scene(resource_path: String) -> Node3D:
@@ -1267,6 +1314,84 @@ func _on_phoneme_changed(label: String) -> void:
 	hud.set_phoneme(label)
 
 
+func _setup_music_rhythm_notifier() -> void:
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		add_child(music_player)
+
+	if rhythm_notifier == null:
+		rhythm_notifier = RhythmNotifier.new()
+		rhythm_notifier.name = "RhythmNotifier"
+		add_child(rhythm_notifier)
+
+	if music_player.stream == null and ResourceLoader.exists(DEFAULT_MUSIC_TRACK_PATH):
+		music_player.stream = load(DEFAULT_MUSIC_TRACK_PATH)
+
+	if music_player.stream == null:
+		push_warning("[ReadingMode] No music track is configured for rhythm sync.")
+		return
+
+	rhythm_notifier.bpm = _resolve_music_bpm(music_player.stream)
+	rhythm_notifier.audio_stream_player = music_player
+	if not rhythm_notifier.beat.is_connected(Callable(self, "_on_music_beat")):
+		rhythm_notifier.beat.connect(_on_music_beat)
+
+
+func _start_music_playback() -> void:
+	if music_player == null:
+		return
+	if music_player.stream == null:
+		_setup_music_rhythm_notifier()
+	if music_player.stream == null:
+		return
+	if rhythm_notifier != null:
+		rhythm_notifier.bpm = _resolve_music_bpm(music_player.stream)
+	if not music_player.playing:
+		music_player.play()
+
+
+func _resolve_music_bpm(stream: AudioStream) -> float:
+	if stream == null:
+		return DEFAULT_MUSIC_BPM
+
+	var resource_path := stream.resource_path
+	if resource_path.is_empty():
+		return DEFAULT_MUSIC_BPM
+
+	var track_name := resource_path.get_file().get_basename().to_lower()
+	return float(MUSIC_BPM_BY_TRACK.get(track_name, DEFAULT_MUSIC_BPM))
+
+
+func _should_sync_phonemes_to_music() -> bool:
+	return (
+		reading_mode == ReadingSettingsStore.READING_MODE_STANDARD
+		and rhythm_notifier != null
+		and music_player != null
+		and music_player.playing
+	)
+
+
+func _queue_phoneme_on_next_beat(label: String, stream: AudioStream) -> void:
+	_pending_music_phoneme_label = label
+	_pending_music_phoneme_stream = stream
+	phoneme_player.stop_phoneme()
+
+
+func _on_music_beat(_current_beat: int) -> void:
+	_vehicle_light_pulse = 1.0
+	if vehicle_beat_light != null:
+		vehicle_beat_light.light_energy = _vehicle_light_base_energy + _vehicle_light_pulse * 0.9
+
+	if _pending_music_phoneme_label.is_empty() or _pending_music_phoneme_stream == null:
+		return
+
+	phoneme_player.play_looping_phoneme(_pending_music_phoneme_label, _pending_music_phoneme_stream)
+	_pending_music_phoneme_label = ""
+	_pending_music_phoneme_stream = null
+	_on_phoneme_changed(phoneme_player.get_current_phoneme_label())
+
+
 # ============ Gameplay System Signal Handlers ============
 
 
@@ -1297,10 +1422,12 @@ func _on_gameplay_pickup_collected(letter: String, phoneme_label: String) -> voi
 	else:
 		print("[ReadingMode] phoneme stream resolved successfully for '%s'" % resolved_label)
 
-	phoneme_player.stop_phoneme()
 	if phoneme_stream == null:
 		print("[ReadingMode] WARNING: phoneme_stream is null, cannot play looping phoneme")
+	elif _should_sync_phonemes_to_music():
+		_queue_phoneme_on_next_beat(resolved_label, phoneme_stream)
 	else:
+		phoneme_player.stop_phoneme()
 		phoneme_player.play_looping_phoneme(resolved_label, phoneme_stream)
 
 	# Update HUD phoneme text immediately (important for tests and direct event calls)

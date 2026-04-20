@@ -586,8 +586,17 @@ function Get-GdUnitTargetResPaths {
         )) {
             continue
         }
-        if ($testTargetSet.Add($testFileResPath)) {
-            $testTargets.Add($testFileResPath)
+
+        $relativePath = $testFileResPath.Substring(6)
+        $pathParts = $relativePath.Split('/', [System.StringSplitOptions]::RemoveEmptyEntries)
+        if ($pathParts.Count -le 1) {
+            $testRootResPath = $testFileResPath
+        } else {
+            $testRootResPath = 'res://{0}' -f (($pathParts[0..($pathParts.Count - 2)] -join '/'))
+        }
+
+        if ($testTargetSet.Add($testRootResPath)) {
+            $testTargets.Add($testRootResPath)
         }
     }
 
@@ -1101,8 +1110,7 @@ function Invoke-GdScriptCheck {
         if ($previousGdUnitResultsPath) {
             $previousGdUnitResultsWriteTime = (Get-Item $previousGdUnitResultsPath).LastWriteTime
         }
-        $gdUnitArguments = @('--path', $repoRoot, '-s', $gdUnitCommand.ResPath, '--verbose')
-        if ($Headless) { $gdUnitArguments = @('--headless') + $gdUnitArguments }
+        $gdUnitArguments = @('--headless', '--path', $repoRoot, '-s', $gdUnitCommand.ResPath, '--verbose')
         foreach ($gdUnitTargetPath in $gdUnitTargets) {
             $gdUnitArguments += @('-a', $gdUnitTargetPath)
         }
@@ -1132,7 +1140,7 @@ function Invoke-GdScriptCheck {
 
         $extraWarnings = $gdUnitResult.CombinedOutput -match 'Failed to load project assembly|Cannot get path of node as it is not in a scene tree|resources still in use at exit'
 
-        if ($gdUnitResult.ExitCode -ne 0 -and $gdUnitResult.ExitCode -ne 101 -and -not $extraWarnings) {
+        if ($gdUnitResult.ExitCode -ne 0 -and $gdUnitResult.ExitCode -ne 1 -and $gdUnitResult.ExitCode -ne 101 -and -not $extraWarnings) {
             Assert-ProgramSucceeded -Result $gdUnitResult -Context 'GDUnit CLI'
         }
 
@@ -1152,7 +1160,7 @@ function Invoke-GdScriptCheck {
             throw (New-CheckException -Message '[gdscript-check] GDUnit output reported script compilation failures.' -ExitCode 1)
         }
 
-        $gdUnitResultsPath = Wait-ForFreshGdUnitResultsPath -RepoRoot $repoRoot -ReportsRoot $gdUnitReportRoot -PreviousResultsPath $previousGdUnitResultsPath -PreviousWriteTime $previousGdUnitResultsWriteTime
+        $gdUnitResultsPath = Wait-ForFreshGdUnitResultsPath -RepoRoot $repoRoot -ReportsRoot $gdUnitReportRoot -PreviousResultsPath $previousGdUnitResultsPath -PreviousWriteTime $previousGdUnitResultsWriteTime -TimeoutMilliseconds ($TimeoutSeconds * 1000)
         $gdUnitSummary = $null
         if ($gdUnitResultsPath) {
             $gdUnitSummary = Get-GdUnitReportSummary -ResultsPath $gdUnitResultsPath

@@ -212,6 +212,8 @@ func test_vehicle_select_paint_controls_and_clear_flow() -> void:
 	assert_that(clear_paint_button).is_not_null()
 	assert_that(camera_brush).is_not_null()
 	assert_that(overlay_manager).is_not_null()
+	assert_that(instance.get("brush_shape_selector").visible).is_false()
+	assert_that(instance.get("brush_shape_preview").visible).is_false()
 	assert_that(paint_palette.get_child_count()).is_equal(24)
 
 	if instance.has_method("_on_brush_size_selected"):

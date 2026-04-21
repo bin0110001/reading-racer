@@ -1,6 +1,13 @@
 class_name VehicleSelectUtils
 extends RefCounted
 
+const _BRUSH_SHAPE_RESOURCE_PATHS := {
+	"circle": "res://sprites/brush_shapes/circle_brush_shape.webp",
+	"square": "res://sprites/brush_shapes/square_brush_shape.webp",
+	"star": "res://sprites/brush_shapes/star_brush_shape.webp",
+	"smoke": "res://sprites/brush_shapes/smoke_brush_shape.webp",
+}
+
 
 static func create_brush_size_texture(brush_size: float, selected: bool) -> Texture2D:
 	var size := 48
@@ -118,21 +125,50 @@ static func create_smoke_brush_shape(size: int = 256) -> Image:
 
 
 static func create_brush_shape_preview_texture(shape_id: String, size: int = 64) -> Texture2D:
-	var image: Image
-	match shape_id:
-		"circle":
-			image = create_circular_brush_shape(size)
-		"square":
-			image = create_square_brush_shape(size)
-		"star":
-			image = create_star_brush_shape(size)
-		"smoke":
-			image = create_smoke_brush_shape(size)
-		_:
-			image = create_circular_brush_shape(size)
+	var image := _load_brush_shape_image(shape_id, size)
 
 	var texture := ImageTexture.create_from_image(image)
 	return texture
+
+
+static func _load_brush_shape_image(shape_id: String, size: int) -> Image:
+	var normalized_shape_id := shape_id.strip_edges().to_lower()
+	if _BRUSH_SHAPE_RESOURCE_PATHS.has(normalized_shape_id):
+		var resource_path := str(_BRUSH_SHAPE_RESOURCE_PATHS[normalized_shape_id])
+		if ResourceLoader.exists(resource_path):
+			var resource := load(resource_path)
+			var loaded_image := _resource_to_image(resource)
+			if (
+				loaded_image != null
+				and loaded_image.get_width() > 0
+				and loaded_image.get_height() > 0
+			):
+				if loaded_image.get_width() != size or loaded_image.get_height() != size:
+					loaded_image = loaded_image.duplicate()
+					loaded_image.resize(size, size, Image.INTERPOLATE_BILINEAR)
+				return loaded_image
+
+	match normalized_shape_id:
+		"circle":
+			return create_circular_brush_shape(size)
+		"square":
+			return create_square_brush_shape(size)
+		"star":
+			return create_star_brush_shape(size)
+		"smoke":
+			return create_smoke_brush_shape(size)
+		_:
+			return create_circular_brush_shape(size)
+
+
+static func _resource_to_image(resource: Variant) -> Image:
+	if resource is Image:
+		return resource as Image
+	if resource is Texture2D:
+		var texture_image := (resource as Texture2D).get_image()
+		if texture_image != null:
+			return texture_image
+	return null
 
 
 static func find_closest_brush_preset_index(brush_size: float, brush_presets: Array) -> int:

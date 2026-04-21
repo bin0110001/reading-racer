@@ -519,6 +519,11 @@ func test_vehicle_select_scene_with_scene_runner() -> void:
 	)
 	assert_that(decals_after_drag).is_greater(decals_before_drag)
 
+	vehicle_scene.call("_on_next_vehicle")
+	runner.simulate_frames(1)
+	assert_that((camera_brush as CameraBrush).drawing).is_false()
+	assert_that(bool(vehicle_scene.get("painting_pointer_down"))).is_false()
+
 	var painting_snapshot: Dictionary = vehicle_scene.call("get_paint_debug_snapshot")
 
 	var overlay_apply_before := int(painting_snapshot.get("overlay_apply_count", 0))

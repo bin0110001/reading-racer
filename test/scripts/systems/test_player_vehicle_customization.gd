@@ -194,21 +194,6 @@ func test_player_vehicle_library_fit_instance_scales_to_max_dimension() -> void:
 	assert_that(root.scale.z < 1.0).is_true()
 
 
-func test_player_vehicle_library_apply_paint_color_modifies_material() -> void:
-	var player_library = PlayerVehicleLibraryScript.new()
-	var mesh_instance := MeshInstance3D.new()
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(1, 1, 1)
-	mesh_instance.mesh = BoxMesh.new()
-	mesh_instance.set_surface_override_material(0, mat)
-
-	player_library.apply_paint_color_instance(mesh_instance, Color(0.2, 0.8, 0.3))
-
-	var applied_material := mesh_instance.get_surface_override_material(0) as BaseMaterial3D
-	assert_that(applied_material).is_not_null()
-	assert_that(applied_material.albedo_color).is_not_equal(mat.albedo_color)
-
-
 func test_player_vehicle_library_apply_vehicle_decals_adds_decal_nodes() -> void:
 	var player_library = PlayerVehicleLibraryScript.new()
 	var root := _own_node(Node3D.new()) as Node3D

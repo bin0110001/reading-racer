@@ -312,6 +312,7 @@ func _build_vehicle_ui() -> void:
 
 	var shape_label := Label.new()
 	shape_label.text = "Brush Shape"
+	shape_label.visible = false
 	controls_panel.add_child(shape_label)
 
 	brush_shape_selector = OptionButton.new()
@@ -320,6 +321,7 @@ func _build_vehicle_ui() -> void:
 	brush_shape_selector.selected = _find_brush_shape_option_index(selected_brush_shape)
 	brush_shape_selector.focus_mode = Control.FOCUS_NONE
 	brush_shape_selector.connect("item_selected", Callable(self, "_on_brush_shape_selected"))
+	brush_shape_selector.visible = false
 	controls_panel.add_child(brush_shape_selector)
 
 	brush_shape_preview = TextureRect.new()
@@ -328,6 +330,7 @@ func _build_vehicle_ui() -> void:
 	brush_shape_preview.texture = vehicle_select_paint_helpers.create_brush_shape_preview_texture(
 		selected_brush_shape, 64
 	)
+	brush_shape_preview.visible = false
 	controls_panel.add_child(brush_shape_preview)
 
 	var paint_mode_hint := Label.new()
@@ -457,6 +460,7 @@ func _select_vehicle(vehicle_id: String) -> void:
 		if str(vehicle.get("id", "")) == selected_vehicle_id:
 			selected_vehicle_index = index
 			break
+	_reset_painting_state()
 	_update_vehicle_selection_display()
 
 
@@ -557,6 +561,7 @@ func _on_vehicle_selected(index: int) -> void:
 	if index < 0 or index >= vehicle_catalog.size():
 		return
 	selected_vehicle_index = index
+	_reset_painting_state()
 	_update_vehicle_selection_display()
 	_refresh_vehicle_preview()
 
@@ -567,6 +572,7 @@ func _on_prev_vehicle() -> void:
 	selected_vehicle_index = (
 		(selected_vehicle_index - 1 + vehicle_catalog.size()) % vehicle_catalog.size()
 	)
+	_reset_painting_state()
 	_update_vehicle_selection_display()
 	_refresh_vehicle_preview()
 
@@ -575,6 +581,7 @@ func _on_next_vehicle() -> void:
 	if vehicle_catalog.size() == 0:
 		return
 	selected_vehicle_index = (selected_vehicle_index + 1) % vehicle_catalog.size()
+	_reset_painting_state()
 	_update_vehicle_selection_display()
 	_refresh_vehicle_preview()
 
@@ -614,6 +621,13 @@ func _on_clear_paint_pressed() -> void:
 	vehicle_select_paint_helpers.log_paint(
 		self, PAINT_LOG_LEVEL_INFO, "Cleared paint state", _paint_debug_snapshot()
 	)
+	if camera_brush != null:
+		camera_brush.drawing = false
+	painting_pointer_down = false
+
+
+func _reset_painting_state() -> void:
+	painting_pointer_down = false
 	if camera_brush != null:
 		camera_brush.drawing = false
 

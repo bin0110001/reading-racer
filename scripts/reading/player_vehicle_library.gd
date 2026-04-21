@@ -14,21 +14,6 @@ const RUNTIME_MAX_DIMENSION := 5.2
 const _DEFAULT_SCENE_PATH := (
 	"res://Assets/SimpleCars/Prefabs/PosZFacing/" + "sedan_seperate_PosZ.prefab.scn"
 )
-const _PAINT_EXCLUSION_TOKENS := [
-	"wheel",
-	"tire",
-	"rim",
-	"glass",
-	"window",
-	"light",
-	"head",
-	"tail",
-	"interior",
-	"seat",
-	"steering",
-	"mirror",
-	"chrome",
-]
 const _VEHICLES := [
 	{
 		"id": "sedan",
@@ -230,28 +215,6 @@ static func fit_instance_to_dimension(instance: Node3D, max_dimension: float) ->
 	)
 
 
-static func apply_paint_color(instance: Node3D, paint_color: Color) -> void:
-	var painted_surfaces := _apply_paint_recursive(instance, paint_color)
-	if painted_surfaces > 0:
-		return
-
-	var first_mesh := _find_first_mesh_instance(instance)
-	if first_mesh == null or first_mesh.mesh == null:
-		return
-
-	for surface_index in range(first_mesh.mesh.get_surface_count()):
-		var override_material := first_mesh.get_surface_override_material(surface_index)
-		var base_material := override_material
-		if base_material == null:
-			base_material = first_mesh.mesh.surface_get_material(surface_index)
-		var tinted = _create_tinted_material(base_material, paint_color)
-		first_mesh.set_surface_override_material(surface_index, tinted)
-
-
-func apply_paint_color_instance(instance: Node3D, paint_color: Color) -> void:
-	apply_paint_color(instance, paint_color)
-
-
 func fit_instance_to_dimension_instance(instance: Node3D, max_dimension: float) -> void:
 	fit_instance_to_dimension(instance, max_dimension)
 
@@ -294,72 +257,6 @@ func build_vehicle_settings_instance(
 	vehicle_id: String, paint_color: Color, paint_decals: Array = []
 ) -> Dictionary:
 	return build_vehicle_settings(vehicle_id, paint_color, paint_decals)
-
-
-static func _apply_paint_recursive(node: Node, paint_color: Color) -> int:
-	var painted_surfaces := 0
-	if node is MeshInstance3D:
-		painted_surfaces += _paint_mesh_instance(node as MeshInstance3D, paint_color)
-
-	for child in node.get_children():
-		painted_surfaces += _apply_paint_recursive(child, paint_color)
-
-	return painted_surfaces
-
-
-static func _paint_mesh_instance(mesh_instance: MeshInstance3D, paint_color: Color) -> int:
-	if mesh_instance.mesh == null:
-		return 0
-
-	var painted_surfaces := 0
-	for surface_index in range(mesh_instance.mesh.get_surface_count()):
-		var override_material := mesh_instance.get_surface_override_material(surface_index)
-		var base_material := override_material
-		if base_material == null:
-			base_material = mesh_instance.mesh.surface_get_material(surface_index)
-		if not _should_paint_surface(mesh_instance, base_material):
-			continue
-
-		mesh_instance.set_surface_override_material(
-			surface_index, _create_tinted_material(base_material, paint_color)
-		)
-		painted_surfaces += 1
-
-	return painted_surfaces
-
-
-static func _should_paint_surface(mesh_instance: MeshInstance3D, material: Material) -> bool:
-	var name_tokens := mesh_instance.name.to_lower()
-	if material != null:
-		name_tokens += " %s" % str(material.resource_name).to_lower()
-
-	for token in _PAINT_EXCLUSION_TOKENS:
-		if name_tokens.contains(token):
-			return false
-
-	if material is BaseMaterial3D:
-		var base_material := material as BaseMaterial3D
-		if base_material.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
-			return false
-		if base_material.albedo_color.a < 0.95:
-			return false
-
-	return true
-
-
-static func _create_tinted_material(material: Material, paint_color: Color) -> Material:
-	if material is BaseMaterial3D:
-		var duplicated := material.duplicate(true) as BaseMaterial3D
-		var source_color := duplicated.albedo_color
-		if source_color == Color.WHITE:
-			duplicated.albedo_color = paint_color
-		else:
-			duplicated.albedo_color = source_color.lerp(paint_color, 0.7)
-		return duplicated
-
-	var fallback := StandardMaterial3D.new()
-	fallback.albedo_color = paint_color
-	return fallback
 
 
 static func apply_vehicle_decals(instance: Node3D, decals: Array) -> int:
